@@ -1,9 +1,12 @@
 name: release
 
-# On every push to main, Changesets either opens (or updates) a "Release" PR that bumps the version,
-# writes CHANGELOG.md and syncs the plugin manifests, or, once that PR is merged, tags the release.
+# Releasing is a choice, not a side effect of merging. Changesets pile up on main until you run this
+# workflow by hand (Actions → release → Run workflow), which opens or refreshes a "Release skills" PR
+# that bumps the version, syncs the plugin manifests and writes CHANGELOG.md. Merging that PR is the
+# release: the push to main tags v<version>. The tag step is a no-op on any other push.
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
 
@@ -12,7 +15,8 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions: {}
 
 jobs:
-  release:
+  release-pr:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -26,8 +30,24 @@ jobs:
       - uses: changesets/action@v1
         with:
           version: npm run version
-          publish: npx changeset git-tag
           commit: "Release skills"
           title: "Release skills"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  tag:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      # Tags the current package.json version if it has no tag yet; otherwise does nothing.
+      - run: npx changeset git-tag
+      - run: git push origin --tags

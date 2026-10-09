@@ -85,10 +85,17 @@ npm install && npx changeset       # describe the change and pick patch / minor 
 
 ### Releases
 
-Versions and `CHANGELOG.md` are managed by [Changesets](https://github.com/changesets/changesets). On
-every push to `main`, `.github/workflows/release.yml` opens or updates a "Release skills" PR from the
-pending changesets. It bumps `package.json`, copies the version into both `.claude-plugin/*.json` files
-(`scripts/sync-plugin-version.mjs`) and writes the changelog. Merging that PR tags the release (`v<version>`).
+Versions and `CHANGELOG.md` are managed by [Changesets](https://github.com/changesets/changesets). Merging
+a PR doesn't release anything: its changeset waits on `main` until you decide to release.
+
+1. Run the release workflow by hand: Actions → release → Run workflow, or `gh workflow run release.yml`.
+   It opens or refreshes a "Release skills" PR from the pending changesets. That PR bumps `package.json`,
+   copies the version into both `.claude-plugin/*.json` files (`scripts/sync-plugin-version.mjs`) and
+   writes the changelog.
+2. Merge that PR. The push to `main` tags the release `v<version>`.
+
+The release PR is opened by the Actions token, so CI doesn't run on it and the required checks never
+report. Merge it with the admin bypass.
 
 ## Checks
 
@@ -108,7 +115,7 @@ Other workflows:
 
 | Workflow | What it does |
 | --- | --- |
-| `release.yml` | Opens the Changesets release PR, and tags the release once it's merged |
+| `release.yml` | Run by hand: opens the Changesets release PR. On every push to `main`: tags the version if it has no tag yet |
 | `triage-label.yml` | Labels every new issue `needs-triage` |
 | `needs-info.yml` | Daily: closes issues still labelled `needs-info` 14 days later. A reply removes the label and puts the issue back in `needs-triage` |
 

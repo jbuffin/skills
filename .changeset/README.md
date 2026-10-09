@@ -1,9 +1,10 @@
 # Changesets
 
 Each file here describes one change and how much it bumps the version. Add one with `npx changeset`
-in any PR that adds, removes or materially changes a skill. On merge to `main`, the release workflow
-collects them into a "Release skills" PR that bumps `package.json`, syncs both `.claude-plugin/*.json`
-manifests and writes `CHANGELOG.md`. Merging that PR tags the release.
+in any PR that adds, removes or materially changes a skill. They wait on `main` until you run the
+release workflow by hand (`gh workflow run release.yml`). It collects them into a "Release skills" PR
+that bumps `package.json`, syncs both `.claude-plugin/*.json` manifests and writes `CHANGELOG.md`.
+Merging that PR tags the release.
 
 - `patch`: wording fixes and small behaviour corrections in an existing skill.
 - `minor`: a new or promoted skill, or a new capability in an existing one.
