@@ -1,5 +1,5 @@
-# skills
-
+<!-- The hero image is the title, so there is no top-level heading. -->
+<!-- markdownlint-disable-next-line MD041 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/images/hero-light.png">
