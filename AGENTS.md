@@ -4,7 +4,9 @@ This repo publishes agent skills. Each skill is a folder with a `SKILL.md` (YAML
 
 - New skills start in `incubator/` via `scripts/new-skill.sh <name>`. Incubator skills keep
   `metadata.internal: true` and are never installed by `npx skills add`.
-- A skill moves to `skills/` only via `scripts/promote.sh <name>`, which removes the internal flag.
+- A skill moves to `skills/<category>/` only via `scripts/promote.sh <name> <category>`, which removes the
+  internal flag. When you add a new category folder, add it to the `skills` array in
+  `.claude-plugin/plugin.json` too, or the Claude Code plugin won't load its skills.
   Do not hand-move skills between trees.
 - Frontmatter `name` must equal the folder name (lowercase, hyphens, ≤64 chars). `description` says
   what the skill does and when to use it, ≤1024 chars.

@@ -11,7 +11,7 @@ fail() { echo "  ✗ $1: $2" >&2; errors=$((errors + 1)); }
 
 frontmatter() { awk '/^---$/ { n++; next } n == 1 { print } n >= 2 { exit }' "$1"; }
 
-for file in "$root"/skills/*/SKILL.md "$root"/incubator/*/SKILL.md; do
+for file in "$root"/skills/*/SKILL.md "$root"/skills/*/*/SKILL.md "$root"/incubator/*/SKILL.md; do
   [[ -f "$file" ]] || continue
   count=$((count + 1))
   rel="${file#"$root"/}"
