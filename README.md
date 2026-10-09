@@ -22,6 +22,7 @@ skills/<category>/<name>/    Promoted, grouped by category (e.g. engineering). D
 incubator/<name>/SKILL.md    In development. Not in a discovery path, and marked
                              `metadata.internal: true` as a second guard.
 templates/SKILL.template.md  Starting point used by scripts/new-skill.sh.
+templates/AGENTS.template.md Generic AGENTS.md starting point for other repos.
 scripts/                     new-skill, promote, validate, and the check-* scripts CI runs.
 .githooks/                   Optional pre-commit hook.
 .claude-plugin/              Claude Code plugin + marketplace manifests.

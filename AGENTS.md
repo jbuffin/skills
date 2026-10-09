@@ -35,3 +35,17 @@ This repo publishes agent skills. Each skill is a folder with a `SKILL.md` (YAML
 - Run `scripts/validate.sh` before committing. CI runs it plus shell, Markdown, Python, workflow,
   plugin and discovery checks (see the Checks section of `README.md`).
 - When a PR changes a `SKILL.md`, say in the description what behaviour changes for the agent.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues on jbuffin/skills via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
