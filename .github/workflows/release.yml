@@ -48,6 +48,15 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      # changeset git-tag makes annotated tags, which need a committer identity. Without one, git tag
+      # fails and Changesets still reports the tag as created.
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       # Tags the current package.json version if it has no tag yet; otherwise does nothing.
       - run: npx changeset git-tag
-      - run: git push origin --tags
+      - name: Push the version tag
+        run: |
+          tag="v$(node -p 'require("./package.json").version')"
+          git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null || { echo "::error::tag $tag was not created"; exit 1; }
+          git push origin "refs/tags/$tag"
