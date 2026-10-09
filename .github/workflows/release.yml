@@ -1,0 +1,33 @@
+name: release
+
+# On every push to main, Changesets either opens (or updates) a "Release" PR that bumps the version,
+# writes CHANGELOG.md and syncs the plugin manifests, or, once that PR is merged, tags the release.
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: changesets/action@v1
+        with:
+          version: npm run version
+          publish: npx changeset git-tag
+          commit: "Release skills"
+          title: "Release skills"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

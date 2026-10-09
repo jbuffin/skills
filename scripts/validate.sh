@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Check every SKILL.md in skills/ and incubator/ against the Agent Skills frontmatter rules,
 # plus this repo's conventions: incubator skills are internal, promoted skills are not; every
-# category is in plugin.json; every promoted skill is in the README; scripts are executable;
-# relative links resolve.
+# category is in plugin.json; every promoted skill is in the README; both plugin manifests carry the
+# package.json version; scripts are executable; relative links resolve.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,6 +47,16 @@ done
 for json in "$root"/.claude-plugin/*.json; do
   python3 -m json.tool "$json" >/dev/null 2>&1 || fail "${json#"$root"/}" "invalid JSON"
 done
+
+# Changesets bumps package.json; scripts/sync-plugin-version.mjs copies it into the plugin manifests.
+python3 - "$root" <<'PY' || fail ".claude-plugin" "manifest versions differ from package.json; run: node scripts/sync-plugin-version.mjs"
+import json, sys
+root = sys.argv[1]
+want = json.load(open(f"{root}/package.json"))["version"]
+plugin = json.load(open(f"{root}/.claude-plugin/plugin.json")).get("version")
+market = json.load(open(f"{root}/.claude-plugin/marketplace.json")).get("metadata", {}).get("version")
+sys.exit(0 if plugin == market == want else 1)
+PY
 
 # The Claude Code plugin only loads category folders listed in plugin.json.
 plugin_skills="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])).get("skills",[]); print("\n".join([s] if isinstance(s,str) else s))' \

@@ -25,6 +25,8 @@ templates/SKILL.template.md  Starting point used by scripts/new-skill.sh.
 scripts/                     new-skill, promote, validate, and the check-* scripts CI runs.
 .githooks/                   Optional pre-commit hook.
 .claude-plugin/              Claude Code plugin + marketplace manifests.
+.changeset/                  Pending changesets; they become CHANGELOG.md entries on release.
+.github/ISSUE_TEMPLATE/      Issue forms: skill problem, skill idea.
 ```
 
 ## Install
@@ -78,9 +80,17 @@ npx skills add ./incubator/<name>
 ```bash
 scripts/new-skill.sh my-skill      # scaffold incubator/my-skill
 # ...iterate...
-scripts/validate.sh                # frontmatter, plugin categories, README list, links, script modes
+scripts/validate.sh                # frontmatter, plugin categories, README list, versions, links, script modes
 scripts/promote.sh my-skill engineering   # move to skills/engineering/, drop internal flag
+npm install && npx changeset       # describe the change and pick patch / minor / major
 ```
+
+### Releases
+
+Versions and `CHANGELOG.md` are managed by [Changesets](https://github.com/changesets/changesets). On
+every push to `main`, `.github/workflows/release.yml` opens or updates a "Release skills" PR from the
+pending changesets. It bumps `package.json`, copies the version into both `.claude-plugin/*.json` files
+(`scripts/sync-plugin-version.mjs`) and writes the changelog. Merging that PR tags the release (`v<version>`).
 
 ## Checks
 
@@ -88,13 +98,21 @@ CI (`.github/workflows/validate.yml`) runs on every push and pull request:
 
 | Job | What it checks |
 | --- | --- |
-| validate | `scripts/validate.sh` |
+| validate | `scripts/validate.sh`, including that both plugin manifests match the `package.json` version |
 | shell | `shellcheck` on bash scripts, `zsh -n` on zsh scripts |
 | markdown | `markdownlint-cli2` (line length off, see `.markdownlint-cli2.jsonc`) |
 | python | `ruff check` and `ruff format --check` (see `ruff.toml`) |
 | workflows | `actionlint` |
 | plugin | `claude plugin validate .` |
 | discovery | `scripts/check-discovery.sh`: `npx skills` finds exactly the promoted skills |
+
+Other workflows:
+
+| Workflow | What it does |
+| --- | --- |
+| `release.yml` | Opens the Changesets release PR, and tags the release once it's merged |
+| `triage-label.yml` | Labels every new issue `needs-triage` |
+| `needs-info.yml` | Daily: closes issues still labelled `needs-info` 14 days later. A reply removes the label and puts the issue back in `needs-triage` |
 
 ### Local pre-commit hook
 

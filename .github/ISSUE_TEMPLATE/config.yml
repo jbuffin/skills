@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/jbuffin/skills/security/advisories/new
+    about: A way a skill could leak a secret or act outside what it was allowed to do. Report it privately, not as an issue.
