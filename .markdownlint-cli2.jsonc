@@ -3,7 +3,9 @@
     // Skills and docs use one line per paragraph; wrapping them adds diff noise for no benefit.
     "MD013": false,
     // CHANGELOG.md repeats "### Minor Changes" etc. under each release.
-    "MD024": { "siblings_only": true }
+    "MD024": { "siblings_only": true },
+    // README hero uses <picture> to switch between the light and dark images.
+    "MD033": { "allowed_elements": ["picture", "source", "img"] }
   },
   // Changesets are one-off release notes with no heading; they end up in CHANGELOG.md, which is linted.
   "ignores": ["node_modules/**", ".changeset/*.md"]
