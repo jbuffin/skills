@@ -3,10 +3,21 @@
 # Creates ${AGENT_TEAMS_DIR:-${CLAUDE_CONFIG_DIR:-~/.claude}/teams}/<run-name>/ with team.env, state.md, teammates.tsv,
 # prompts/ and reports/, and prints the run directory and the resolved script directories of this skill, agent-teammates and run-preflight.
 # Safe to re-run: never overwrites existing files.
+# Exits 6, before creating anything, if agent-teammates, run-preflight or target-evaluation isn't installed next to this skill.
 set -e
 NAME=$1; WT=${2:A}
 [[ -z $NAME || -z $WT ]] && { echo "usage: team-init.sh <run-name> <repo>"; exit 5; }
 SKILL=${0:A:h:h}
+# The skills this one runs alongside sit next to it; without them the paths below point nowhere.
+missing=()
+for dep in agent-teammates run-preflight target-evaluation; do
+  [[ -f ${SKILL:h}/$dep/SKILL.md ]] || missing+=($dep)
+done
+if (( $#missing )); then
+  echo "missing skills next to ${SKILL:t} in ${SKILL:h}: ${missing[*]}"
+  echo "agent-team-build needs agent-teammates, run-preflight and target-evaluation installed alongside it."
+  exit 6
+fi
 RUN=${AGENT_TEAMS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/teams}/$NAME
 mkdir -p $RUN/prompts $RUN/reports
 

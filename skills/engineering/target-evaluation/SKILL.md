@@ -23,7 +23,7 @@ If the acceptance bar names the real target ("works on a real device") and you o
 
 ## Own the target
 
-Only one agent touches a target at a time. Use your own test account and your own browser profile or device session, so the engineer's stay untouched. Secrets reach the target only through run-preflight's helpers. Dismiss the target's known dialogs with the button the run's notes or the repo's docs name, choosing only options that keep data in and permissions as they are. Clean up only the processes you started. After every request, leave the target the way you agreed to: signed out, settings restored, production untouched.
+Only one agent touches a target at a time. Use your own test account and your own browser profile or device session, so the engineer's stay untouched. Secrets reach the target only through run-preflight's helpers. Without that skill, use the repo's own secret helper if it has one, or have the engineer sign the target in before you start. Never type, print or write a secret's value yourself. Dismiss the target's known dialogs with the button the run's notes or the repo's docs name, choosing only options that keep data in and permissions as they are. Clean up only the processes you started. After every request, leave the target the way you agreed to: signed out, settings restored, production untouched.
 
 ## Light check, every change
 
@@ -31,7 +31,7 @@ This should take minutes, not an hour.
 
 1. Install or deploy the build.
 2. Confirm the build points at the environment the accounts live in, from the build's own output (the served bundle, the deployed config, a request's host). Do this before signing in. A build that fell back to another environment makes valid credentials fail, and that reads as a credentials problem.
-3. Sign in through run-preflight's secret helper.
+3. Sign in through run-preflight's secret helper, or confirm the engineer's sign-in is still active.
 4. Run the change's smoke flow.
 5. Confirm the error channel is empty, whether that's the crash log, the browser console or the service logs.
 6. Run the project's UI or integration suite, if it has one.
