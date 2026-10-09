@@ -1,0 +1,7 @@
+# Lint for the Python scripts that ship inside skills. They run on the system python3,
+# so keep them compatible with 3.9.
+target-version = "py39"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "B", "UP", "PL", "RUF", "I", "SIM"]

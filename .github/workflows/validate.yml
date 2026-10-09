@@ -4,9 +4,62 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: scripts/validate.sh
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck (bash scripts)
+        run: git grep -l -E '^#!(/usr/bin/env bash|/bin/bash|/bin/sh)' | xargs shellcheck
+      - name: zsh -n (zsh scripts; shellcheck doesn't support zsh)
+        run: |
+          sudo apt-get install -y -qq zsh >/dev/null
+          git grep -l -E '^#!(/bin/zsh|/usr/bin/env zsh)' | xargs -n1 zsh -n
+
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx -y markdownlint-cli2@0.23.2 '**/*.md'
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pipx run ruff==0.16.10 check .
+      - run: pipx run ruff==0.16.10 format --check .
+
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx -y @anthropic-ai/claude-code@2.1.295 plugin validate .
+
+  discovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: scripts/check-discovery.sh

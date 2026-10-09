@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Check every SKILL.md in skills/ and incubator/ against the Agent Skills frontmatter rules,
-# plus this repo's convention: incubator skills are internal, promoted skills are not.
+# plus this repo's conventions: incubator skills are internal, promoted skills are not; every
+# category is in plugin.json; every promoted skill is in the README; scripts are executable;
+# relative links resolve.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,6 +47,32 @@ done
 for json in "$root"/.claude-plugin/*.json; do
   python3 -m json.tool "$json" >/dev/null 2>&1 || fail "${json#"$root"/}" "invalid JSON"
 done
+
+# The Claude Code plugin only loads category folders listed in plugin.json.
+plugin_skills="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])).get("skills",[]); print("\n".join([s] if isinstance(s,str) else s))' \
+  "$root/.claude-plugin/plugin.json" 2>/dev/null || true)"
+for category in "$root"/skills/*/; do
+  ls "$category"*/SKILL.md >/dev/null 2>&1 || continue
+  rel="skills/$(basename "$category")/"
+  grep -qxF "./$rel" <<<"$plugin_skills" || fail ".claude-plugin/plugin.json" "skills array is missing \"./$rel\""
+done
+
+# Every promoted skill is listed in the README catalogue.
+for file in "$root"/skills/*/SKILL.md "$root"/skills/*/*/SKILL.md; do
+  [[ -f "$file" ]] || continue
+  name="$(basename "$(dirname "$file")")"
+  grep -qF "| \`$name\` |" "$root/README.md" || fail "README.md" "skill '$name' has no row in the Skills table"
+done
+
+# Scripts with a shebang must be executable.
+while IFS= read -r script; do
+  [[ -x "$root/$script" ]] || fail "$script" "has a shebang but isn't executable"
+done < <(git -C "$root" grep -l -I '^#!' -- skills incubator scripts 2>/dev/null || true)
+
+python3 "$root/scripts/check-links.py" "$root" >/dev/null || {
+  python3 "$root/scripts/check-links.py" "$root" | sed 's/^/  ✗ /' >&2 || true
+  fail "links" "broken relative links (see above)"
+}
 
 if (( errors > 0 )); then
   echo "validation failed: $errors error(s) across $count skill(s)" >&2

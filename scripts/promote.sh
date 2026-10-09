@@ -33,5 +33,8 @@ awk '
   }
 ' "$dst/SKILL.md" > "$dst/SKILL.md.tmp" && mv "$dst/SKILL.md.tmp" "$dst/SKILL.md"
 
+# README Skills table row, and the category in plugin.json if it's new.
+python3 "$root/scripts/register-skill.py" "$root" "$rel"
+
 "$root/scripts/validate.sh"
 echo "promoted $name -> $rel"
