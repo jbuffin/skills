@@ -92,10 +92,16 @@ a PR doesn't release anything: its changeset waits on `main` until you decide to
    It opens or refreshes a "Release skills" PR from the pending changesets. That PR bumps `package.json`,
    copies the version into both `.claude-plugin/*.json` files (`scripts/sync-plugin-version.mjs`) and
    writes the changelog.
-2. Merge that PR. The push to `main` tags the release `v<version>`.
+2. Approve the PR's CI run. The PR is opened by the Actions token, so GitHub holds its checks until
+   someone approves them: the "Approve workflows to run" button on the PR, or
 
-The release PR is opened by the Actions token, so CI doesn't run on it and the required checks never
-report. Merge it with the admin bypass.
+   ```bash
+   gh run list --branch changeset-release/main --json databaseId,conclusion \
+     --jq '.[] | select(.conclusion=="action_required") | .databaseId'
+   gh api -X POST repos/jbuffin/skills/actions/runs/<id>/approve
+   ```
+
+3. Merge the PR once the checks pass. The push to `main` tags the release `v<version>`.
 
 ## Checks
 
