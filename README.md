@@ -1,4 +1,4 @@
-# agent-skills
+# skills
 
 Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)), installable with the
 [`skills` CLI](https://github.com/vercel-labs/skills) or as a Claude Code plugin.
@@ -20,13 +20,13 @@ The repo is private, so the CLI needs GitHub access (`gh auth login`, or `GITHUB
 
 ```bash
 # list / install promoted skills
-npx skills add jbuffin/agent-skills --list
-npx skills add jbuffin/agent-skills --skill <name>
-npx skills add jbuffin/agent-skills            # all promoted skills
+npx skills add jbuffin/skills --list
+npx skills add jbuffin/skills --skill <name>
+npx skills add jbuffin/skills            # all promoted skills
 
 # Claude Code plugin route
-/plugin marketplace add jbuffin/agent-skills
-/plugin install jbuffin-skills@jbuffin-skills
+/plugin marketplace add jbuffin/skills
+/plugin install jasonbuffin@skills
 ```
 
 To try an incubator skill without promoting it, point the CLI at its folder:

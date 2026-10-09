@@ -1,5 +1,5 @@
 {
-  "name": "jbuffin-skills",
+  "name": "skills",
   "owner": {
     "name": "Jason Buffin",
     "email": "jason@jasonbuffin.dev"
@@ -10,7 +10,7 @@
   },
   "plugins": [
     {
-      "name": "jbuffin-skills",
+      "name": "jasonbuffin",
       "source": "./",
       "description": "Promoted skills from skills/."
     }
