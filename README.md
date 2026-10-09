@@ -130,6 +130,10 @@ The hook runs `scripts/validate.sh` and `scripts/check-denylist.sh --staged`. Th
 match. It's for names that must never land here, like employers and internal systems. `.denylist` is
 gitignored, because committing it would publish the very names it keeps out, so CI can't run this check.
 
+## Contributing
+
+Issues are welcome; pull requests aren't accepted. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 [MIT](LICENSE)
