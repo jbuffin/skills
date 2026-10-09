@@ -1,5 +1,3 @@
-# skills
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/images/hero-light.png">
@@ -9,7 +7,7 @@
 Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)), installable with the
 [`skills` CLI](https://github.com/vercel-labs/skills) or as a Claude Code plugin.
 
-## Skills
+# Skills
 
 ### Engineering
 
