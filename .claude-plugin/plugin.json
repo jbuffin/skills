@@ -7,7 +7,7 @@
     "email": "jason@jasonbuffin.dev"
   },
   "repository": "https://github.com/jbuffin/skills",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "skills": [
     "./skills/engineering/"
   ]
