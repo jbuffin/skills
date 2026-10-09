@@ -3,15 +3,27 @@
 Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)), installable with the
 [`skills` CLI](https://github.com/vercel-labs/skills) or as a Claude Code plugin.
 
+## Skills
+
+### Engineering
+
+| Skill | What it does |
+| --- | --- |
+| `agent-team-build` | Runs work as chief of staff over Sonnet teammates in git worktrees: plan units, brief, build, independent review, evaluation on the real target, delivered as a PR, a gh stack or fixes to an existing PR. Type `/agent-team-build`; it doesn't load on its own. |
+| `agent-teammates` | Launches, watches, re-tasks and closes Claude Code background sessions (`claude --bg`) as teammates, with a report-and-marker contract, a watchdog and proof checks. |
+| `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
+| `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
+
 ## Layout
 
-```
+```text
 skills/<category>/<name>/    Promoted, grouped by category (e.g. engineering). Discovered and
                              installed by `npx skills add`.
 incubator/<name>/SKILL.md    In development. Not in a discovery path, and marked
                              `metadata.internal: true` as a second guard.
 templates/SKILL.template.md  Starting point used by scripts/new-skill.sh.
-scripts/                     new-skill, promote, validate.
+scripts/                     new-skill, promote, validate, and the check-* scripts CI runs.
+.githooks/                   Optional pre-commit hook.
 .claude-plugin/              Claude Code plugin + marketplace manifests.
 ```
 
@@ -66,8 +78,31 @@ npx skills add ./incubator/<name>
 ```bash
 scripts/new-skill.sh my-skill      # scaffold incubator/my-skill
 # ...iterate...
-scripts/validate.sh                # check frontmatter in both trees
+scripts/validate.sh                # frontmatter, plugin categories, README list, links, script modes
 scripts/promote.sh my-skill engineering   # move to skills/engineering/, drop internal flag
 ```
 
-Validation runs in CI on every push and pull request.
+## Checks
+
+CI (`.github/workflows/validate.yml`) runs on every push and pull request:
+
+| Job | What it checks |
+| --- | --- |
+| validate | `scripts/validate.sh` |
+| shell | `shellcheck` on bash scripts, `zsh -n` on zsh scripts |
+| markdown | `markdownlint-cli2` (line length off, see `.markdownlint-cli2.jsonc`) |
+| python | `ruff check` and `ruff format --check` (see `ruff.toml`) |
+| workflows | `actionlint` |
+| plugin | `claude plugin validate .` |
+| discovery | `scripts/check-discovery.sh`: `npx skills` finds exactly the promoted skills |
+
+### Local pre-commit hook
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs `scripts/validate.sh` and `scripts/check-denylist.sh --staged`. The denylist check reads
+`.denylist` at the repo root, one case-insensitive regex per line, and blocks any commit that adds a
+match. It's for names that must never land here, like employers and internal systems. `.denylist` is
+gitignored, because committing it would publish the very names it keeps out, so CI can't run this check.

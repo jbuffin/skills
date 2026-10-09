@@ -42,3 +42,6 @@ scratch/
 *.log
 *.tmp
 dist/
+
+# Local list of names that must never be committed (scripts/check-denylist.sh)
+.denylist

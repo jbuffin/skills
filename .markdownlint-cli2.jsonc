@@ -1,0 +1,7 @@
+{
+  "config": {
+    // Skills and docs use one line per paragraph; wrapping them adds diff noise for no benefit.
+    "MD013": false
+  },
+  "ignores": ["node_modules/**"]
+}
