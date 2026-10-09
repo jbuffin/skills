@@ -58,7 +58,7 @@ Pin each `secret-run.sh` rule to one service, one variable and one consumer comm
 
 Force-pushes go through a wrapper that pins the refspec to the run's own branches, such as agent-team-build's `push-branch.sh`. A prefix rule on `git push --force-with-lease origin <branch-prefix>*` also matches `origin <branch-prefix>x:main`, which force-pushes main.
 
-Rules match the literal command, and agents make every call bare (agent-teammates defines it). Write the paths exactly the way the agents will type them, because a symlinked skills folder resolves to a different path. Where a permission classifier judges actions by their description, add the plain phrasing the environment accepts, such as "pass the stage test user's password to the UI tests via the Keychain helper". Done when every gated action in the manifest has a rule. The engineer approves them in the section 4 batch, and then you write them to settings.
+Rules match the literal command, so agents make every call bare: one command, run directly by its literal absolute path, with no `;`, `&&`, pipes, `source` or shell variables. Write the paths exactly the way the agents will type them, because a symlinked skills folder resolves to a different path. Where a permission classifier judges actions by their description, add the plain phrasing the environment accepts, such as "pass the stage test user's password to the UI tests via the Keychain helper". Done when every gated action in the manifest has a rule. The engineer approves them in the section 4 batch, and then you write them to settings.
 
 ## 4. One batch of decisions
 
