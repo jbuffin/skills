@@ -31,8 +31,6 @@ scripts/                     new-skill, promote, validate, and the check-* scrip
 
 ## Install
 
-The repo is private, so the CLI needs GitHub access (`gh auth login`, or `GITHUB_TOKEN`/`GH_TOKEN`).
-
 ```bash
 # list / install promoted skills
 npx skills add jbuffin/skills --list
