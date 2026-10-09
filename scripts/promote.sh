@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# Promote an incubator skill to skills/ so it becomes installable.
+# Promote an incubator skill to skills/[<category>/] so it becomes installable.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 name="${1:-}"
+category="${2:-}"
 src="$root/incubator/$name"
-dst="$root/skills/$name"
+rel="skills/${category:+$category/}$name"
+dst="$root/$rel"
 
-[[ -n "$name" && -f "$src/SKILL.md" ]] || { echo "usage: $0 <incubator-skill-name>" >&2; exit 1; }
-[[ ! -e "$dst" ]] || { echo "error: skills/$name already exists" >&2; exit 1; }
+[[ -n "$name" && -f "$src/SKILL.md" ]] || { echo "usage: $0 <incubator-skill-name> [category]" >&2; exit 1; }
+[[ ! -e "$dst" ]] || { echo "error: $rel already exists" >&2; exit 1; }
 
 if grep -q 'TODO' "$src/SKILL.md"; then
   echo "error: incubator/$name/SKILL.md still contains TODO placeholders" >&2
   exit 1
 fi
 
+mkdir -p "$(dirname "$dst")"
 git -C "$root" mv "$src" "$dst" 2>/dev/null || mv "$src" "$dst"
 
 # Drop `internal: true`, and the metadata block if that leaves it empty.
@@ -31,4 +34,4 @@ awk '
 ' "$dst/SKILL.md" > "$dst/SKILL.md.tmp" && mv "$dst/SKILL.md.tmp" "$dst/SKILL.md"
 
 "$root/scripts/validate.sh"
-echo "promoted $name -> skills/$name"
+echo "promoted $name -> $rel"
