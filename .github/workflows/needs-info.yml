@@ -1,0 +1,34 @@
+name: needs-info
+
+# Close an issue 14 days after it's labelled needs-info if nobody replies. Only that label is touched;
+# nothing goes stale on its own. A reply removes needs-info and puts the issue back in needs-triage,
+# so ask your question first, then add the label.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      actions: write # actions/stale keeps its state in the Actions cache
+    steps:
+      - uses: actions/stale@v10
+        with:
+          only-issue-labels: needs-info
+          stale-issue-label: needs-info
+          days-before-issue-stale: -1
+          days-before-issue-close: 14
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          remove-issue-stale-when-updated: true
+          labels-to-add-when-unstale: needs-triage
+          close-issue-reason: not_planned
+          close-issue-message: >
+            Closing this: it's been 14 days since I asked for more detail. Comment with the
+            details and I'll reopen it.

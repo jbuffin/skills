@@ -1,7 +1,10 @@
 {
   "config": {
     // Skills and docs use one line per paragraph; wrapping them adds diff noise for no benefit.
-    "MD013": false
+    "MD013": false,
+    // CHANGELOG.md repeats "### Minor Changes" etc. under each release.
+    "MD024": { "siblings_only": true }
   },
-  "ignores": ["node_modules/**"]
+  // Changesets are one-off release notes with no heading; they end up in CHANGELOG.md, which is linted.
+  "ignores": ["node_modules/**", ".changeset/*.md"]
 }

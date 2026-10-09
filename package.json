@@ -1,0 +1,20 @@
+{
+  "name": "jasonbuffin-skills",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Jason Buffin's personal agent skills",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbuffin/skills"
+  },
+  "license": "MIT",
+  "scripts": {
+    "changeset": "changeset",
+    "version": "changeset version && node scripts/sync-plugin-version.mjs"
+  },
+  "packageManager": "npm@10.9.4",
+  "devDependencies": {
+    "@changesets/changelog-github": "1.0.1",
+    "@changesets/cli": "3.0.3"
+  }
+}

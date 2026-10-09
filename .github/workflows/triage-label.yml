@@ -1,0 +1,22 @@
+name: triage-label
+
+# Label every new issue needs-triage. The issue forms add it too; this catches issues opened through
+# the API, the CLI or a blank issue.
+
+on:
+  issues:
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - run: gh issue edit "$NUMBER" --add-label needs-triage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}

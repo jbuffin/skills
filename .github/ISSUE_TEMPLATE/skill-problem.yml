@@ -1,0 +1,94 @@
+name: Skill problem
+description: A skill did the wrong thing, stopped partway, or wouldn't install or load.
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Skills here drive agents through real repos, accounts and devices, so transcripts and reports
+        often hold things that shouldn't be public. Redact secrets, internal hostnames, and company or
+        customer names before you paste anything.
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Skill
+      options:
+        - agent-team-build
+        - agent-teammates
+        - run-preflight
+        - target-evaluation
+        - Repo tooling (install, plugin, scripts, CI)
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where it went wrong
+      options:
+        - Installing, or the skill never loaded
+        - A preflight check failed or was wrong
+        - During a run
+        - In the result (report, PR, evaluation)
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - Claude Code plugin (/plugin install jasonbuffin@skills)
+        - skills CLI (npx skills add jbuffin/skills)
+        - Local copy or symlink
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Skills version
+      description: The plugin version from `/plugin`, or the commit you installed from.
+      placeholder: 0.2.1 or bb99813
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Agent and environment
+      description: The output of `claude --version`, your OS version, and your shell.
+      placeholder: Claude Code 2.1.x, macOS 15.5, zsh
+    validations:
+      required: true
+  - type: textarea
+    id: asked
+    attributes:
+      label: What you asked for
+      description: The slash command or prompt that started it, plus any profile or `team.env` settings that matter.
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What the agent did
+      description: The step where it went wrong, and the excerpt of the transcript, report or error that shows it.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: If a line in the SKILL.md or its references says otherwise, quote or link it.
+    validations:
+      required: true
+  - type: textarea
+    id: preflight
+    attributes:
+      label: Preflight output
+      description: For the engineering team skills, the output of `agent-team-build/scripts/team-preflight.sh` or `run-preflight/scripts/preflight.sh`, if you ran it.
+      render: shell
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed secrets, tokens, internal hostnames, and company or customer names from everything above.
+          required: true

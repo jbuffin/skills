@@ -12,7 +12,8 @@ This repo publishes agent skills. Each skill is a folder with a `SKILL.md` (YAML
   there). Do not hand-move skills between trees.
 - When you rename or remove a skill, update its row in the README Skills table yourself.
   `scripts/validate.sh` fails if a promoted skill has no row.
-- Bump `version` in both `.claude-plugin/*.json` files when promoting or materially changing a skill.
+- When promoting or materially changing a skill, add a changeset (`npx changeset`; see `.changeset/README.md`).
+  Don't edit `version` in `package.json` or `.claude-plugin/*.json` by hand; the release workflow does it.
 
 ## Writing skills
 

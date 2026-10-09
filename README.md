@@ -25,11 +25,11 @@ templates/SKILL.template.md  Starting point used by scripts/new-skill.sh.
 scripts/                     new-skill, promote, validate, and the check-* scripts CI runs.
 .githooks/                   Optional pre-commit hook.
 .claude-plugin/              Claude Code plugin + marketplace manifests.
+.changeset/                  Pending changesets; they become CHANGELOG.md entries on release.
+.github/ISSUE_TEMPLATE/      Issue forms: skill problem, skill idea.
 ```
 
 ## Install
-
-The repo is private, so the CLI needs GitHub access (`gh auth login`, or `GITHUB_TOKEN`/`GH_TOKEN`).
 
 ```bash
 # list / install promoted skills
@@ -78,9 +78,24 @@ npx skills add ./incubator/<name>
 ```bash
 scripts/new-skill.sh my-skill      # scaffold incubator/my-skill
 # ...iterate...
-scripts/validate.sh                # frontmatter, plugin categories, README list, links, script modes
+scripts/validate.sh                # frontmatter, plugin categories, README list, versions, links, script modes
 scripts/promote.sh my-skill engineering   # move to skills/engineering/, drop internal flag
+npm install && npx changeset       # describe the change and pick patch / minor / major
 ```
+
+### Releases
+
+Versions and `CHANGELOG.md` are managed by [Changesets](https://github.com/changesets/changesets). Merging
+a PR doesn't release anything: its changeset waits on `main` until you decide to release.
+
+1. Run the release workflow by hand: Actions → release → Run workflow, or `gh workflow run release.yml`.
+   It opens or refreshes a "Release skills" PR from the pending changesets. That PR bumps `package.json`,
+   copies the version into both `.claude-plugin/*.json` files (`scripts/sync-plugin-version.mjs`) and
+   writes the changelog.
+2. Merge that PR. The push to `main` tags the release `v<version>`.
+
+The release PR is opened by the Actions token, so CI doesn't run on it and the required checks never
+report. Merge it with the admin bypass.
 
 ## Checks
 
@@ -88,13 +103,21 @@ CI (`.github/workflows/validate.yml`) runs on every push and pull request:
 
 | Job | What it checks |
 | --- | --- |
-| validate | `scripts/validate.sh` |
+| validate | `scripts/validate.sh`, including that both plugin manifests match the `package.json` version |
 | shell | `shellcheck` on bash scripts, `zsh -n` on zsh scripts |
 | markdown | `markdownlint-cli2` (line length off, see `.markdownlint-cli2.jsonc`) |
 | python | `ruff check` and `ruff format --check` (see `ruff.toml`) |
 | workflows | `actionlint` |
 | plugin | `claude plugin validate .` |
 | discovery | `scripts/check-discovery.sh`: `npx skills` finds exactly the promoted skills |
+
+Other workflows:
+
+| Workflow | What it does |
+| --- | --- |
+| `release.yml` | Run by hand: opens the Changesets release PR. On every push to `main`: tags the version if it has no tag yet |
+| `triage-label.yml` | Labels every new issue `needs-triage` |
+| `needs-info.yml` | Daily: closes issues still labelled `needs-info` 14 days later. A reply removes the label and puts the issue back in `needs-triage` |
 
 ### Local pre-commit hook
 
@@ -106,6 +129,10 @@ The hook runs `scripts/validate.sh` and `scripts/check-denylist.sh --staged`. Th
 `.denylist` at the repo root, one case-insensitive regex per line, and blocks any commit that adds a
 match. It's for names that must never land here, like employers and internal systems. `.denylist` is
 gitignored, because committing it would publish the very names it keeps out, so CI can't run this check.
+
+## Contributing
+
+Issues are welcome; pull requests aren't accepted. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
