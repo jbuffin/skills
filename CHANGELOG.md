@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 0.2.2
+
+### Patch Changes
+
+- [#5](https://github.com/jbuffin/skills/pull/5) [`803252f`](https://github.com/jbuffin/skills/commit/803252f8a8c65c80477062ac8d234d140ca7a88e) Thanks [@jbuffin](https://github.com/jbuffin)! - The skills are now MIT licensed ([#4](https://github.com/jbuffin/skills/pull/4)). Versions and this changelog are now managed with Changesets.
+
 ## 0.2.1
 
 Versions up to here were bumped by hand, before Changesets.
