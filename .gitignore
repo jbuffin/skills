@@ -1,0 +1,44 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Node (if a skill ships JS helpers)
+node_modules/
+npm-debug.log*
+.npm/
+
+# Python (if a skill ships Python helpers)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Agent-local state — skills installed *into* this repo by `npx skills add`
+# or per-user agent settings, not the skills this repo publishes
+.agents/
+.claude/skills/
+.claude/settings.local.json
+.cursor/
+.windsurf/
+skills-lock.json
+
+# Scratch / outputs
+tmp/
+scratch/
+*.log
+*.tmp
+dist/

@@ -1,0 +1,12 @@
+{
+  "name": "jbuffin-skills",
+  "description": "Jason Buffin's personal agent skills (promoted skills only).",
+  "version": "0.1.0",
+  "author": {
+    "name": "Jason Buffin",
+    "email": "jason@jasonbuffin.dev"
+  },
+  "repository": "https://github.com/jbuffin/agent-skills",
+  "license": "UNLICENSED",
+  "skills": "./skills/"
+}

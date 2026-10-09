@@ -1,0 +1,18 @@
+{
+  "name": "jbuffin-skills",
+  "owner": {
+    "name": "Jason Buffin",
+    "email": "jason@jasonbuffin.dev"
+  },
+  "metadata": {
+    "description": "Jason Buffin's personal agent skills.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "jbuffin-skills",
+      "source": "./",
+      "description": "Promoted skills from skills/."
+    }
+  ]
+}
