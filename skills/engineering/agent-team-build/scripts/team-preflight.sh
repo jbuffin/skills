@@ -53,15 +53,16 @@ else
   done
   # One probe per model in parallel (each has its own session name); print in order.
   pd=$(mktemp -d); pids=()
-  trap 'kill $pids 2>/dev/null; rm -rf $pd; exit 143' INT TERM HUP
+  # $pids are the probes themselves, so each probe's own trap stops its session; wait for them before cleaning up.
+  trap 'kill -TERM $pids 2>/dev/null; wait; rm -rf $pd; exit 143' INT TERM HUP
   i=0
   for m in $models; do
     i=$((i+1))
-    { ${ADVISOR_PROBE:-${0:A:h}/advisor-probe.sh} $1 $m > $pd/$i 2>&1; echo $? > $pd/$i.rc } &
+    ${ADVISOR_PROBE:-${0:A:h}/advisor-probe.sh} $1 $m > $pd/$i 2>&1 &
     pids+=$!
     sleep 0.3   # start the sessions in order, not in a burst
   done
-  wait
+  i=0; for pid in $pids; do i=$((i+1)); wait $pid; echo $? > $pd/$i.rc; done
   i=0
   for m in $models; do
     i=$((i+1))
