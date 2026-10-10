@@ -15,8 +15,8 @@ RO=; MODEL_OPT=; ROLE=
 while [[ $1 == --* ]]; do
   case $1 in
     --read-only) RO=1; shift ;;
-    --model) [[ -n $2 ]] || usage; MODEL_OPT=$2; shift 2 ;;
-    --role) [[ -n $2 ]] || usage; ROLE=$2; shift 2 ;;
+    --model) [[ -n $2 && $2 != -* ]] || usage; MODEL_OPT=$2; shift 2 ;;
+    --role) [[ -n $2 && $2 != -* ]] || usage; ROLE=$2; shift 2 ;;
     *) usage ;;
   esac
 done
