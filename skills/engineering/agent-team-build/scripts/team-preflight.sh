@@ -59,6 +59,7 @@ else
     i=$((i+1))
     { ${ADVISOR_PROBE:-${0:A:h}/advisor-probe.sh} $1 $m > $pd/$i 2>&1; echo $? > $pd/$i.rc } &
     pids+=$!
+    sleep 0.3   # start the sessions in order, not in a burst
   done
   wait
   i=0
