@@ -87,4 +87,4 @@ If `launch-teammate.sh` exits 2 (`NO_BG`, meaning background sessions aren't ava
 
 ## Parallelism
 
-Two teammates working at once is about the useful limit for one coordinator. Past that, your context goes on reading reports. Give each exclusive resource (a device, a worktree, a test account) one long-lived owner that takes requests by message, rather than sharing it between teammates.
+Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (a reviewer, a security reviewer, a brief checker) do not count toward the limit. The limit protects your context from too many reports and keeps writers from contending, and read-only reviewers produce the same reports whether they run in parallel or one after another. Give each exclusive resource (a device, a worktree, a test account) one long-lived owner that takes requests by message, rather than sharing it between teammates.

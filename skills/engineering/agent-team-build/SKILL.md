@@ -20,6 +20,9 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 ## Words used here
 
+- A **security reviewer** is a read-only teammate, fresh every review round, that reviews a unit's diff only for security vulnerabilities, alongside the reviewer.
+- A **blocking finding** is a review finding at or above the profile's severity threshold (default: HIGH and MEDIUM). It must be fixed, or handed to a human at the round cap, before the unit ships.
+- A **non-blocking finding** is a review finding below the threshold (default: LOW). It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial.
 - A **unit** is one piece of the work a single reviewer can hold in their head, usually one PR. The plan is an ordered list of units.
 - The **source of truth** is what a unit gets checked against: a spec, a design, an issue's acceptance criteria, existing behaviour, or reference code at a commit SHA. It is never a paraphrase of any of those.
 - The **target** is wherever the work runs for its users. A browser, a phone, an API, a terminal, a desktop.
@@ -40,7 +43,7 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 Pick the mode in phase 1 and say which one and why in the decision batch. If the work turns out bigger or smaller than it looked, change it and tell the engineer. The chosen mode's section of [`references/modes.md`](references/modes.md) has its worktree commands and procedure.
 
-You launch every teammate with `--role <role>`, using the role names `brief-checker`, `test-writer`, `implementer`, `reviewer`, `target-steward` and `scribe`. The model comes from the profile through `team.env` (`MODEL_<ROLE>`), and a fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names.
+You launch every teammate with `--role <role>`, using the role names `brief-checker`, `test-writer`, `implementer`, `reviewer`, `security-reviewer`, `target-steward` and `scribe`. The model comes from the profile through `team.env` (`MODEL_<ROLE>`), and a fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names.
 
 ```bash
 <teammates>/launch-teammate.sh [--read-only] --role <role> <run> <name> <unit> [prompt-file]
@@ -97,6 +100,7 @@ The workflow is fixed, but the cast changes with the work. Pick each unit's team
 | Test writer | writes the unit's failing tests (or checks, for non-code work) from the source of truth | the behaviour can be pinned by tests or scripted checks |
 | Implementer | builds the unit, then stays alive to fix its own findings | always |
 | Reviewer | reviews the diff against the source of truth, fresh each round | always |
+| Security reviewer | reviews the same diff for security vulnerabilities only, fresh each round | always |
 | Target steward | owns the target for the whole run, does a light check each unit and full evaluations on target-evaluation's cadence | the work runs somewhere a user would touch it |
 | Scribe | PR bodies, round-cap PR comments, notes | unless the run is tiny |
 
@@ -105,14 +109,14 @@ For each unit:
 1. Write the brief. Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the skill the role runs, and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). Done when the brief checker reports no contradicted or unsourced claims.
 2. The test writer goes red. Its tests all fail, and for the right reason.
 3. The implementer goes green. Its suites and lint pass, the work is committed in the unit's worktree, and its proof verifies. Once it commits, start the next unit's test writer, as long as the next unit's source doesn't depend on this unit's review.
-4. Review and evaluation run in parallel. A fresh reviewer, launched `--read-only --role reviewer`, runs the review skill on the diff. The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change). Done when both reports are in. If the reviewer found nothing blocking and the light check passed, go to step 6.
-5. Run fix rounds. Findings go to the unit's implementer by message (SendMessage to its name, then `<teammates>/retasked.sh`), a fresh reviewer looks at the fix diff only, and the steward re-checks anything user-visible. Done when a round ends with no blocking findings and a passing light check, or at the round cap. At the cap, record in `state.md` what's left for a human.
+4. Review and evaluation run in parallel. A fresh reviewer, launched `--read-only --role reviewer`, runs the review skill on the diff. A fresh security reviewer, named `u<unit>-security-reviewer[-<round>]` and launched `--read-only --role security-reviewer`, runs `/security-review` or the profile's security review skill. That skill can't take a commit range, so its brief gives the exact range and tells it to review only that: `<unit base>...HEAD` in round 1, where the unit base is the previous unit's branch in a stack and the base branch otherwise, and `<last reviewed SHA>..HEAD` after. Record the last reviewed SHA in `state.md` each round. The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change). Done when all three reports are in: the reviewer's, the security reviewer's and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6. HIGH and MEDIUM findings are blocking and LOW findings are non-blocking, unless the profile moves the threshold.
+5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and send it to the unit's implementer in a single message (SendMessage to its name, then `<teammates>/retasked.sh`). When fixes conflict, the security fix wins, and you record the decision in `state.md`. The implementer may also fix trivial non-blocking findings, but only in a round that already has blocking fixes, so they never cause an extra round. Trivial means a few lines inside the unit's own files with no other change in behaviour. Its report lists which non-blocking findings it fixed. Then a fresh reviewer and a fresh security reviewer look at the fix diff only, and the steward re-checks anything user-visible. Security findings share the reviewer's round counter and its cap of 3. Done when a round ends with no blocking findings and a passing light check, or at the round cap. At the cap, record in `state.md` what's left for a human, unresolved security findings included, and list it in the round-cap PR comment. Record unfixed non-blocking findings in `state.md` too, for the final summary.
 6. Ship the way the mode says. The scribe writes the PR body first, and at the round cap a PR comment listing what's left for a human, posted once the PR exists. Then open a draft PR, run `gh stack submit --auto` or `gh stack push`, or run `<team>/push-branch.sh <run> <branch>` for the existing PR's branch. Run `<team>/watch-ci.sh <run> <branch>` in the background; it exits non-zero on red. Red CI gets fixed before anything builds on the unit.
 7. Close the unit once CI is green. Mark the unit's trace rows, update `state.md`, close the unit's teammates and send the engineer the unit summary. Close the implementer last, because until then a finding from the reviewer, the target or CI goes back to it.
 
 On every `DONE`, run `<teammates>/verify-report.sh <run> <name>` before you act on the report. It checks that the report and marker are from this tasking, that each declared proof ran in the teammate's worktree on its current HEAD with nothing uncommitted and exited 0, and that the report's `commit:` line names that HEAD. `verdict: unverified` means the work isn't done, whatever the report says; send the FAIL lines back to the teammate as its next instruction.
 
-Keep at most two teammates working at once, plus the steward. A teammate waiting for a message doesn't count (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
+Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (the reviewer, the security reviewer, the brief checker) do not count, and neither does a teammate waiting for a message (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
 
 ## Bubbling questions up
 
@@ -128,6 +132,7 @@ Teammates put questions in their reports, with options and a recommendation, and
 Unit N: <unit> (<PR or branch>, <state>)
 Built: <one line>   Tests: <counts>   Target (<option used>): <light check passed/failed; full eval yes/no>
 Review: round k of cap, <fixed / left for human>
+Security: <fixed / left for human / none>; LOW: <n recorded>
 Proof: <verify-report verdict>   Criteria closed: <ids from the trace>
 CI: <green / red / running>
 Not checked: <what nobody ran or looked at, and why | nothing>
@@ -161,5 +166,5 @@ The run ends when the stop rule is observed on the target it names. Opening the 
    If any check fails, the run is partial. Say exactly which checks failed.
 3. Close every teammate, stop the watchdog and the CI watchers, and leave the target in the agreed state. List every worktree from `worktrees.tsv` with its branch and whether it's clean. Remove them only when the engineer says so.
 4. Leave the delivery the way the ground rules say. Every PR at the round cap has its human-review comment.
-5. Write the final report: units and PRs, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why.
+5. Write the final report: units and PRs, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why.
 6. Lessons go to the repo's own docs, as a proposed edit for the engineer to accept, whenever the run tripped over a missing or wrong instruction there.
