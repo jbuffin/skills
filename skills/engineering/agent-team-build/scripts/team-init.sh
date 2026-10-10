@@ -68,6 +68,15 @@ MODEL=sonnet
 PERMISSION_MODE=auto
 CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 # Fill from the profile:
+# MODEL is the fallback for a teammate launched without --role. REQUIRE_ROLE=1 makes every launch pass --role or --model.
+# MODEL_<ROLE> is the model for --role <role>; an empty one refuses that launch.
+REQUIRE_ROLE=1
+MODEL_BRIEF_CHECKER=opus
+MODEL_TEST_WRITER=sonnet
+MODEL_IMPLEMENTER=sonnet
+MODEL_REVIEWER=opus
+MODEL_TARGET_STEWARD=sonnet
+MODEL_SCRIBE=sonnet
 MODE=            # single | stack | independent | pr
 BASE_BRANCH=
 BRANCH_PREFIX=

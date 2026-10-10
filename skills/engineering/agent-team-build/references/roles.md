@@ -1,6 +1,18 @@
 # Roles
 
-Every teammate is a Sonnet session. Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name is `<name>`." Then it gives the role's section below, the unit, and the unit's pointers. The role sections speak to the teammate, so paste them as written. Names follow `u<unit>-<role>[-<round>]`, like `u3-reviewer-2`. The target steward and the scribe are just `target-steward` and `scribe`.
+Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name is `<name>`." Then it gives the role's section below, the unit, and the unit's pointers. The role sections speak to the teammate, so paste them as written. Names follow `u<unit>-<role>[-<round>]`, like `u3-reviewer-2`. The target steward and the scribe are just `target-steward` and `scribe`.
+
+## Models
+
+Launch every teammate with `--role <role>`, using the names `brief-checker`, `test-writer`, `implementer`, `reviewer`, `target-steward` and `scribe`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`, which the profile fills. These are the defaults, and the profile overrides them:
+
+| Role | Default |
+| --- | --- |
+| Implementer, test writer, target steward | sonnet |
+| Reviewer, brief checker | opus |
+| Scribe | sonnet (haiku allowed) |
+
+The reviewer and the brief checker run on a model at least as capable as the coordinator's. If the coordinator runs on a model above Opus, the profile sets these two roles to the coordinator's model.
 
 ## Lifetimes
 
@@ -19,7 +31,7 @@ Investigation and documentation work keeps the same roles. The implementer produ
 
 ## Brief checker
 
-You're launched `--read-only`, with the unit's draft briefs and its source of truth (a spec, issue, design, or code at a SHA). For each factual claim in a brief, such as a URI, a contract, a UI shape, an acceptance criterion or which PR owns which behaviour, find that claim in the source. Report which claims you confirmed, which the source contradicts (with file:line), and which have no source at all. The coordinator fixes the brief before launching anyone.
+You're launched `--read-only --role brief-checker`, with the unit's draft briefs and its source of truth (a spec, issue, design, or code at a SHA). For each factual claim in a brief, such as a URI, a contract, a UI shape, an acceptance criterion or which PR owns which behaviour, find that claim in the source. Report which claims you confirmed, which the source contradicts (with file:line), and which have no source at all. The coordinator fixes the brief before launching anyone.
 
 Coordinator mistakes tend to live in briefs. A contract value gets copied wrong, or a UI gets described from a comment written before the merge instead of from the merged code. This is the cheapest place to catch them.
 
@@ -37,7 +49,7 @@ Then stay alive. On the coordinator's fix-round message, apply the findings, re-
 
 ## Reviewer
 
-You're launched `--read-only`. Run `/code-review`, or the project's review skill, on the unit's diff in round 1 and on the fix commits after that. Use the source of truth and the unit's brief as context. Report findings ranked by severity, each with file:line and a failure scenario, and mark which ones block. Your output is the report alone: no edits, no GitHub comments.
+You're launched `--read-only --role reviewer`. Run `/code-review`, or the project's review skill, on the unit's diff in round 1 and on the fix commits after that. Use the source of truth and the unit's brief as context. Report findings ranked by severity, each with file:line and a failure scenario, and mark which ones block. Your output is the report alone: no edits, no GitHub comments.
 
 ## Target steward
 

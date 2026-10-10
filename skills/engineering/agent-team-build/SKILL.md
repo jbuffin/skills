@@ -1,6 +1,6 @@
 ---
 name: agent-team-build
-description: Chief-of-staff team run. Plan the work into units, brief fresh Sonnet teammates in git worktrees, review and evaluate each unit on the real target, and deliver one PR, a gh stack, or fixes to an existing PR.
+description: Chief-of-staff team run. Plan the work into units, brief fresh teammates, each on the model its role calls for, in git worktrees, review and evaluate each unit on the real target, and deliver one PR, a gh stack, or fixes to an existing PR.
 disable-model-invocation: true
 ---
 
@@ -40,6 +40,12 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 Pick the mode in phase 1 and say which one and why in the decision batch. If the work turns out bigger or smaller than it looked, change it and tell the engineer. The chosen mode's section of [`references/modes.md`](references/modes.md) has its worktree commands and procedure.
 
+You launch every teammate with `--role <role>`, using the role names `brief-checker`, `test-writer`, `implementer`, `reviewer`, `target-steward` and `scribe`. The model comes from the profile through `team.env` (`MODEL_<ROLE>`), and a fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names.
+
+```bash
+<teammates>/launch-teammate.sh [--read-only] --role <role> <run> <name> <unit> [prompt-file]
+```
+
 The work inside a role can be one of the user's own skills. The profile names the skill each role runs, and each brief tells the teammate to invoke it. A role with no named skill follows its section in [`references/roles.md`](references/roles.md).
 
 ## The run directory and the state file
@@ -54,7 +60,7 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 The run has to get from the first unit to the stop rule without the engineer.
 
-1. Write the profile. Copy [`references/profile-template.md`](references/profile-template.md) to `<run>/profile.md` and fill it from the repo: CLAUDE.md or AGENTS.md, the CI config, the issue, the PR template. Ask the engineer only for what the repo can't tell you. Done when every field is filled or `n/a`.
+1. Write the profile. Copy [`references/profile-template.md`](references/profile-template.md) to `<run>/profile.md` and fill it from the repo: CLAUDE.md or AGENTS.md, the CI config, the issue, the PR template. Ask the engineer only for what the repo can't tell you. Record the model for each role in the profile's Goal section (defaults and the capability rule are in [`references/roles.md`](references/roles.md)), and copy those choices into the `MODEL_<ROLE>` lines of `<run>/team.env`. Done when every field is filled or `n/a` and every role the run uses has a non-empty `MODEL_<ROLE>`.
 2. Plan the units, ordered so each builds only on the units below it. Anything every unit needs (CI, tooling, shared types) goes in the first. Then check four things.
    - Does the ask match the plan of record? If the project has a roadmap, design or ticket hierarchy and the request doesn't fit it, propose the smallest cut that meets the stop rule, and ask.
    - What does the work build on? Note unmerged prerequisite branches and what happens when they merge.
@@ -74,7 +80,7 @@ The run has to get from the first unit to the stop rule without the engineer.
 
       Record the answers in `state.md`. The rest of the run reads its ground rules from there.
    3. Run `<team>/team-preflight.sh <run>`, which does the team checks plus run-preflight's and lists any ignored files the worktrees still lack.
-   4. Launch run-preflight's probe with agent-teammates, so it runs exactly the way teammates will, and settle whatever it reports with the engineer.
+   4. Launch run-preflight's probe with agent-teammates and `--role implementer`, so it runs exactly the way teammates will, on the model of the teammates that write, and settle whatever it reports with the engineer.
 
    Done when the probe comes back clean, every secret is stored, and `state.md` holds the ground rules and every answer.
 6. Write the common brief at `<run>/brief-common.md`, starting from [`references/brief-common.md`](references/brief-common.md). Done when no `<…>` is left in it.
@@ -99,7 +105,7 @@ For each unit:
 1. Write the brief. Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the skill the role runs, and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). Done when the brief checker reports no contradicted or unsourced claims.
 2. The test writer goes red. Its tests all fail, and for the right reason.
 3. The implementer goes green. Its suites and lint pass, the work is committed in the unit's worktree, and its proof verifies. Once it commits, start the next unit's test writer, as long as the next unit's source doesn't depend on this unit's review.
-4. Review and evaluation run in parallel. A fresh reviewer, launched `--read-only`, runs the review skill on the diff. The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change). Done when both reports are in. If the reviewer found nothing blocking and the light check passed, go to step 6.
+4. Review and evaluation run in parallel. A fresh reviewer, launched `--read-only --role reviewer`, runs the review skill on the diff. The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change). Done when both reports are in. If the reviewer found nothing blocking and the light check passed, go to step 6.
 5. Run fix rounds. Findings go to the unit's implementer by message (SendMessage to its name, then `<teammates>/retasked.sh`), a fresh reviewer looks at the fix diff only, and the steward re-checks anything user-visible. Done when a round ends with no blocking findings and a passing light check, or at the round cap. At the cap, record in `state.md` what's left for a human.
 6. Ship the way the mode says. The scribe writes the PR body first, and at the round cap a PR comment listing what's left for a human, posted once the PR exists. Then open a draft PR, run `gh stack submit --auto` or `gh stack push`, or run `<team>/push-branch.sh <run> <branch>` for the existing PR's branch. Run `<team>/watch-ci.sh <run> <branch>` in the background; it exits non-zero on red. Red CI gets fixed before anything builds on the unit.
 7. Close the unit once CI is green. Mark the unit's trace rows, update `state.md`, close the unit's teammates and send the engineer the unit summary. Close the implementer last, because until then a finding from the reviewer, the target or CI goes back to it.
