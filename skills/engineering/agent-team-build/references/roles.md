@@ -14,6 +14,12 @@ Launch every teammate with `--role <role>`, using the names `brief-checker`, `te
 
 The reviewer, the security reviewer and the brief checker run on a model at least as capable as the coordinator's. If the coordinator runs on a model above Opus, the profile sets these three roles to the coordinator's model.
 
+## The advisor
+
+Every role runs with the advisor: implementers, test writers, the target steward and the scribe, and also reviewers, security reviewers and brief checkers. The launcher passes `--advisor $ADVISOR` (default opus) on every launch, read-only ones included, and `brief-common.md` tells each teammate when to consult it. A teammate's advisor sees only that teammate's own transcript. It never sees the work a reviewer judges, so reviewers stay independent of the implementer.
+
+The advisor must rank at or above the teammate's model, and a pairing that doesn't hold starts without it and no error. `MODEL_REVIEWER=opus` with `ADVISOR=sonnet` leaves the reviewer without an advisor. A Fable teammate needs `ADVISOR=fable`, since a Fable main model accepts only a Fable advisor. The preflight probes every distinct model and reports `ADVISOR OFF` for each one that fails.
+
 ## Lifetimes
 
 | Role | Lifetime | Why |

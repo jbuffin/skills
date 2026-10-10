@@ -82,8 +82,8 @@ The run has to get from the first unit to the stop rule without the engineer.
       - Anything the engineer names stays untouched.
 
       Record the answers in `state.md`. The rest of the run reads its ground rules from there.
-   3. Run `<team>/team-preflight.sh <run>`, which does the team checks plus run-preflight's and lists any ignored files the worktrees still lack.
-   4. Launch run-preflight's probe with agent-teammates and `--role implementer`, so it runs exactly the way teammates will, on the model of the teammates that write, and settle whatever it reports with the engineer.
+   3. Run `<team>/team-preflight.sh <run>`, which does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and probes the advisor once per distinct teammate model (`<team>/advisor-probe.sh`; it starts a real session per model and takes up to a few minutes). A `WARN  ADVISOR OFF: <model> (<roles>): <reason>` line means those roles would start without the advisor and no error. Before you launch any teammate, tell the engineer which roles are affected and why. If they've already left, put it in your next update and carry on. Record it in `state.md` under Decisions and assumptions. There's no subagent fallback: those roles run without the advisor. Fix the cause only if it's cheap (an unset `DISABLE_TELEMETRY`, an `ADVISOR` that ranks below the model: `ADVISOR=fable` for a Fable teammate, otherwise `opus`). With `ADVISOR=none` the check is skipped.
+   4. Launch run-preflight's probe with agent-teammates and `--role implementer`, so it runs exactly the way teammates will, on the model of the teammates that write, and settle whatever it reports with the engineer. The probe proves the launch path and the gated actions. It doesn't prove the advisor; `advisor-probe.sh` does.
 
    Done when the probe comes back clean, every secret is stored, and `state.md` holds the ground rules and every answer.
 6. Write the common brief at `<run>/brief-common.md`, starting from [`references/brief-common.md`](references/brief-common.md). Done when no `<…>` is left in it.
@@ -128,6 +128,7 @@ Keep at most two teammates that write (edit files or commit) working at once, pl
 
 Teammates put questions in their reports, with options and a recommendation, and you sort each one.
 
+- Technical questions (how to do something, which approach, why a test fails) are for the advisor. Teammates ask it themselves and log each call under `## Advisor consults`. Scope, product behaviour, departures from the source of truth and ground-rule questions are never the advisor's; sort them as below. Read `## Advisor consults` in every report. A teammate that never consults, one that consults constantly, or the same confusion across teammates means the brief needs fixing: add what was missing to `<run>/brief-common.md` or the affected briefs.
 - If the profile, the source of truth or a ground rule answers it, it's yours. Decide, record it in `state.md`, and tell the teammate. Fresh teammates read `brief-common.md` and their own brief, not `state.md`. So if the decision binds later units or roles, also add it to `<run>/brief-common.md` or the affected briefs, saying where it came from.
 - If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next unit summary so the engineer can overturn it.
 - Product behaviour, design choices that depart from the source, scope, and anything external or irreversible belong to the engineer. Batch them. If the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
@@ -137,6 +138,7 @@ Teammates put questions in their reports, with options and a recommendation, and
 ```text
 Unit N: <unit> (<PR or branch>, <state>)
 Built: <one line>   Tests: <counts>   Target (<option used>): <light check passed/failed; full eval yes/no>
+Advisor: <on | off for <roles>: <reason>>
 Review: round k of cap, <fixed / left for human>
 Security: <fixed / left for human / none>; LOW: <n recorded>
 Proof: <verify-report verdict>   Criteria closed: <ids from the trace>

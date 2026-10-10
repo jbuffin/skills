@@ -8,6 +8,7 @@
 # '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
 # --read-only denies the file-editing tools inside <workdir> (a reviewer, a brief checker); it can still write its
 # report in <team-dir>. Bash isn't covered, so it's a guard against slips, not a sandbox.
+# Every launch passes --advisor $ADVISOR (default opus) unless team.env sets ADVISOR=none.
 # Exit 2 when a background session can't be started: run the teammate as an in-process subagent instead.
 SELF=${0:A}
 usage() { sed -n 2,11p $SELF; exit 5; }
@@ -53,7 +54,9 @@ print -r -- "$LIVE" | grep -q "\"name\": *\"${NAME//./\\.}\"" && {
 
 # --disallowedTools takes several values, so it goes before another flag, never right before the prompt.
 DENY=(); [[ -n $RO ]] && DENY=(--disallowedTools "Edit(/$W/**)" "NotebookEdit(/$W/**)")
-OUT=$(cd $W && claude --bg -n $NAME $DENY --model $CHOSEN --permission-mode $PERMISSION_MODE \
+# Every role gets the built-in advisor (ADVISOR, default opus; none turns it off). A refused pairing is dropped silently.
+ADV=(); [[ $ADVISOR != none ]] && ADV=(--advisor $ADVISOR)
+OUT=$(cd $W && claude --bg -n $NAME $DENY $ADV --model $CHOSEN --permission-mode $PERMISSION_MODE \
   "You are teammate $NAME. Read $P and do exactly what it says." 2>&1)
 RC=$?
 CLEAN=$(print -r -- "$OUT" | sed $'s/\x1b\\[[0-9;]*m//g')
@@ -63,7 +66,7 @@ ID=$(print -r -- "$CLEAN" | awk '/^backgrounded/ {print $3; exit}')
 if [[ $RC != 0 ]]; then
   print -r -- "$CLEAN" | grep -v '^warning: --bg manages the session id' | head -5
   [[ $CLEAN == *"not trusted"* ]] && echo "the folder isn't trusted: run \`claude\` once in the repository and accept the prompt (worktrees inside it inherit trust)"
-  echo "NO_BG: run $NAME as an in-process subagent with model=$CHOSEN, working in $W${RO:+, read-only (no edits in $W)}, task: read $P"; exit 2
+  echo "NO_BG: run $NAME as an in-process subagent with model=$CHOSEN, working in $W${RO:+, read-only (no edits in $W)}, task: read $P. It inherits the coordinator's configured advisor, if any."; exit 2
 fi
 
 VREF=

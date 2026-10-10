@@ -1,7 +1,7 @@
 #!/bin/zsh
 # usage: team-preflight.sh <run-dir>
-# The team-specific static checks (runtime, mode, gh-stack, worktrees), then the generic ones from the
-# run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL.
+# The team-specific static checks (runtime, mode, gh-stack, worktrees, advisor), then the generic ones from the
+# run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2,4p $0; exit 5; }
 source $1/team.env
 fail=0
@@ -9,6 +9,7 @@ ok()   { echo "OK    $*"; }
 warn() { echo "WARN  $*"; }
 bad()  { echo "FAIL  $*"; fail=1; }
 REPO=${REPO:-$WORKTREE}
+MODEL=${MODEL:-sonnet}; ADVISOR=${ADVISOR:-opus}
 
 command -v claude >/dev/null && ok "claude found" || bad "claude not on PATH"
 claude agents --json >/dev/null 2>&1 && ok "claude background sessions available (claude agents)" \
@@ -35,6 +36,24 @@ if [[ $MODE == stack ]]; then
   elif [[ $(printf '%s\n0.2.0\n' $v | sort -V | head -1) == 0.2.0 ]]; then ok "gh-stack $v (shares stack tracking across worktrees)"
   else bad "gh-stack $v keeps stack tracking per worktree; one worktree per unit needs >= 0.2.0 (gh extension upgrade gh-stack)"; fi
   [[ $(git -C $REPO config rerere.enabled) == true ]] && ok "rerere enabled" || warn "git rerere off (git config rerere.enabled true helps stack rebases)"
+fi
+# The built-in advisor comes on silently or not at all in a background session, so probe it once per distinct
+# teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment).
+if [[ $ADVISOR == none ]]; then
+  ok "advisor check skipped (ADVISOR=none)"
+else
+  models=(); typeset -A model_roles
+  add_model() { [[ -n ${model_roles[$1]+x} ]] || models+=$1; model_roles[$1]+="${model_roles[$1]:+, }$2"; }
+  add_model $MODEL default
+  for var in ${(u)${(f)"$(sed -nE 's/^MODEL_([A-Za-z0-9_]+)=.*/\1/p' $1/team.env)"}}; do
+    m=${(P)${:-MODEL_$var}}
+    [[ -n $m ]] && add_model $m ${${(L)var}//_/-}
+  done
+  for m in $models; do
+    line=$(${ADVISOR_PROBE:-${0:A:h}/advisor-probe.sh} $1 $m 2>&1 | tail -1)
+    if [[ $line == "ADVISOR ON "* ]]; then ok "advisor on for $m (${model_roles[$m]})"
+    else warn "ADVISOR OFF: $m (${model_roles[$m]}): ${line#ADVISOR OFF $m: }"; fi
+  done
 fi
 WT_DIR=${WORKTREES_DIR:-$REPO/.claude/worktrees}
 if [[ $WT_DIR == $REPO/* ]]; then

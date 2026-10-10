@@ -1,6 +1,7 @@
 # Sourced by the agent-teammates scripts, with D set to the team directory.
 # Loads <team-dir>/team.env if present, then fills defaults.
 #   MODEL            teammate model (default sonnet), for launches without --model or --role
+#   ADVISOR          built-in advisor model for every teammate (default opus; none turns it off); a pairing the main model refuses starts without it, silently
 #   MODEL_<ROLE>     model for launches with --role <role> (the role uppercased, "-" as "_"); no default: unset or empty refuses the launch
 #   REQUIRE_ROLE     1: a launch needs --role or --model; no default
 #   PERMISSION_MODE  teammate permission mode (default auto); same class as the coordinator, or messages are held
@@ -8,7 +9,7 @@
 #   REPO             a checkout teammates must never start in
 #   STALL_MIN        minutes a working teammate may go without writing to its transcript before STALL (default 10)
 [[ -f $D/team.env ]] && source $D/team.env
-: ${MODEL:=sonnet}; : ${STALL_MIN:=10}; : ${PERMISSION_MODE:=auto}; : ${VIEWER:=none}
+: ${MODEL:=sonnet}; : ${ADVISOR:=opus}; : ${STALL_MIN:=10}; : ${PERMISSION_MODE:=auto}; : ${VIEWER:=none}
 : ${CMUX:=${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}}
 REG=$D/teammates.tsv     # name id tasked-epoch|closed viewer-ref|- workdir
 mkdir -p $D/reports; touch $REG
