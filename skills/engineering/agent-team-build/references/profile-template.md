@@ -7,6 +7,7 @@ Copy this to `<run>/profile.md`. Fill in every field, or write `n/a`. The profil
 - What's being done (feature, fix, refactor, migration, investigation, docs), the issue or epic link, and the work item if the project uses a tracker.
 - Mode: single unit (one PR), stack (multi-phase, or related issues in order), independent units (one PR each), or existing PR (its number and what to do on it). Why this mode. The base branch.
 - The skill each role runs, from the user's own skills. For example implementer `/tdd`, reviewer `/code-review`, PR body `/pr`. Leave a role blank to have it follow its section in roles.md.
+- The model for each role (`MODEL_<ROLE>` in `team.env`): brief checker, test writer, implementer, reviewer, target steward, scribe. Defaults and the capability rule are in roles.md; write the role's model even when it is the default.
 - The stop rule. That's the observable event that ends the run, and the build and target it happens on. It should be something a person could watch happen, not "the PRs are open".
 
 ## Units

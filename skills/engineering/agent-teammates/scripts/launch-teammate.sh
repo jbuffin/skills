@@ -1,17 +1,43 @@
 #!/bin/zsh
-# usage: launch-teammate.sh [--read-only] <team-dir> <name> <workdir|unit> [prompt-file]
-# Starts a teammate as a Claude Code background session (`claude --bg`) named <name>, on $MODEL, in <workdir>,
-# told to read [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
+# usage: launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]
+# Starts a teammate as a Claude Code background session (`claude --bg`) named <name>, in <workdir>, told to read
+# [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
 # in <team-dir>/teammates.tsv. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
 # directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it (closing the pane never stops it).
+# Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' as
+# '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
 # --read-only denies the file-editing tools inside <workdir> (a reviewer, a brief checker); it can still write its
 # report in <team-dir>. Bash isn't covered, so it's a guard against slips, not a sandbox.
 # Exit 2 when a background session can't be started: run the teammate as an in-process subagent instead.
-RO=; [[ $1 == --read-only ]] && { RO=1; shift; }
-[[ -z $1 || -z $2 || -z $3 ]] && { sed -n 2,10p $0; exit 5; }
+SELF=${0:A}
+usage() { sed -n 2,11p $SELF; exit 5; }
+RO=; MODEL_OPT=; ROLE=
+while [[ $1 == --* ]]; do
+  case $1 in
+    --read-only) RO=1; shift ;;
+    --model) [[ -n $2 ]] || usage; MODEL_OPT=$2; shift 2 ;;
+    --role) [[ -n $2 ]] || usage; ROLE=$2; shift 2 ;;
+    *) usage ;;
+  esac
+done
+[[ -z $1 || -z $2 || -z $3 ]] && usage
 D=${1:A}; NAME=$2; W=$3; P=${${4:-$1/prompts/$2.md}:A}
 source ${0:A:h}/team-env.zsh
 valid_name $NAME
+# Choose the model before anything else, so a refused launch never calls claude.
+if [[ -n $ROLE ]]; then
+  valid_name $ROLE
+  ROLE_VAR=MODEL_${${(U)ROLE}//[-.]/_}
+fi
+if [[ -n $MODEL_OPT ]]; then
+  CHOSEN=$MODEL_OPT
+elif [[ -n $ROLE ]]; then
+  CHOSEN=${(P)ROLE_VAR}
+  [[ -z $CHOSEN ]] && { echo "$ROLE_VAR is unset or empty in $D/team.env; set it (or pass --model) before launching $NAME with --role $ROLE"; exit 5; }
+else
+  [[ $REQUIRE_ROLE == 1 ]] && { echo "REQUIRE_ROLE=1 in $D/team.env: launch $NAME with --role <role> or --model <model>"; exit 5; }
+  CHOSEN=$MODEL
+fi
 if [[ ! -d $W ]]; then
   W=$(awk -v u=$W '$1==u {print $3}' $D/worktrees.tsv 2>/dev/null | tail -1)
   [[ -z $W ]] && { echo "no directory or registered worktree for '$3'"; exit 5; }
@@ -27,7 +53,7 @@ print -r -- "$LIVE" | grep -q "\"name\": *\"${NAME//./\\.}\"" && {
 
 # --disallowedTools takes several values, so it goes before another flag, never right before the prompt.
 DENY=(); [[ -n $RO ]] && DENY=(--disallowedTools "Edit(/$W/**)" "NotebookEdit(/$W/**)")
-OUT=$(cd $W && claude --bg -n $NAME $DENY --model $MODEL --permission-mode $PERMISSION_MODE \
+OUT=$(cd $W && claude --bg -n $NAME $DENY --model $CHOSEN --permission-mode $PERMISSION_MODE \
   "You are teammate $NAME. Read $P and do exactly what it says." 2>&1)
 RC=$?
 CLEAN=$(print -r -- "$OUT" | sed $'s/\x1b\\[[0-9;]*m//g')
@@ -37,7 +63,7 @@ ID=$(print -r -- "$CLEAN" | awk '/^backgrounded/ {print $3; exit}')
 if [[ $RC != 0 ]]; then
   print -r -- "$CLEAN" | grep -v '^warning: --bg manages the session id' | head -5
   [[ $CLEAN == *"not trusted"* ]] && echo "the folder isn't trusted: run \`claude\` once in the repository and accept the prompt (worktrees inside it inherit trust)"
-  echo "NO_BG: run $NAME as an in-process subagent with model=$MODEL, working in $W${RO:+, read-only (no edits in $W)}, task: read $P"; exit 2
+  echo "NO_BG: run $NAME as an in-process subagent with model=$CHOSEN, working in $W${RO:+, read-only (no edits in $W)}, task: read $P"; exit 2
 fi
 
 VREF=

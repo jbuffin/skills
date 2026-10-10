@@ -13,7 +13,7 @@ Teammates run unattended, so almost everything here guards against one failure. 
 
 This can be any directory you choose, or one an orchestrating skill gives you. It holds `prompts/<name>.md` (one per teammate), `prompts/<name>.proof` (its proof commands, when it has any), `reports/` (their output), and `teammates.tsv`, a registry the scripts keep with each teammate's name, session id, tasked-at time, viewer and working directory. It can also hold two optional files.
 
-- `team.env` sets `MODEL` (default sonnet), `PERMISSION_MODE` (default auto), `STALL_MIN` (default 10, the quiet minutes before STALL), `VIEWER` (`none` by default, or `cmux` or `tmux`), and `REPO`, the engineer's checkout, inside which no teammate starts. For cmux viewers it also sets `CMUX_WORKSPACE` and `CMUX_SURFACE`, which you get from `cmux identify`.
+- `team.env` sets `MODEL` (default sonnet, for a launch with neither `--model` nor `--role`), `MODEL_<ROLE>` (the model for `--role <role>`, with the role uppercased and `-` as `_`, so `brief-checker` reads `MODEL_BRIEF_CHECKER`; it has no default), `REQUIRE_ROLE` (`1` makes every launch pass `--role` or `--model`), `PERMISSION_MODE` (default auto), `STALL_MIN` (default 10, the quiet minutes before STALL), `VIEWER` (`none` by default, or `cmux` or `tmux`), and `REPO`, the engineer's checkout, inside which no teammate starts. For cmux viewers it also sets `CMUX_WORKSPACE` and `CMUX_SURFACE`, which you get from `cmux identify`.
 - `worktrees.tsv` lists `unit branch path`, so a unit name can stand in for a directory.
 
 `<teammates>` below is this skill's `scripts/` directory, as a resolved absolute path.
@@ -36,7 +36,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 ## Launch, re-task, close
 
 ```bash
-<teammates>/launch-teammate.sh [--read-only] <team-dir> <name> <workdir|unit> [prompt-file]   # claude --bg
+<teammates>/launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]   # claude --bg
 <teammates>/retasked.sh        <team-dir> <name>                                              # after sending new work
 <teammates>/close-teammate.sh  <team-dir> <name>...                                           # claude stop
 ```
@@ -49,7 +49,7 @@ Write a teammate's `prompts/<name>.proof` before launching or re-tasking it, one
 
 To give a live teammate new work, send it with the SendMessage tool, `to: <name>`, because the session name is the address. Then run `retasked.sh` so the watchdog stops counting the old marker. Teammates have to run in the same permission class as the coordinator (`PERMISSION_MODE` in `team.env`). Otherwise the message sits waiting for the engineer's approval in that session.
 
-Set the model explicitly. `--model` comes from `MODEL` and defaults to Sonnet. An in-process agent launched without a model runs on whatever model the coordinator uses.
+Set the model explicitly. The launcher picks it in this order: `--model <model>`; else, with `--role <role>`, `MODEL_<ROLE>` from `team.env`; else `MODEL`, which defaults to Sonnet. If `MODEL_<ROLE>` is unset or empty, the launch exits 5 and names the variable, and it never falls back to `MODEL`. With `REQUIRE_ROLE=1`, a launch with neither `--role` nor `--model` exits 5, so a forgotten flag fails loudly. Flags go in any order before the positional arguments. The launcher passes the model name through unchecked. An in-process agent launched without a model runs on whatever model the coordinator uses.
 
 Give each teammate its own working directory, which is usually a git worktree. The folder has to be trusted. Worktrees inside a repository the engineer has opened in Claude Code inherit its trust, and anything else fails to launch with "Workspace not trusted".
 
@@ -83,7 +83,7 @@ For a single teammate, a SendMessage with `notify_when_idle: true` gives you a o
 
 ## Fallback
 
-If `launch-teammate.sh` exits 2 (`NO_BG`, meaning background sessions aren't available or the folder isn't trusted), run the teammate as an in-process subagent. Give it an explicit `model: sonnet`, the same prompt file, the same contract and its own working directory, and verify it with `verify-report.sh … --workdir <dir>`, since it isn't in the registry. The watchdog still reports its `DONE` marker, but none of the session events. Tell the engineer what they lose. There's no dashboard and no attaching, and the teammate ends when the coordinator's session does.
+If `launch-teammate.sh` exits 2 (`NO_BG`, meaning background sessions aren't available or the folder isn't trusted), run the teammate as an in-process subagent. Give it an explicit `model=` set to the model the `NO_BG` message names, the same prompt file, the same contract and its own working directory, and verify it with `verify-report.sh … --workdir <dir>`, since it isn't in the registry. The watchdog still reports its `DONE` marker, but none of the session events. Tell the engineer what they lose. There's no dashboard and no attaching, and the teammate ends when the coordinator's session does.
 
 ## Parallelism
 

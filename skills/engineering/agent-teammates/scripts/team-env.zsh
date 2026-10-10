@@ -1,6 +1,8 @@
 # Sourced by the agent-teammates scripts, with D set to the team directory.
 # Loads <team-dir>/team.env if present, then fills defaults.
-#   MODEL            teammate model (default sonnet)
+#   MODEL            teammate model (default sonnet), for launches without --model or --role
+#   MODEL_<ROLE>     model for launches with --role <role> (the role uppercased, "-" as "_"); no default: unset or empty refuses the launch
+#   REQUIRE_ROLE     1: a launch needs --role or --model; no default
 #   PERMISSION_MODE  teammate permission mode (default auto); same class as the coordinator, or messages are held
 #   VIEWER           none | cmux | tmux; optional panes that attach to a teammate; closing one never stops it
 #   REPO             a checkout teammates must never start in
