@@ -2,6 +2,8 @@
 # usage: team-preflight.sh <run-dir>
 # The team-specific static checks (runtime, mode, gh-stack, worktrees, advisor), then the generic ones from the
 # run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
+# Run it in the background or with a long timeout: it starts one real session per distinct teammate model (in
+# parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2,4p $0; exit 5; }
 source $1/team.env
 fail=0
@@ -49,11 +51,25 @@ else
     m=${(P)${:-MODEL_$var}}
     [[ -n $m ]] && add_model $m ${${(L)var}//_/-}
   done
+  # One probe per model in parallel (each has its own session name); print in order.
+  pd=$(mktemp -d); pids=()
+  trap 'kill $pids 2>/dev/null; rm -rf $pd; exit 143' INT TERM HUP
+  i=0
   for m in $models; do
-    line=$(${ADVISOR_PROBE:-${0:A:h}/advisor-probe.sh} $1 $m 2>&1 | tail -1)
+    i=$((i+1))
+    { ${ADVISOR_PROBE:-${0:A:h}/advisor-probe.sh} $1 $m > $pd/$i 2>&1; echo $? > $pd/$i.rc } &
+    pids+=$!
+  done
+  wait
+  i=0
+  for m in $models; do
+    i=$((i+1))
+    line=$(tail -n 1 $pd/$i)
     if [[ $line == "ADVISOR ON "* ]]; then ok "advisor on for $m (${model_roles[$m]})"
+    elif [[ -z $line ]]; then warn "ADVISOR OFF: $m (${model_roles[$m]}): probe printed nothing (exit $(<$pd/$i.rc))"
     else warn "ADVISOR OFF: $m (${model_roles[$m]}): ${line#ADVISOR OFF $m: }"; fi
   done
+  rm -rf $pd; trap - INT TERM HUP
 fi
 WT_DIR=${WORKTREES_DIR:-$REPO/.claude/worktrees}
 if [[ $WT_DIR == $REPO/* ]]; then

@@ -11,7 +11,7 @@
 # Every launch passes --advisor $ADVISOR (default opus) unless team.env sets ADVISOR=none.
 # Exit 2 when a background session can't be started: run the teammate as an in-process subagent instead.
 SELF=${0:A}
-usage() { sed -n 2,11p $SELF; exit 5; }
+usage() { sed -n 2,12p $SELF; exit 5; }
 RO=; MODEL_OPT=; ROLE=
 while [[ $1 == --* ]]; do
   case $1 in

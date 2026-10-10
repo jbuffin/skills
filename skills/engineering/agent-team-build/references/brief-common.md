@@ -36,7 +36,7 @@ Secrets reach a command only through run-preflight's helper, as a bare call: `<p
 
 ## Asking the advisor
 
-Your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. Calling it is guidance, never required. Call it for technical questions:
+Your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. Calling it is guidance, never required. If you have no advisor tool, skip this section and write `none` under `## Advisor consults`. Call it for technical questions:
 
 - After you've looked around (read the files and the source of truth) but before substantive work: before the first edit, or before you settle on an interpretation.
 - When you're stuck: the same error keeps recurring, the approach isn't converging, or the results don't fit.
