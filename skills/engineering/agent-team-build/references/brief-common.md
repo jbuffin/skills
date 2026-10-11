@@ -34,6 +34,19 @@ Secrets reach a command only through run-preflight's helper, as a bare call: `<p
 
 <target type and the option in use, from the profile>. Only the target steward uses it. Everyone else runs unit tests, or whatever their brief names.
 
+## Asking the advisor
+
+Your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. The teammate contract below says what to ask it and how to log each call; this section says when. If you have no advisor tool, skip it. You decide whether to call it; these are the moments it helps most:
+
+- After you've looked around (read the files and the source of truth) but before substantive work: before the first edit, or before you settle on an interpretation.
+- When you're stuck: the same error keeps recurring, the approach isn't converging, or the results don't fit.
+- Before you change approach.
+- Before you declare done, after you commit, so the work survives if the session ends.
+
+Give its advice serious weight. Adapt only when a step fails when you try it, or primary-source evidence contradicts a specific claim. A passing self-test isn't evidence the advice is wrong.
+
+If the advice conflicts with evidence you already have, don't switch quietly. Call the advisor once more: "I found X, you suggest Y; which constraint breaks the tie?"
+
 ## Working as a teammate
 
 <Paste the "teammate contract" section of the agent-teammates skill here word for word, with <team-dir> set to this run directory and <teammates> to agent-teammates' scripts directory (TEAMMATES_SCRIPTS in team.env).>

@@ -1,0 +1,89 @@
+#!/bin/zsh
+# usage: advisor-probe.sh <team-dir> <model>
+# Prints `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>` and exits 0 either way (5 on bad arguments).
+# A refused advisor pairing or a disabled feature flag starts a session without the advisor and prints no error, so
+# this starts a real `claude --bg` session on <model> with --advisor $ADVISOR, asks it to consult the advisor once,
+# and reads its transcript for up to ADVISOR_PROBE_TIMEOUT seconds (default 150), retrying once with a fresh session.
+# Transcript signal (confirmed on a real session): a {"type":"server_tool_use",…,"name":"advisor",…} entry, then a
+# {"type":"advisor_tool_result",…} entry. "Advisor unavailable (<code>)" or an advisor_tool_result_error means OFF.
+# Cost: about 15-30 s when the advisor is on, up to about 5 min when it's off. Sessions end with `claude stop`.
+[[ -z $1 || -z $2 || -n $3 || ! -d $1 ]] && { sed -n 2,3p $0; exit 5; }
+D=${1:A}; M=$2
+# Sourcing team-env.zsh creates teammates.tsv and reports/; cleanup removes them again if this script made them.
+HAD_REG=; HAD_REPORTS=; [[ -e $D/teammates.tsv ]] && HAD_REG=1; [[ -d $D/reports ]] && HAD_REPORTS=1
+source ${0:A:h:h:h}/agent-teammates/scripts/team-env.zsh
+NAME=advisor-probe-${M//[^A-Za-z0-9._-]/-}   # sonnet[1m] -> advisor-probe-sonnet-1m-
+TIMEOUT=${ADVISOR_PROBE_TIMEOUT:-150}
+MARK=$D/$NAME.marker
+ID=
+stop_session() { [[ -n $ID ]] && claude stop $ID >/dev/null 2>&1; ID=; }
+cleanup() {
+  stop_session; rm -f $MARK
+  [[ -z $HAD_REG && ! -s $REG ]] && rm -f $REG
+  [[ -z $HAD_REPORTS ]] && rmdir $D/reports 2>/dev/null
+}
+trap cleanup EXIT
+trap 'cleanup; exit 143' INT TERM HUP
+
+# Cheap, checkable causes of a silent OFF.
+hints() {
+  local h=()
+  [[ -n $CLAUDE_CODE_DISABLE_ADVISOR_TOOL ]] && h+="CLAUDE_CODE_DISABLE_ADVISOR_TOOL is set"
+  [[ -n $DISABLE_TELEMETRY ]] && h+="DISABLE_TELEMETRY is set (the advisor needs feature-flag fetching)"
+  [[ -n $CLAUDE_CODE_USE_BEDROCK ]] && h+="CLAUDE_CODE_USE_BEDROCK is set (the advisor needs the Anthropic API)"
+  [[ -n $CLAUDE_CODE_USE_VERTEX ]] && h+="CLAUDE_CODE_USE_VERTEX is set (the advisor needs the Anthropic API)"
+  [[ -n $ANTHROPIC_BASE_URL ]] && h+="ANTHROPIC_BASE_URL is set (the gateway must forward the advisor tool)"
+  [[ $ADVISOR == fable ]] && h+="ADVISOR=fable may need the one-time usage-credits consent (/model fable)"
+  (( $#h )) && print -r -- " (check: ${(j:; :)h})"
+}
+off() { print -r -- "ADVISOR OFF $M: $1$(hints)"; exit 0; }
+
+# A directory to start in: trusted, and not the engineer's own checkout.
+REPO_TOP=${${REPO:-}:A}
+usable() { [[ -d $1 ]] || return 1; local top=$(git -C $1 rev-parse --show-toplevel 2>/dev/null); [[ -z $REPO_TOP || ${${top:-$1}:A} != $REPO_TOP ]]; }
+W=
+for p in ${(f)"$(awk '{print $3}' $D/worktrees.tsv 2>/dev/null)"}; do usable $p && { W=${p:A}; break; }; done
+[[ -z $W ]] && usable ${WORKTREES_DIR:-} && W=${WORKTREES_DIR:A}
+[[ -z $W ]] && off "probe session couldn't start (no trusted directory outside $REPO: add a worktree to worktrees.tsv or set WORKTREES_DIR)"
+
+LIVE=$(claude agents --json 2>/dev/null) || off "probe session couldn't start (claude agents --json failed)"
+live_named "$LIVE" $NAME && off "a live session is already named $NAME; stop it with claude stop, then rerun"
+
+# The prompt avoids the strings matched below, so it can't match itself.
+PROMPT="You are a probe. Consult your advisor exactly once, on this question: is 17 a prime number? Then write the word done to $MARK and stop. Do nothing else."
+# attempt -> sets RESULT to ON, OFF <reason>, UNAVAILABLE <code> or NONE, and stops its session. Not run in a command
+# substitution, so ID stays visible to the traps.
+attempt() {
+  local out clean tp code t=$SECONDS
+  rm -f $MARK
+  local ADV=(); [[ $ADVISOR != none ]] && ADV=(--advisor $ADVISOR)
+  out=$(cd $W && claude --bg -n $NAME --model $M $ADV --permission-mode $PERMISSION_MODE "$PROMPT" 2>&1)
+  clean=$(strip_ansi "$out")
+  ID=$(bg_id "$clean")
+  if [[ -z $ID ]]; then
+    RESULT="OFF probe session couldn't start ($(print -r -- "$clean" | grep -v '^warning: --bg manages the session id' | head -1))"; return
+  fi
+  while (( SECONDS - t < TIMEOUT )); do
+    tp=$(transcript_of $ID)
+    if [[ -n $tp && -f $tp ]]; then
+      if grep -aqE 'Advisor unavailable \(|advisor_tool_result_error' $tp; then
+        code=$(grep -aoE 'Advisor unavailable \([A-Za-z0-9_]+\)|"error_code": *"[A-Za-z0-9_]+"' $tp | head -1 | grep -oE '\([A-Za-z0-9_]+\)|"[A-Za-z0-9_]+"$' | tr -d '()"')
+        RESULT="UNAVAILABLE ${code:-unknown error}"; stop_session; return
+      fi
+      if grep -aq 'Advisor declined to advise' $tp || { grep -aE '"type": *"server_tool_use"' $tp | grep -aqE '"name": *"advisor"' && grep -aqE '"type": *"advisor_tool_result"' $tp; }; then
+        RESULT=ON; stop_session; return
+      fi
+    fi
+    sleep 2
+  done
+  RESULT=NONE; stop_session
+}
+for n in 1 2; do
+  attempt
+  case $RESULT in
+    ON) print -r -- "ADVISOR ON $M"; exit 0 ;;
+    OFF\ *) off ${RESULT#OFF } ;;
+    UNAVAILABLE\ *) off "advisor unavailable (${RESULT#UNAVAILABLE })" ;;
+  esac
+done
+off "no advisor call seen"

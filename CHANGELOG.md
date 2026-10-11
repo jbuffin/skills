@@ -1,5 +1,15 @@
 # jasonbuffin-skills
 
+## 0.3.0
+
+### Minor Changes
+
+- [#19](https://github.com/jbuffin/skills/pull/19) [`3dc121b`](https://github.com/jbuffin/skills/commit/3dc121bb0d96da37d02ab9196b6515b2aac22289) Thanks [@jbuffin](https://github.com/jbuffin)! - Choose each teammate's model by role. `launch-teammate.sh` takes `--model` and `--role` in any order, reads `MODEL_<ROLE>` from `team.env`, and refuses a launch with no model for its role. `REQUIRE_ROLE=1` makes a forgotten flag fail. `agent-team-build` records a model per role in the profile and writes the defaults into `team.env`.
+
+- [#19](https://github.com/jbuffin/skills/pull/19) [`3dc121b`](https://github.com/jbuffin/skills/commit/3dc121bb0d96da37d02ab9196b6515b2aac22289) Thanks [@jbuffin](https://github.com/jbuffin)! - `agent-team-build` adds a security reviewer that runs in every review round alongside the reviewer, with merged, source-labelled findings, blocking and non-blocking severities, new profile security fields, and a `MODEL_SECURITY_REVIEWER` default in `team.env`. Both `agent-team-build` and `agent-teammates` now limit concurrency to two teammates that write, plus the steward; read-only teammates don't count.
+
+- [#19](https://github.com/jbuffin/skills/pull/19) [`3dc121b`](https://github.com/jbuffin/skills/commit/3dc121bb0d96da37d02ab9196b6515b2aac22289) Thanks [@jbuffin](https://github.com/jbuffin)! - Give every teammate Claude Code's built-in advisor. In `agent-teammates`, `launch-teammate.sh` passes `--advisor $ADVISOR` (default `opus`, `none` turns it off) on every launch. The teammate contract asks for an `## Advisor consults` section in every report, and the common brief says when to consult. `team-preflight.sh` probes the advisor once per distinct teammate model with the new `advisor-probe.sh` and warns `ADVISOR OFF` where it didn't come on; `agent-team-build` tells the engineer before launching and reads the consults.
+
 ## 0.2.2
 
 ### Patch Changes
