@@ -64,7 +64,7 @@ npx skills add ./incubator/<name>
 
 `commodore` starts every run by working out its mission from what you point it at, and confirms it
 with you before anyone starts. A spec, an issue or a request is a build mission, and so, for now, is
-your own PR (finished in existing-PR mode). Someone else's PR waits for the review mission.
+your own PR (finished in existing-PR mode). Someone else's PR stops until the review mission lands.
 
 - **Install all four together.** `commodore` runs scripts from the other three by sibling path, so
   `npx skills add jbuffin/skills --skill commodore` alone leaves it broken. The plugin route always

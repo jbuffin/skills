@@ -60,7 +60,7 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 ## The mission, before phase 1
 
-If `state.md` records a mission, you're resuming: run that mission and skip detection. Otherwise settle the mission before phase 1.
+If `state.md` exists, you're resuming: run the mission it records, or `build` if it records none (a run from before missions), and skip detection. Otherwise settle the mission before phase 1.
 
 1. Detect it from what the engineer pointed you at.
    - A PR whose author is the authenticated `gh` user is `pr-feedback`. Compare `gh pr view <pr> --json author --jq .author.login` with `gh api user --jq .login`. For a bare number such as `#42`, `gh pr view` tells you whether it's a PR or an issue.
