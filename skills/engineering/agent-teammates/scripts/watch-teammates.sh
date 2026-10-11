@@ -23,8 +23,11 @@ while true; do
   done
   now=$(date -u +%s)
   states=$(drv status $D)
+  rc=$?
+  # the driver can't report status at all: say so and stop, rather than skip every poll silently
+  (( rc == 5 )) && { echo "WATCH the $HARNESS driver has no status operation; the watchdog can't run"; exit 5; }
   # a failed or unreadable listing says nothing about the teammates; skip the session checks this poll
-  (( $? == 0 )) || { sleep 60; continue; }
+  (( rc == 0 )) || { sleep 60; continue; }
   # latest registry row per teammate; a "closed" row ends the watch for that name
   awk '{last[$1]=$0} END {for (n in last) print last[n]}' $REG | while read -r name id started viewer workdir; do
     [[ -z $name || $started == closed ]] && continue

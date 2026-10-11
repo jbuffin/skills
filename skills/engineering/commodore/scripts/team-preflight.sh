@@ -5,6 +5,7 @@
 # Run it in the background or with a long timeout: it starts one real session per distinct teammate model (in
 # parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2,4p $0; exit 5; }
+unset HARNESS   # HARNESS comes from team.env alone, never from the caller's environment
 source $1/team.env
 fail=0
 ok()   { echo "OK    $*"; }
@@ -16,14 +17,19 @@ MODEL=${MODEL:-sonnet}; ADVISOR=${ADVISOR:-opus}
 # The harness this run was started from: HARNESS in team.env (a team.env from before drivers has none; every earlier
 # run was Claude) must match the environment, and have a driver.
 HARNESS=${HARNESS:-claude}
-DRIVER=${0:A:h:h:h}/agent-teammates/scripts/drivers/$HARNESS
-detected=(${(f)"$(${0:A:h:h:h}/agent-teammates/scripts/detect-harness.sh)"})
-if [[ ! -d $DRIVER ]]; then
-  bad "HARNESS=$HARNESS in team.env has no driver (looked in $DRIVER)"
-elif [[ ${detected[(Ie)$HARNESS]} == 0 ]]; then
-  bad "HARNESS=$HARNESS in team.env, but this environment is ${detected:-no supported harness}; start the run from $HARNESS, or fix HARNESS in team.env"
-elif [[ -x $DRIVER/preflight ]]; then
-  $DRIVER/preflight $1 || fail=1
+harness_ok=1
+if [[ ! $HARNESS =~ '^[a-z0-9-]+$' ]]; then
+  bad "invalid HARNESS '$HARNESS' in team.env: use lowercase letters, digits and '-'"; harness_ok=
+else
+  DRIVER=${0:A:h:h:h}/agent-teammates/scripts/drivers/$HARNESS
+  detected=(${(f)"$(${0:A:h:h:h}/agent-teammates/scripts/detect-harness.sh)"})
+  if [[ ! -d $DRIVER ]]; then
+    bad "HARNESS=$HARNESS in team.env has no driver (looked in $DRIVER)"; harness_ok=
+  elif [[ ${detected[(Ie)$HARNESS]} == 0 ]]; then
+    bad "HARNESS=$HARNESS in team.env, but this environment is ${detected:-no supported harness}; start the run from $HARNESS, or fix HARNESS in team.env"; harness_ok=
+  elif [[ -x $DRIVER/preflight ]]; then
+    $DRIVER/preflight $1 || fail=1
+  fi
 fi
 case ${VIEWER:-none} in
   cmux) [[ -x $CMUX && -n $CMUX_WORKSPACE ]] && $CMUX list-panes --workspace $CMUX_WORKSPACE >/dev/null 2>&1 \
@@ -42,6 +48,8 @@ fi
 # teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment).
 if [[ $ADVISOR == none ]]; then
   ok "advisor check skipped (ADVISOR=none)"
+elif [[ -z $harness_ok ]]; then
+  :   # the harness check failed above; don't start probes through a driver that isn't the run's
 elif [[ -z $ADVISOR_PROBE && ! -x $DRIVER/advisor-probe ]]; then
   ok "ADVISOR n/a ($HARNESS)"
 else
@@ -86,7 +94,7 @@ if [[ -d $REPO ]]; then
   unlisted=()
   # top-level ignored files, and top-level ignored directories without their trailing slash
   for f in ${(f)"$(git -C $REPO ls-files --others --ignored --exclude-standard --directory 2>/dev/null | sed -n -e '/^[^/]*$/p' -e 's#^\([^/]*\)/$#\1#p')"}; do
-    [[ -z $f || $f == (.claude) || $REPO/$f == $WT_DIR* || " ${WORKTREE_SETUP_SKIP-.DS_Store .vscode .idea coverage} " == *" $f "* ]] && continue
+    [[ -z $f || $f == .claude || $REPO/$f == $WT_DIR* || " ${WORKTREE_SETUP_SKIP-.DS_Store .vscode .idea coverage} " == *" $f "* ]] && continue
     [[ " ${WORKTREE_SETUP} " == *":$f "* ]] || unlisted+=$f
   done
   (( ${#unlisted} )) && warn "ignored in the checkout, so absent from new worktrees: ${(j:, :)unlisted}. Add each one the build or tests read to WORKTREE_SETUP (copy: or clone:)"

@@ -56,4 +56,4 @@ read -r ID VREF <<< ${OUT%%$'\n'*}
 [[ $VREF == - ]] && VREF=
 printf '%s %s %s %s %s\n' "$NAME" "$ID" "$(date -u +%s)" "${VREF:--}" "$W" >> $REG
 echo "launched $NAME as background session $ID in $W${RO:+ (read-only)}${VREF:+ (viewer $VREF)}"
-print -r -- "${OUT#*$'\n'}"
+[[ $OUT == *$'\n'* ]] && print -r -- "${OUT#*$'\n'}"

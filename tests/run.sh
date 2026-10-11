@@ -332,7 +332,7 @@ shared_code() {  # shared_code <egrep-pattern>: matching non-comment lines in sh
     grep -nE -- "$1" $f | grep -vE '^[0-9]+:[[:space:]]*#' | sed "s#^#${f#$ROOT/}:#"
   done
 }
-hits=$(shared_code '(^|[^-/a-z])claude ')
+hits=$(shared_code '(^|[^-/a-z.])claude ')
 [[ -z $hits ]] && pass "C1 no shared script calls claude" || fail "C1 no shared script calls claude" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
 $(print -r -- $hits | head -6)"
 hits=$(shared_code '\.jsonl|/projects|\.claude\.json')
@@ -382,6 +382,36 @@ want c4 && {
   pf_case "C4 HARNESS=claude with no harness detected fails" c4-claude-none HARNESS=claude - fail claude
   pf_case "C4 HARNESS=codex inside claude fails" c4-codex-in-claude HARNESS=codex CLAUDECODE=1 fail codex
   pf_case "C4 HARNESS=bogus (no driver) fails" c4-no-driver HARNESS=bogus CLAUDECODE=1 fail bogus
+}
+
+# C4 (real mismatch): a test-only driver directory, so the mismatch branch is reached and not only the no-driver one.
+want c4 && {
+  cp -R $SKILLS $SB/src-other; mkdir -p $SB/src-other/agent-teammates/scripts/drivers/other
+  TREE=$SB/src-other; HL=HARNESS=other; pf_sc c4-mismatch; HL=; TREE=$SKILLS
+  xrun CLAUDECODE=1 $SB/src-other/commodore/scripts/team-preflight.sh $D
+  line=$(grep '^FAIL' $SC/out | grep 'HARNESS=other' | grep 'this environment is claude' | head -1)
+  if [[ $RC == 1 && -n $line ]] && ! grep -q 'ADVISOR' $SC/out; then pass "C4 HARNESS=other (a driver exists) inside claude fails the mismatch check, no advisor probe"
+  else fail "C4 HARNESS=other (a driver exists) inside claude fails the mismatch check, no advisor probe" "exit $RC (want 1); mismatch FAIL line: ${line:-none}; advisor lines: $(grep ADVISOR $SC/out | head -2 | tr '\n' '|')"; fi
+}
+
+# ======================================================================================================================
+# S1: HARNESS comes from team.env alone, and must be a plain name.
+# ======================================================================================================================
+want s1 && {
+  # An environment HARNESS pointing outside drivers/ is ignored when team.env has none: nothing outside drivers/ runs.
+  mk s1-env-traversal; mkdir -p $SC/evil; printf '#!/bin/sh\necho ran > "%s/evil-ran"\n' $SC > $SC/evil/stop; chmod +x $SC/evil/stop
+  reg t1 c51dbe46 1789999000 - $SC/wt
+  xrun HARNESS=../../../../../../../../../../..$SC/evil $AT/close-teammate.sh $D t1
+  if [[ $RC == 0 && ! -e $SC/evil-ran && $(cat $SC/out) == "stopped t1 (c51dbe46)" ]]; then pass "S1 an environment HARNESS with ../ never runs a file outside drivers/"
+  else fail "S1 an environment HARNESS with ../ never runs a file outside drivers/" "exit $RC; evil ran: $([[ -e $SC/evil-ran ]] && echo yes || echo no); out: $(cat $SC/out | head -c 200)"; fi
+  # An invalid HARNESS in team.env is rejected by every script that resolves a driver.
+  mk s1-invalid HARNESS=../x; reg t1 c51dbe46 1789999000 - $SC/wt; mk_repo
+  xrun $AT/close-teammate.sh $D t1; rc1=$RC; o1=$(cat $SC/out)
+  xrun $CM/advisor-probe.sh $D sonnet; rc2=$RC; o2=$(cat $SC/out)
+  xrun CLAUDECODE=1 $CM/team-preflight.sh $D; rc3=$RC
+  if [[ $rc1 == 5 && $o1 == *"invalid HARNESS"* && $rc2 == 5 && $o2 == *"invalid HARNESS"* && $rc3 == 1 ]] && grep -q '^FAIL  invalid HARNESS' $SC/out && ! grep -q 'ADVISOR' $SC/out; then
+    pass "S1 an invalid HARNESS in team.env is rejected (exit 5, a FAIL line in preflight, no advisor probe)"
+  else fail "S1 an invalid HARNESS in team.env is rejected (exit 5, a FAIL line in preflight, no advisor probe)" "close: $rc1 '$o1'; advisor-probe: $rc2 '$o2'; preflight: $rc3 $(grep -E 'FAIL|ADVISOR' $SC/out | head -3 | tr '\n' '|')"; fi
 }
 
 # ======================================================================================================================

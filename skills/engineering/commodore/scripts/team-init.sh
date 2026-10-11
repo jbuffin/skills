@@ -20,19 +20,24 @@ if (( $#missing )); then
   echo "commodore needs agent-teammates, run-preflight and target-evaluation installed alongside it."
   exit 6
 fi
-# The harness this run is for. It is written to team.env, and every later script uses that harness's driver.
-SUPPORTED=(claude)
-if [[ -n $HARNESS ]]; then
-  [[ ${SUPPORTED[(Ie)$HARNESS]} == 0 ]] && { echo "$HARNESS: not supported yet (supported: ${(j:, :)SUPPORTED})"; exit 7; }
-else
-  detected=(${(f)"$(${SKILL:h}/agent-teammates/scripts/detect-harness.sh)"})
-  case $#detected in
-    0) echo "no supported harness detected (supported: ${(j:, :)SUPPORTED}). Start the run from one of them, for example Claude Code."; exit 7 ;;
-    1) HARNESS=$detected[1] ;;
-    *) echo "more than one harness detected (${(j:, :)detected}). Start the run from one of them."; exit 7 ;;
-  esac
-fi
 RUN=${AGENT_TEAMS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/teams}/$NAME
+# The harness this run is for. It is written to team.env, and every later script uses that harness's driver. A run that
+# already has a team.env keeps it, so a re-run needs no detection.
+DRIVERS=${SKILL:h}/agent-teammates/scripts/drivers
+SUPPORTED=(${DRIVERS}/*(/N:t))
+if [[ ! -f $RUN/team.env ]]; then
+  if [[ -n $HARNESS ]]; then
+    [[ $HARNESS =~ '^[a-z0-9-]+$' && -d $DRIVERS/$HARNESS ]] || { echo "$HARNESS: not supported yet (supported: ${(j:, :)SUPPORTED})"; exit 7; }
+  else
+    detected=(${(f)"$(${SKILL:h}/agent-teammates/scripts/detect-harness.sh)"})
+    case $#detected in
+      0) echo "no supported harness detected (supported: ${(j:, :)SUPPORTED}). Start the run from one of them, for example Claude Code."; exit 7 ;;
+      1) HARNESS=$detected[1]
+         [[ -d $DRIVERS/$HARNESS ]] || { echo "$HARNESS: has no driver yet (supported: ${(j:, :)SUPPORTED})"; exit 7; } ;;
+      *) echo "more than one harness detected (${(j:, :)detected}). Start the run from one of them."; exit 7 ;;
+    esac
+  fi
+fi
 mkdir -p $RUN/prompts $RUN/reports
 
 CMUX_BIN=${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}

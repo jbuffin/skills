@@ -9,15 +9,19 @@
 #   HARNESS          the harness the run was started from (default claude); selects scripts/drivers/<HARNESS>
 #   REPO             a checkout teammates must never start in
 #   STALL_MIN        minutes a working teammate may go without writing to its transcript before STALL (default 10)
+# HARNESS comes from team.env alone, never from the caller's environment.
+unset HARNESS
 [[ -f $D/team.env ]] && source $D/team.env
 : ${MODEL:=sonnet}; : ${ADVISOR:=opus}; : ${STALL_MIN:=10}; : ${PERMISSION_MODE:=auto}; : ${VIEWER:=none}
 : ${HARNESS:=claude}   # a team.env from before drivers has no HARNESS line; every earlier run was Claude
+[[ $HARNESS =~ '^[a-z0-9-]+$' ]] || { echo "invalid HARNESS '$HARNESS' in $D/team.env: use lowercase letters, digits and '-'"; exit 5; }
 DRIVER=${0:A:h}/drivers/$HARNESS
 : ${CMUX:=${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}}
 REG=$D/teammates.tsv     # name id tasked-epoch|closed viewer-ref|- workdir
 mkdir -p $D/reports; touch $REG
 # Run a driver operation: drv <op> <args>. The driver is chosen by HARNESS in team.env.
-drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $HARNESS has no $op operation ($DRIVER)"; exit 5; }; $DRIVER/$op "$@"; }
+# A missing operation returns 5 with a message on stderr; the caller decides what to do.
+drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $HARNESS has no $op operation ($DRIVER)" >&2; return 5; }; $DRIVER/$op "$@"; }
 reg_field() { awk -v n=$1 -v f=$2 '$1==n {v=$f} END {print v}' $REG; }   # last row for a name wins
 # Names and labels become file names and registry fields: letters, digits, '.', '_' and '-' only.
 valid_name() { [[ $1 =~ '^[A-Za-z0-9._-]+$' && $1 != .* ]] || { echo "invalid name '$1': use letters, digits, '.', '_' and '-', not starting with '.'"; exit 5; }; }
