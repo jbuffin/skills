@@ -13,19 +13,18 @@ bad()  { echo "FAIL  $*"; fail=1; }
 REPO=${REPO:-$WORKTREE}
 MODEL=${MODEL:-sonnet}; ADVISOR=${ADVISOR:-opus}
 
-command -v claude >/dev/null && ok "claude found" || bad "claude not on PATH"
-claude agents --json >/dev/null 2>&1 && ok "claude background sessions available (claude agents)" \
-  || bad "claude agents --json failed; background sessions unavailable; teammates would fall back to in-process subagents"
-python3 - "$REPO" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" <<'PY' && ok "repository is trusted for background sessions" || warn "repository not marked trusted; run \`claude\` once in $REPO and accept the prompt, or launches fail with 'Workspace not trusted'"
-import json, os, sys
-repo = os.path.realpath(sys.argv[1]); cfgs = [os.path.join(sys.argv[2], ".claude.json"), os.path.expanduser("~/.claude.json")]
-for c in cfgs:
-    try: projects = json.load(open(c)).get("projects", {})
-    except Exception: continue
-    for path, v in projects.items():
-        if v.get("hasTrustDialogAccepted") and (repo == path or repo.startswith(path.rstrip("/") + "/")): sys.exit(0)
-sys.exit(1)
-PY
+# The harness this run was started from: HARNESS in team.env (a team.env from before drivers has none; every earlier
+# run was Claude) must match the environment, and have a driver.
+HARNESS=${HARNESS:-claude}
+DRIVER=${0:A:h:h:h}/agent-teammates/scripts/drivers/$HARNESS
+detected=(${(f)"$(${0:A:h:h:h}/agent-teammates/scripts/detect-harness.sh)"})
+if [[ ! -d $DRIVER ]]; then
+  bad "HARNESS=$HARNESS in team.env has no driver (looked in $DRIVER)"
+elif [[ ${detected[(Ie)$HARNESS]} == 0 ]]; then
+  bad "HARNESS=$HARNESS in team.env, but this environment is ${detected:-no supported harness}; start the run from $HARNESS, or fix HARNESS in team.env"
+elif [[ -x $DRIVER/preflight ]]; then
+  $DRIVER/preflight $1 || fail=1
+fi
 case ${VIEWER:-none} in
   cmux) [[ -x $CMUX && -n $CMUX_WORKSPACE ]] && $CMUX list-panes --workspace $CMUX_WORKSPACE >/dev/null 2>&1 \
           && ok "cmux viewer: workspace $CMUX_WORKSPACE found" || warn "VIEWER=cmux but workspace '$CMUX_WORKSPACE' not found (cmux identify); teammates still run, just without panes" ;;
@@ -43,6 +42,8 @@ fi
 # teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment).
 if [[ $ADVISOR == none ]]; then
   ok "advisor check skipped (ADVISOR=none)"
+elif [[ -z $ADVISOR_PROBE && ! -x $DRIVER/advisor-probe ]]; then
+  ok "ADVISOR n/a ($HARNESS)"
 else
   models=(); typeset -A model_roles
   add_model() { [[ -n ${model_roles[$1]+x} ]] || models+=$1; model_roles[$1]+="${model_roles[$1]:+, }$2"; }
@@ -85,7 +86,7 @@ if [[ -d $REPO ]]; then
   unlisted=()
   # top-level ignored files, and top-level ignored directories without their trailing slash
   for f in ${(f)"$(git -C $REPO ls-files --others --ignored --exclude-standard --directory 2>/dev/null | sed -n -e '/^[^/]*$/p' -e 's#^\([^/]*\)/$#\1#p')"}; do
-    [[ -z $f || $f == .claude || $REPO/$f == $WT_DIR* || " ${WORKTREE_SETUP_SKIP-.DS_Store .vscode .idea coverage} " == *" $f "* ]] && continue
+    [[ -z $f || $f == (.claude) || $REPO/$f == $WT_DIR* || " ${WORKTREE_SETUP_SKIP-.DS_Store .vscode .idea coverage} " == *" $f "* ]] && continue
     [[ " ${WORKTREE_SETUP} " == *":$f "* ]] || unlisted+=$f
   done
   (( ${#unlisted} )) && warn "ignored in the checkout, so absent from new worktrees: ${(j:, :)unlisted}. Add each one the build or tests read to WORKTREE_SETUP (copy: or clone:)"
