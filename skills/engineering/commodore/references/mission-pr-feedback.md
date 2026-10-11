@@ -44,10 +44,10 @@ Run SKILL.md's phase 1 steps in this order. The triage comes before step 2, beca
 
    Give each item an ID (`t1`, `r1`, `c1`, `ci1` for a thread, a review, a comment and a check). Save each item's text, verbatim, with your file-writing tool, to its own file, `<run>/triage/<id>.txt` (every comment of a thread in order, with its author). A check is a GitHub Actions check only when its `workflow` is non-empty and its link is `https://github.com/<owner>/<repo>/actions/runs/<digits>/job/<job-id>` with `<job-id>` matching `^[0-9]+$`. For one, run `gh run view --repo <owner>/<repo> --job <job-id> --log-failed` and save its output to `<run>/triage/<id>.log` with your file-writing tool. For any other check, save only its name, description and link. Then write `<run>/triage/items.md`: one line per item with the ID, its source (person or bot, with the login, or the check's name), the kind, `path:line` for a thread, the thread's node ID, the link and the text file's path. Record every item's ID and GitHub ID in `state.md`. Done when every unresolved thread, every non-empty review body, every PR comment and every failing check has an ID.
 6. Prepare the triager's launch:
-   - Check the advisor: `<team>/advisor-probe.sh <run> <MODEL_TRIAGER>`. On `ADVISOR OFF`, follow "When the advisor is off" in [`roles.md`](roles.md).
+   - Check the advisor: `<team>/advisor-probe.sh <run> <MODEL_TRIAGER>`. On `ADVISOR OFF`, follow "When the advisor is off" in [`harness-claude.md`](harness-claude.md) (the harness reference).
    - Write a read-only common brief at `<run>/brief-common.md` (SKILL.md step 6), as mission-review's step 11 does: delivery is "no PR yet; the triage only", the data rule above goes in, and the lines about pushing and committing are replaced with "leave the worktree as you found it, with no edits, commits or pushes".
    - Write the triager's brief at `<run>/prompts/triager.md`, following [Briefs](../SKILL.md#briefs): its [`roles.md`](roles.md) section, `<run>/triage/items.md`, the PR's `headRefOid`, and what done means.
-   - Start agent-teammates' watchdog: `<teammates>/watch-teammates.sh <run>` under Monitor.
+   - Start agent-teammates' watchdog: `<teammates>/watch-teammates.sh <run>`, the way agent-teammates' harness reference says to run it.
 7. Launch the triager in the PR's worktree:
 
    ```bash

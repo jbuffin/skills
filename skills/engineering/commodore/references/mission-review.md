@@ -43,7 +43,7 @@ Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktrees below in place of st
    ```
 
    Do this for each `WORKTREE_SETUP` entry kept in step 8, the way `unit-worktree.sh` does: skip a path the worktree already has, and use `cp -cR` for a `clone:` entry, falling back to `cp -R` if it fails. Add `steward - <WORKTREES_DIR>/<run-name>-steward` to `worktrees.tsv` and record the path in `state.md`.
-10. Check the advisor: run `<team>/advisor-probe.sh <run> <model>` once per distinct model this run launches. On `ADVISOR OFF`, follow "When the advisor is off" in [`roles.md`](roles.md).
+10. Where the harness has an advisor, check it: run `<team>/advisor-probe.sh <run> <model>` once per distinct model this run launches. On `ADVISOR OFF`, follow "When the advisor is off" in [`harness-claude.md`](harness-claude.md) (the harness reference).
 11. Write the common brief (SKILL.md step 6). Delivery is "no PR; the coordinator posts one GitHub review". Replace the template's lines about working on a branch, pushing through `push-branch.sh` and committing before the marker with: every teammate leaves its worktree as it found it, with no edits, commits or pushes.
 
 Phase 1 is done when `state.md` holds the PR's two SHAs, the source of truth, the steward call and the worktree paths. Tell the engineer the review is starting, and that you'll need them again to approve the findings, in place of SKILL.md's "you can leave".

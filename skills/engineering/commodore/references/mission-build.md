@@ -41,7 +41,7 @@ For each unit:
    - Keep a running list of unfixed non-blocking findings in `state.md` across rounds: add each round's, and drop the ones a fix round resolves.
 
    Done when all three reports are in: the reviewer's, the security reviewer's and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6.
-5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and send it to the unit's implementer in a single message (SendMessage to its name, then `<teammates>/retasked.sh`).
+5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and send it to the unit's implementer in a single message, the way agent-teammates' harness reference says to send new work, then run `<teammates>/retasked.sh`.
    - When fixes conflict, the security fix wins, and you record the decision in `state.md`.
    - The implementer may also fix trivial non-blocking findings, but only in a round that already has blocking fixes, so they never cause an extra round. Trivial means a few lines inside the unit's own files with no other change in behaviour. Its report lists which non-blocking findings it fixed.
    - Then a fresh reviewer and a fresh security reviewer look at the fix diff only, and the steward re-checks anything user-visible.
@@ -55,7 +55,7 @@ For each unit:
 ```text
 Unit N: <unit> (<PR or branch>, <state>)
 Built: <one line>   Tests: <counts>   Target (<option used>): <light check passed/failed; full eval yes/no>
-Advisor: <on | off for <roles>: <reason>>
+Advisor: <on | off for <roles>: <reason> | n/a (<harness>)>
 Review: round k of cap, <fixed / left for human>
 Security: <fixed / left for human / none>   Non-blocking: <n recorded>
 Proof: <verify-report verdict>   Criteria closed: <ids from the trace>

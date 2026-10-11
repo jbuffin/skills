@@ -1,6 +1,6 @@
 ---
 name: commodore
-description: Entry point for team work. Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve the findings. The PR-feedback mission triages the review comments and failing checks on your own PR, fixes what you approve, and posts the replies you approve.
+description: Entry point for team work, harness-aware (Claude Code is the supported harness today). Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve the findings. The PR-feedback mission triages the review comments and failing checks on your own PR, fixes what you approve, and posts the replies you approve.
 disable-model-invocation: true
 ---
 
@@ -36,9 +36,13 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 - **Carry-forward checks** are checks a unit defers to a later one, such as "re-run the migration test once u3 lands". Each names the unit that owes it.
 - `<run>` is the run directory. `<team>`, `<teammates>` and `<preflight>` are the script directories of this skill, agent-teammates and run-preflight. `team-init.sh` prints all four and writes the script directories to `team.env` as resolved literal paths. Briefs and allow rules use those literal paths.
 
+## The harness
+
+The run's harness is the agent CLI it starts in. `team-init.sh` detects it and writes `HARNESS` to `team.env`. Read `references/harness-<HARNESS>.md`, with `HARNESS` from the run's `team.env`. With no `team.env`, or no `HARNESS` line in it, the harness is `claude`: read [`references/harness-claude.md`](references/harness-claude.md). It holds the default model per role, the advisor rules and how to see who is live. agent-teammates has its own harness reference for launching, messaging and watching.
+
 ## Launching teammates
 
-You launch every teammate with `--role <role>`. The role names, their default models and the advisor pairing are in [`references/roles.md`](references/roles.md). A fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names.
+You launch every teammate with `--role <role>`. The role names and the capability rule are in [`references/roles.md`](references/roles.md); the default model per role and the advisor pairing are in the harness reference. A fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, the harness reference says which model to use.
 
 ```bash
 <teammates>/launch-teammate.sh [--read-only] --role <role> <run> <name> <unit> [prompt-file]
@@ -56,7 +60,7 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 `state.md` is the run's memory: the mission, the mode and current unit, branches, worktrees and head SHAs, the acceptance trace, ground rules, open questions with recommended defaults, assumptions taken, live teammates, review-round counts and carry-forward checks. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. Whether it's a new run or a resume is decided in the mission section below.
 
-`state.md` holds decisions and history. Branch heads, PR and CI state, and who is live change on their own. Re-read those from `git`, `gh` and `claude agents --json` when you resume and before any push, stack submit or close. Where they disagree with `state.md`, the live value wins, and you fix `state.md`.
+`state.md` holds decisions and history. Branch heads, PR and CI state, and who is live change on their own. Re-read those from `git`, `gh` and the harness's session status (see the harness reference) when you resume and before any push, stack submit or close. Where they disagree with `state.md`, the live value wins, and you fix `state.md`.
 
 ## The mission, before phase 1
 
@@ -94,7 +98,7 @@ The mission table is the one place a mission is registered. A new mission adds a
 
 The run has to get from the first unit to the stop rule without the engineer. Run the steps your mission's row lists.
 
-1. Write the profile. Copy [`references/profile-template.md`](references/profile-template.md) to `<run>/profile.md` and fill it from the repo: CLAUDE.md or AGENTS.md, the CI config, the issue, the PR template. Ask the engineer only for what the repo can't tell you. Record the model for each role in the profile's Goal section (defaults and the capability rule are in [`references/roles.md`](references/roles.md)), and copy those choices into the `MODEL_<ROLE>` lines of `<run>/team.env`. Done when every field is filled or `n/a` and every role the run uses has a non-empty `MODEL_<ROLE>`.
+1. Write the profile. Copy [`references/profile-template.md`](references/profile-template.md) to `<run>/profile.md` and fill it from the repo: CLAUDE.md or AGENTS.md, the CI config, the issue, the PR template. Ask the engineer only for what the repo can't tell you. Record the model for each role in the profile's Goal section (defaults are in the harness reference, the capability rule in [`references/roles.md`](references/roles.md)), and copy those choices into the `MODEL_<ROLE>` lines of `<run>/team.env`. Done when every field is filled or `n/a` and every role the run uses has a non-empty `MODEL_<ROLE>`.
 2. Plan the units, ordered so each builds only on the units below it. Anything every unit needs (CI, tooling, shared types) goes in the first. Then check four things.
    - Does the ask match the plan of record? If the project has a roadmap, design or ticket hierarchy and the request doesn't fit it, propose the smallest cut that meets the stop rule, and ask.
    - What does the work build on? Note unmerged prerequisite branches and what happens when they merge.
@@ -113,7 +117,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
       - Anything the engineer names stays untouched.
 
       Record the answers in `state.md`. The rest of the run reads its ground rules from there.
-   3. Run `<team>/team-preflight.sh <run>` in the background or with the maximum Bash timeout. It does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and probes the advisor with one real session per distinct teammate model, which can take about 5 minutes. On a `WARN  ADVISOR OFF` line, follow "When the advisor is off" in [`references/roles.md`](references/roles.md) before you launch anyone.
+   3. Run `<team>/team-preflight.sh <run>` in the background or with the maximum Bash timeout. It does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and, where the harness has an advisor, probes it with one real session per distinct teammate model, which can take about 5 minutes. Otherwise it prints `ADVISOR n/a`. On a `WARN  ADVISOR OFF` line, follow "When the advisor is off" in the harness reference before you launch anyone.
    4. Launch run-preflight's probe with agent-teammates and `--role implementer`, so it runs exactly the way teammates will, on the model of the teammates that write, and settle whatever it reports with the engineer. The probe proves the launch path and the gated actions. It doesn't prove the advisor; `advisor-probe.sh` does.
 
    Done when the probe comes back clean, every secret is stored, and `state.md` holds the ground rules and every answer.
@@ -129,7 +133,7 @@ Give the role, the unit, the unit's worktree, the source of truth by exact refer
 
 Teammates put questions in their reports, with options and a recommendation, and you sort each one.
 
-- Technical questions (how to do something, which approach, why a test fails) go to each teammate's own advisor, so the questions that reach you are the ones sorted below. Read `## Advisor consults` in every report. A teammate that never consults, one that consults constantly, or the same confusion across teammates means the brief needs fixing: add what was missing to `<run>/brief-common.md` or the affected briefs.
+- Where the harness gives teammates an advisor, technical questions (how to do something, which approach, why a test fails) go to each teammate's own advisor, so the questions that reach you are the ones sorted below. Read `## Advisor consults` in every report. A teammate that never consults, one that consults constantly, or the same confusion across teammates means the brief needs fixing: add what was missing to `<run>/brief-common.md` or the affected briefs.
 - If the profile, the source of truth or a ground rule answers it, it's yours. Decide, record it in `state.md`, and tell the teammate. Fresh teammates read `brief-common.md` and their own brief, not `state.md`. So if the decision binds later units or roles, also add it to `<run>/brief-common.md` or the affected briefs, saying where it came from.
 - If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next [unit summary](references/mission-build.md#unit-summary-to-the-engineer) so the engineer can overturn it.
 - Product behaviour, design choices that depart from the source, scope, and anything external or irreversible belong to the engineer. Batch them. If the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
