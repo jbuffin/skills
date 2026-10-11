@@ -479,6 +479,8 @@ ATH=$ATD/references/harness-claude.md
 CMH=$CMD/references/harness-claude.md
 skill_md=( $ATD/SKILL.md $ATD/references/*.md(N) $CMD/SKILL.md $CMD/references/*.md(N) )
 shared_md=( ${skill_md:#$ATH} ); shared_md=( ${shared_md:#$CMH} )
+git -C $ROOT cat-file -e ${REF}^{commit} 2>/dev/null; HAVE_REF=$?
+NOREF="reference commit $REF not in this clone (shallow checkout?)"
 
 # C2: Claude-only words appear only in the two harness-claude.md files.
 want c2 && {
@@ -508,7 +510,7 @@ want d2w && {
 }
 
 # D3: the Claude default table from roles.md at dfb39c8 lives in commodore's harness-claude.md.
-want d3 && {
+want d3 && if (( HAVE_REF )); then fail "D3 harness-claude.md holds every role's default model" "$NOREF"; else
   rows=(); while IFS= read -r row; do rows+=$row; done < <(git -C $ROOT show ${REF}:skills/engineering/commodore/references/roles.md | grep -E '^[|] .(implementer|reviewer|scribe)')
   miss=()
   for row in $rows; do
@@ -520,12 +522,13 @@ want d3 && {
   (( $#rows == 3 )) || miss+="(parsed ${#rows} rows from $REF roles.md, want 3)"
   grep -qi haiku $CMH 2>/dev/null || miss+="scribe=haiku allowed"
   (( $#miss )) && fail "D3 harness-claude.md holds every role's default model" "missing from ${CMH#$ROOT/}: ${miss[*]}" || pass "D3 harness-claude.md holds every role's default model"
-}
+fi
 
 # C6: the changeset, the Markdown lint, and the descriptions.
 want c6 && {
   cs=(); for f in $ROOT/.changeset/*.md(N); do [[ ${f:t} == README.md ]] && continue; git -C $ROOT cat-file -e ${REF}:.changeset/${f:t} 2>/dev/null || cs+=$f; done
-  if (( $#cs )) && grep -qE '^"jasonbuffin-skills": minor$' $cs; then pass "C6 a new changeset bumps jasonbuffin-skills minor"
+  if (( HAVE_REF )); then fail "C6 a new changeset bumps jasonbuffin-skills minor" "$NOREF"
+  elif (( $#cs )) && grep -qE '^"jasonbuffin-skills": minor$' $cs; then pass "C6 a new changeset bumps jasonbuffin-skills minor"
   else fail "C6 a new changeset bumps jasonbuffin-skills minor" "new .changeset/*.md since $REF: ${#cs}; with '\"jasonbuffin-skills\": minor': $(( $#cs ? $(grep -lE '^"jasonbuffin-skills": minor$' $cs | wc -l) : 0 ))"; fi
 
   if command -v markdownlint-cli2 >/dev/null; then
