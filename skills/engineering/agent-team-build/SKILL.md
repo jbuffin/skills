@@ -43,7 +43,7 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 Pick the mode in phase 1 and say which one and why in the decision batch. If the work turns out bigger or smaller than it looked, change it and tell the engineer. The chosen mode's section of [`references/modes.md`](references/modes.md) has its worktree commands and procedure.
 
-You launch every teammate with `--role <role>`, using the role names `brief-checker`, `test-writer`, `implementer`, `reviewer`, `security-reviewer`, `target-steward` and `scribe`. The model comes from the profile through `team.env` (`MODEL_<ROLE>`), and a fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names.
+You launch every teammate with `--role <role>`. The role names, their default models and the advisor pairing are in [`references/roles.md`](references/roles.md). A fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names.
 
 ```bash
 <teammates>/launch-teammate.sh [--read-only] --role <role> <run> <name> <unit> [prompt-file]
@@ -82,7 +82,7 @@ The run has to get from the first unit to the stop rule without the engineer.
       - Anything the engineer names stays untouched.
 
       Record the answers in `state.md`. The rest of the run reads its ground rules from there.
-   3. Run `<team>/team-preflight.sh <run>`, which does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and probes the advisor once per distinct teammate model (`<team>/advisor-probe.sh`, in parallel: it starts a real session per model, about 15-30 s when the advisor is on and up to about 5 min when it's off). Run `team-preflight.sh` in the background or with the maximum Bash timeout, since a foreground call can end first. A `WARN  ADVISOR OFF: <model> (<roles>): <reason>` line means those roles would start without the advisor and no error. Before you launch any teammate, tell the engineer which roles are affected and why. If they've already left, put it in your next update and carry on. Record it in `state.md` under Decisions and assumptions. There's no subagent fallback: those roles run without the advisor. Fix the cause only if it's cheap (an unset `DISABLE_TELEMETRY`, an `ADVISOR` that ranks below the model: `ADVISOR=fable` for a Fable teammate, otherwise `opus`). With `ADVISOR=none` the check is skipped.
+   3. Run `<team>/team-preflight.sh <run>` in the background or with the maximum Bash timeout. It does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and probes the advisor with one real session per distinct teammate model, which can take about 5 minutes. On a `WARN  ADVISOR OFF` line, follow "When the advisor is off" in [`references/roles.md`](references/roles.md) before you launch anyone.
    4. Launch run-preflight's probe with agent-teammates and `--role implementer`, so it runs exactly the way teammates will, on the model of the teammates that write, and settle whatever it reports with the engineer. The probe proves the launch path and the gated actions. It doesn't prove the advisor; `advisor-probe.sh` does.
 
    Done when the probe comes back clean, every secret is stored, and `state.md` holds the ground rules and every answer.
@@ -100,7 +100,7 @@ The workflow is fixed, but the cast changes with the work. Pick each unit's team
 | Test writer | writes the unit's failing tests (or checks, for non-code work) from the source of truth | the behaviour can be pinned by tests or scripted checks |
 | Implementer | builds the unit, then stays alive to fix its own findings | always |
 | Reviewer | reviews the diff against the source of truth, fresh each round | always |
-| Security reviewer | reviews the same diff for security vulnerabilities only, fresh each round | always |
+| Security reviewer | reviews the same diff for security vulnerabilities only | always |
 | Target steward | owns the target for the whole run, does a light check each unit and full evaluations on target-evaluation's cadence | the work runs somewhere a user would touch it |
 | Scribe | PR bodies, round-cap PR comments, notes | unless the run is tiny |
 
@@ -109,14 +109,19 @@ For each unit:
 1. Write the brief. Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the skill the role runs, and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines. Done when the brief checker reports no contradicted or unsourced claims.
 2. The test writer goes red. Its tests all fail, and for the right reason.
 3. The implementer goes green. Its suites and lint pass, the work is committed in the unit's worktree, and its proof verifies. Once it commits, start the next unit's test writer, as long as the next unit's source doesn't depend on this unit's review.
-4. Review and evaluation run in parallel. A fresh reviewer, launched `--read-only --role reviewer`, runs the review skill on the diff. A fresh security reviewer, named `u<unit>-security-reviewer[-<round>]` and launched `--read-only --role security-reviewer`, runs `/security-review` or the profile's security review skill. Put the profile's security-sensitive paths, scope and false-positive notes and blocking threshold in its brief. That skill can't take a commit range, so its brief gives the exact range and tells it to review only that: `<unit base>...HEAD` in round 1, where the unit base is the previous unit's branch, or the base branch for the first unit and in other modes, and `<last reviewed SHA>..HEAD` after. Record the last reviewed SHA in `state.md` each round. The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change). Done when all three reports are in: the reviewer's, the security reviewer's and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6. HIGH and MEDIUM findings are blocking and LOW findings are non-blocking, unless the profile moves the threshold. Whenever the review ends and the unit goes to step 6, record the unfixed non-blocking findings in `state.md`.
+4. Review and evaluation run in parallel.
+   - A fresh reviewer, launched `--read-only --role reviewer`, runs the review skill on the diff.
+   - A fresh security reviewer, launched `--read-only --role security-reviewer`, runs the profile's security review skill. Its brief gives the profile's security settings and the exact range to review: `<unit base>...HEAD` in round 1, where the unit base is the previous unit's branch, or the base branch for the first unit and in other modes, and `<last reviewed SHA>..HEAD` after. Record the last reviewed SHA in `state.md` each round.
+   - The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change).
+   - Keep a running list of unfixed non-blocking findings in `state.md` across rounds: add each round's, and drop the ones a fix round resolves.
+
+   Done when all three reports are in: the reviewer's, the security reviewer's and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6.
 5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and send it to the unit's implementer in a single message (SendMessage to its name, then `<teammates>/retasked.sh`).
    - When fixes conflict, the security fix wins, and you record the decision in `state.md`.
    - The implementer may also fix trivial non-blocking findings, but only in a round that already has blocking fixes, so they never cause an extra round. Trivial means a few lines inside the unit's own files with no other change in behaviour. Its report lists which non-blocking findings it fixed.
    - Then a fresh reviewer and a fresh security reviewer look at the fix diff only, and the steward re-checks anything user-visible.
    - Security findings share the reviewer's round counter and its cap of 3.
    - Done when a round ends with no blocking findings and a passing light check, or at the round cap. At the cap, record in `state.md` what's left for a human, unresolved security findings included, and list it in the round-cap PR comment.
-   - When the last round ends, record the unfixed non-blocking findings in `state.md` for the final summary.
 6. Ship the way the mode says. The scribe writes the PR body first, and at the round cap a PR comment listing what's left for a human, posted once the PR exists. Then open a draft PR, run `gh stack submit --auto` or `gh stack push`, or run `<team>/push-branch.sh <run> <branch>` for the existing PR's branch. Run `<team>/watch-ci.sh <run> <branch>` in the background; it exits non-zero on red. Red CI gets fixed before anything builds on the unit.
 7. Close the unit once CI is green. Mark the unit's trace rows, update `state.md`, close the unit's teammates and send the engineer the unit summary. Close the implementer last, because until then a finding from the reviewer, the security reviewer, the target or CI goes back to it.
 
@@ -128,7 +133,7 @@ Keep at most two teammates that write (edit files or commit) working at once, pl
 
 Teammates put questions in their reports, with options and a recommendation, and you sort each one.
 
-- Technical questions (how to do something, which approach, why a test fails) are for the advisor. Teammates ask it themselves and log each call under `## Advisor consults`. Scope, product behaviour, departures from the source of truth and ground-rule questions are never the advisor's; sort them as below. Read `## Advisor consults` in every report. A teammate that never consults, one that consults constantly, or the same confusion across teammates means the brief needs fixing: add what was missing to `<run>/brief-common.md` or the affected briefs.
+- Technical questions (how to do something, which approach, why a test fails) go to each teammate's own advisor, so the questions that reach you are the ones sorted below. Read `## Advisor consults` in every report. A teammate that never consults, one that consults constantly, or the same confusion across teammates means the brief needs fixing: add what was missing to `<run>/brief-common.md` or the affected briefs.
 - If the profile, the source of truth or a ground rule answers it, it's yours. Decide, record it in `state.md`, and tell the teammate. Fresh teammates read `brief-common.md` and their own brief, not `state.md`. So if the decision binds later units or roles, also add it to `<run>/brief-common.md` or the affected briefs, saying where it came from.
 - If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next unit summary so the engineer can overturn it.
 - Product behaviour, design choices that depart from the source, scope, and anything external or irreversible belong to the engineer. Batch them. If the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
@@ -140,7 +145,7 @@ Unit N: <unit> (<PR or branch>, <state>)
 Built: <one line>   Tests: <counts>   Target (<option used>): <light check passed/failed; full eval yes/no>
 Advisor: <on | off for <roles>: <reason>>
 Review: round k of cap, <fixed / left for human>
-Security: <fixed / left for human / none>; LOW: <n recorded>
+Security: <fixed / left for human / none>   Non-blocking: <n recorded>
 Proof: <verify-report verdict>   Criteria closed: <ids from the trace>
 CI: <green / red / running>
 Not checked: <what nobody ran or looked at, and why | nothing>

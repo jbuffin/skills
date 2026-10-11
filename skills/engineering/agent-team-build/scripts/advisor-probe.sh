@@ -1,31 +1,18 @@
 #!/bin/zsh
 # usage: advisor-probe.sh <team-dir> <model>
-# Does the built-in advisor come on in a background session on <model>, paired with the run's ADVISOR? A session
-# whose pairing is refused, or whose feature flag is off, starts without the advisor and prints no error, and there
-# is no "advisor is on" flag to read. The one signal is an advisor call in the session's transcript, so this starts
-# a real `claude --bg` session named advisor-probe-<model> (--model <model> --advisor $ADVISOR, in the first
-# worktree in <team-dir>/worktrees.tsv, else $WORKTREES_DIR; never a checkout whose git top level is $REPO), tells
-# it to consult the advisor once on a trivial question and stop, and reads its transcript (transcript_of, which
-# honours CLAUDE_CONFIG_DIR) for up to ADVISOR_PROBE_TIMEOUT seconds (default 150). It retries once with a fresh
-# session, always stops its sessions with `claude stop` (never `claude rm`), writes nothing to teammates.tsv, and
-# prints one line: `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>`. Exits 0 either way, 5 on bad arguments.
-#
-# Transcript signal (confirmed on a real session): the JSONL has a {"type":"server_tool_use",…,"name":"advisor",…}
-# entry, then a {"type":"advisor_tool_result",…} entry (its content is redacted). A session whose pairing is refused
-# has no advisor tool at all, so it never emits either. Matching is loose (grep, not a JSON parse), spaces allowed:
-#   ON    a server_tool_use entry naming advisor, and an advisor_tool_result entry that isn't an error;
-#         or the text "Advisor declined to advise"
-#   OFF   "Advisor unavailable (<code>)", or an advisor_tool_result_error with an error_code: the reason is the code
-# The prompt avoids those strings so it can't match itself. The session name is advisor-probe-<model> with characters
-# outside letters, digits, '.', '_' and '-' (as in sonnet[1m]) replaced by '-'. Sourcing team-env.zsh creates an empty
-# teammates.tsv and reports/ in a fresh team dir; this script removes them again if it created them and they're empty.
-# Cost: about 15-30 s when the advisor is on, up to about 5 min when it's off (two attempts of ADVISOR_PROBE_TIMEOUT
-# plus start). Stopped sessions leave nothing in `claude agents --json`, so a rerun is safe.
+# Prints `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>` and exits 0 either way (5 on bad arguments).
+# A refused advisor pairing or a disabled feature flag starts a session without the advisor and prints no error, so
+# this starts a real `claude --bg` session on <model> with --advisor $ADVISOR, asks it to consult the advisor once,
+# and reads its transcript for up to ADVISOR_PROBE_TIMEOUT seconds (default 150), retrying once with a fresh session.
+# Transcript signal (confirmed on a real session): a {"type":"server_tool_use",…,"name":"advisor",…} entry, then a
+# {"type":"advisor_tool_result",…} entry. "Advisor unavailable (<code>)" or an advisor_tool_result_error means OFF.
+# Cost: about 15-30 s when the advisor is on, up to about 5 min when it's off. Sessions end with `claude stop`.
 [[ -z $1 || -z $2 || -n $3 || ! -d $1 ]] && { sed -n 2,3p $0; exit 5; }
 D=${1:A}; M=$2
+# Sourcing team-env.zsh creates teammates.tsv and reports/; cleanup removes them again if this script made them.
 HAD_REG=; HAD_REPORTS=; [[ -e $D/teammates.tsv ]] && HAD_REG=1; [[ -d $D/reports ]] && HAD_REPORTS=1
 source ${0:A:h:h:h}/agent-teammates/scripts/team-env.zsh
-NAME=advisor-probe-${M//[^A-Za-z0-9._-]/-}
+NAME=advisor-probe-${M//[^A-Za-z0-9._-]/-}   # sonnet[1m] -> advisor-probe-sonnet-1m-
 TIMEOUT=${ADVISOR_PROBE_TIMEOUT:-150}
 MARK=$D/$NAME.marker
 ID=
@@ -60,18 +47,19 @@ for p in ${(f)"$(awk '{print $3}' $D/worktrees.tsv 2>/dev/null)"}; do usable $p 
 [[ -z $W ]] && off "probe session couldn't start (no trusted directory outside $REPO: add a worktree to worktrees.tsv or set WORKTREES_DIR)"
 
 LIVE=$(claude agents --json 2>/dev/null) || off "probe session couldn't start (claude agents --json failed)"
-print -r -- "$LIVE" | grep -q "\"name\": *\"${NAME//./\\.}\"" && off "a live session is already named $NAME; stop it with claude stop, then rerun"
+live_named "$LIVE" $NAME && off "a live session is already named $NAME; stop it with claude stop, then rerun"
 
+# The prompt avoids the strings matched below, so it can't match itself.
 PROMPT="You are a probe. Consult your advisor exactly once, on this question: is 17 a prime number? Then write the word done to $MARK and stop. Do nothing else."
 # attempt -> sets RESULT to ON, OFF <reason>, UNAVAILABLE <code> or NONE, and stops its session. Not run in a command
 # substitution, so ID stays visible to the traps.
 attempt() {
-  local out clean tp t=$SECONDS
+  local out clean tp code t=$SECONDS
   rm -f $MARK
   local ADV=(); [[ $ADVISOR != none ]] && ADV=(--advisor $ADVISOR)
   out=$(cd $W && claude --bg -n $NAME --model $M $ADV --permission-mode $PERMISSION_MODE "$PROMPT" 2>&1)
-  clean=$(print -r -- "$out" | sed $'s/\x1b\\[[0-9;]*m//g')
-  ID=$(print -r -- "$clean" | awk '/^backgrounded/ {print $3; exit}')
+  clean=$(strip_ansi "$out")
+  ID=$(bg_id "$clean")
   if [[ -z $ID ]]; then
     RESULT="OFF probe session couldn't start ($(print -r -- "$clean" | grep -v '^warning: --bg manages the session id' | head -1))"; return
   fi

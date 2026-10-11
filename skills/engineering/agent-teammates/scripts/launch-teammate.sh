@@ -4,8 +4,8 @@
 # [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
 # in <team-dir>/teammates.tsv. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
 # directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it (closing the pane never stops it).
-# Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' as
-# '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
+# Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' and
+# '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
 # --read-only denies the file-editing tools inside <workdir> (a reviewer, a brief checker); it can still write its
 # report in <team-dir>. Bash isn't covered, so it's a guard against slips, not a sandbox.
 # Every launch passes --advisor $ADVISOR (default opus) unless team.env sets ADVISOR=none.
@@ -49,8 +49,7 @@ TOP=$(git -C $W rev-parse --show-toplevel 2>/dev/null)
 [[ -n $REPO && ${${TOP:-$W}:A} == ${REPO:A} ]] && { echo "refusing to start $NAME in the repository's own checkout ($REPO); give it a worktree"; exit 5; }
 [[ -f $P ]] || { echo "missing prompt file $P"; exit 5; }
 LIVE=$(claude agents --json 2>/dev/null) || { echo "couldn't list live sessions (claude agents --json failed); retry before launching $NAME"; exit 1; }
-print -r -- "$LIVE" | grep -q "\"name\": *\"${NAME//./\\.}\"" && {
-  echo "a live session is already named $NAME; close it first or pick another name"; exit 5; }
+live_named "$LIVE" $NAME && { echo "a live session is already named $NAME; close it first or pick another name"; exit 5; }
 
 # --disallowedTools takes several values, so it goes before another flag, never right before the prompt.
 DENY=(); [[ -n $RO ]] && DENY=(--disallowedTools "Edit(/$W/**)" "NotebookEdit(/$W/**)")
@@ -59,8 +58,8 @@ ADV=(); [[ $ADVISOR != none ]] && ADV=(--advisor $ADVISOR)
 OUT=$(cd $W && claude --bg -n $NAME $DENY $ADV --model $CHOSEN --permission-mode $PERMISSION_MODE \
   "You are teammate $NAME. Read $P and do exactly what it says." 2>&1)
 RC=$?
-CLEAN=$(print -r -- "$OUT" | sed $'s/\x1b\\[[0-9;]*m//g')
-ID=$(print -r -- "$CLEAN" | awk '/^backgrounded/ {print $3; exit}')
+CLEAN=$(strip_ansi "$OUT")
+ID=$(bg_id "$CLEAN")
 # Started, but the id didn't parse: a session may be running, so don't fall back to a second, in-process copy.
 [[ $RC == 0 && -z $ID ]] && { print -r -- "$CLEAN" | head -5; echo "claude --bg succeeded but printed no session id; find $NAME in claude agents before relaunching"; exit 1; }
 if [[ $RC != 0 ]]; then

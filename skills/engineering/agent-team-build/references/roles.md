@@ -4,21 +4,33 @@ Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name 
 
 ## Models
 
-Launch every teammate with `--role <role>`, using the names `brief-checker`, `test-writer`, `implementer`, `reviewer`, `security-reviewer`, `target-steward` and `scribe`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`, which the profile fills. These are the defaults, and the profile overrides them:
+Launch every teammate with `--role <role>`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`. A fresh `team.env` from `team-init.sh` holds these defaults, and the profile overrides them:
 
-| Role | Default |
+| `--role` | Default model |
 | --- | --- |
-| Implementer, test writer, target steward | sonnet |
-| Reviewer, security reviewer, brief checker | opus |
-| Scribe | sonnet (haiku allowed) |
+| `implementer`, `test-writer`, `target-steward` | sonnet |
+| `reviewer`, `security-reviewer`, `brief-checker` | opus |
+| `scribe` | sonnet (haiku allowed) |
 
-The reviewer, the security reviewer and the brief checker run on a model at least as capable as the coordinator's. If the coordinator runs on a model above Opus, the profile sets these three roles to the coordinator's model.
+The reviewer, the security reviewer and the brief checker run on a model at least as capable as the coordinator's. If the coordinator runs on a model above Opus, the profile sets these three roles to the coordinator's model, and `ADVISOR` has to rank at or above it too (see below).
 
 ## The advisor
 
-Every role runs with the advisor: implementers, test writers, the target steward and the scribe, and also reviewers, security reviewers and brief checkers. The launcher passes `--advisor $ADVISOR` (default opus) on every launch, read-only ones included, and `brief-common.md` tells each teammate when to consult it. A teammate's advisor sees only that teammate's own transcript. It never sees the work a reviewer judges, so reviewers stay independent of the implementer.
+Every role launches with the advisor: implementers, test writers, the target steward and the scribe, and also reviewers, security reviewers and brief checkers. The launcher passes `--advisor $ADVISOR` (default opus) on every launch, read-only ones included, and `brief-common.md` tells each teammate when to consult it. A teammate's advisor sees only that teammate's own transcript. It never sees the work a reviewer judges, so reviewers stay independent of the implementer.
 
 The advisor must rank at or above the teammate's model, and a pairing that doesn't hold starts without it and no error. `MODEL_REVIEWER=opus` with `ADVISOR=sonnet` leaves the reviewer without an advisor. A Fable teammate needs `ADVISOR=fable`, since a Fable main model accepts only a Fable advisor. The preflight probes every distinct model and reports `ADVISOR OFF` for each one that fails.
+
+### When the advisor is off
+
+A `WARN  ADVISOR OFF: <model> (<roles>): <reason>` line from `team-preflight.sh` means those roles would start without the advisor, and nothing else would tell you.
+
+1. Before you launch any teammate, tell the engineer which roles are affected and why. If they've already left, put it in your next update and carry on.
+2. Record it in `state.md` under Decisions and assumptions, and on the unit summary's `Advisor:` line.
+3. Fix the cause only when it's cheap, then rerun the preflight:
+   - `ADVISOR` ranks below the model: set `ADVISOR=fable` for a Fable teammate, otherwise `ADVISOR=opus`.
+   - The probe's hint names a variable such as `DISABLE_TELEMETRY`: unset it for the run.
+
+Otherwise those roles still launch as background sessions, without the advisor. An in-process subagent wouldn't bring it back.
 
 ## Lifetimes
 
@@ -60,7 +72,7 @@ You're launched `--read-only --role reviewer`. Run `/code-review`, or the projec
 
 ## Security reviewer
 
-You're launched `--read-only --role security-reviewer`, in the same rounds as the reviewer and in parallel with it. Run `/security-review`, or the security review skill the profile names, on the unit's diff. That skill can't take a commit range, so review only the range your brief gives (`<unit base>...HEAD` in round 1, `<last reviewed SHA>..HEAD` after) and use the skill's categories and filtering on it. Use the source of truth and the unit's brief as context.
+You're launched `--read-only --role security-reviewer`, in the same rounds as the reviewer and in parallel with it. Run `/security-review`, or the security review skill the profile names, on the unit's diff. That skill can't take a commit range, so review only the range your brief gives, and use the skill's categories and filtering on it. Use the source of truth and the unit's brief as context.
 
 Report findings ranked by severity (HIGH / MEDIUM / LOW), each with file:line, the exploit or failure scenario, and whether it blocks. Your output is the report alone: make no edits and write nothing to GitHub.
 

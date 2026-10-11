@@ -65,7 +65,7 @@ CMUX=$CMUX_BIN
 CMUX_WORKSPACE=$WS
 CMUX_SURFACE=$SF
 MODEL=sonnet
-# Built-in advisor for every teammate (none turns it off). Opus fits a Sonnet or Haiku teammate; a Fable teammate needs ADVISOR=fable.
+# Built-in advisor for every teammate (none turns it off). It must rank at or above every teammate model below.
 ADVISOR=opus
 PERMISSION_MODE=auto
 CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}

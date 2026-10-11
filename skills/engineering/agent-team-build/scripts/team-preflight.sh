@@ -60,7 +60,6 @@ else
     i=$((i+1))
     ${ADVISOR_PROBE:-${0:A:h}/advisor-probe.sh} $1 $m > $pd/$i 2>&1 &
     pids+=$!
-    sleep 0.3   # start the sessions in order, not in a burst
   done
   i=0; for pid in $pids; do i=$((i+1)); wait $pid; echo $? > $pd/$i.rc; done
   i=0
