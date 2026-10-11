@@ -1,6 +1,6 @@
 ---
 name: commodore
-description: Entry point for team work. Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR.
+description: Entry point for team work. Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve the findings.
 disable-model-invocation: true
 ---
 
@@ -60,22 +60,22 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 ## The mission, before phase 1
 
-Settle the mission before you create the run directory. When you start, check `state.md` first.
+Settle the mission before you create the run directory. When you start, check `state.md` first: the one in the run directory you were running before a compaction or crash, or the one the engineer names. A new request that names no run directory has none to check, so it's a new run.
 
-- It has a `mission:` line: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
-- It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished (no phase 3 final report yet): it's an unfinished run from before missions. Resume it as `build` the same way. Template headings alone don't count.
-- Otherwise this is a new run. Settle the mission with these steps. If a `state.md` already exists, reuse its run directory: pass the same run name to `team-init.sh`.
+A run is finished when its `state.md` has a `result:` line, which the mission's last phase writes.
+
+- It has a `mission:` line and the run isn't finished: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
+- It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished: it's an unfinished run from before missions. Resume it as `build` the same way. Template headings alone don't count.
+- Otherwise this is a new run. Settle the mission with these steps. If the `state.md` holds only the empty template, reuse its run directory: pass the same run name to `team-init.sh`. A finished run's directory is never reused: pick a new run name.
 
 1. Detect it from what the engineer pointed you at.
-   - Run `gh pr view <pr> --json author,state` first. For a bare number such as `#42`, it tells you whether it's a PR or an issue. A merged or closed PR fits no mission.
+   - For a PR or a bare number, run `gh pr view <pr> --json author,state` first. For a bare number such as `#42`, it tells you whether it's a PR or an issue. A merged or closed PR fits no mission.
    - An open PR whose author is the authenticated `gh` user is `pr-feedback`. Compare `author.login` with `gh api user --jq .login`.
    - An open PR authored by anyone else is `review`.
    - A spec, an issue, a design doc or a free-text request is `build`.
 
    Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, say so and ask the engineer which one they mean.
-2. Find the mission's row in the mission table below. A mission with no row falls back:
-   - `pr-feedback` runs as `build` in existing-PR mode.
-   - `review` stops the run. Tell the engineer: "The review mission is not available yet. Point me at a spec, an issue or your own PR, or review this PR yourself." Launch nothing.
+2. Find the mission's row in the mission table below. A mission with no row falls back: `pr-feedback` runs as `build` in existing-PR mode.
 3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option, and name any fallback ("your own PR, so `build` in existing-PR mode").
 4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away write `mission: <name>` under the new `state.md`'s `## Mode, phase, current unit` heading. Record the mission that runs, so your own PR on a fallback is `build`.
 5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
@@ -87,6 +87,7 @@ The mission table is the one place a mission is registered. A new mission adds a
 | Mission | Task force | Phase 1 steps | Delivery | Procedure |
 | --- | --- | --- | --- | --- |
 | `build` | the roles in its Phase 2 table | 1–6 | by mode: one PR, a gh stack, or fixes to an existing PR | [`references/mission-build.md`](references/mission-build.md) |
+| `review` | reviewer, security reviewer, and the target steward when the PR changes something a user would touch | 1, 3 (only with the steward), 6; its own read-only worktree in place of 4 | one GitHub review | [`references/mission-review.md`](references/mission-review.md) |
 
 ## Phase 1: before the engineer leaves
 
@@ -118,6 +119,10 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
 6. Write the common brief at `<run>/brief-common.md`, starting from [`references/brief-common.md`](references/brief-common.md). Done when no `<…>` is left in it.
 
 Phase 1 is done when the steps your mission's row lists are. Then tell the engineer plainly: "Everything the run needs is in place; you can leave." Then run the rest of your mission's procedure file.
+
+## Briefs
+
+Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the skill the role runs, and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines.
 
 ## Bubbling questions up
 

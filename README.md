@@ -15,7 +15,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 
 | Skill | What it does |
 | --- | --- |
-| `commodore` | Entry point for team work: works out the mission from what you point it at, then runs it as chief of staff over teammates, each on the model its role calls for, in git worktrees. The build mission plans units, briefs, builds, reviews independently and evaluates on the real target, delivered as a PR, a gh stack or fixes to an existing PR. Type `/commodore`; it doesn't load on its own. |
+| `commodore` | Entry point for team work: works out the mission from what you point it at, then runs it as chief of staff over teammates, each on the model its role calls for, in git worktrees. The build mission plans units, briefs, builds, reviews independently and evaluates on the real target, delivered as a PR, a gh stack or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve it. Type `/commodore`; it doesn't load on its own. |
 | `agent-teammates` | Launches, watches, re-tasks and closes Claude Code background sessions (`claude --bg`) as teammates, with a report-and-marker contract, a watchdog and proof checks. |
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
@@ -64,7 +64,8 @@ npx skills add ./incubator/<name>
 
 `commodore` starts every run by working out its mission from what you point it at, and confirms it
 with you before anyone starts. A spec, an issue or a request is a build mission, and so, for now, is
-your own PR (finished in existing-PR mode). Someone else's PR stops until the review mission lands.
+your own PR (finished in existing-PR mode). Someone else's PR is a review mission: one read-only round,
+and one GitHub review posted only after you approve the findings.
 
 - **Install all four together.** `commodore` runs scripts from the other three by sibling path, so
   `npx skills add jbuffin/skills --skill commodore` alone leaves it broken. The plugin route always

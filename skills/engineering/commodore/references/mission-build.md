@@ -31,7 +31,7 @@ The workflow is fixed, but the task force changes with the work. Pick each unit'
 
 For each unit:
 
-1. Write the brief. Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the skill the role runs, and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines. Done when the brief checker reports no contradicted or unsourced claims.
+1. Write the brief, following [Briefs](../SKILL.md#briefs) in SKILL.md. Done when the brief checker reports no contradicted or unsourced claims.
 2. The test writer goes red. Its tests all fail, and for the right reason.
 3. The implementer goes green. Its suites and lint pass, the work is committed in the unit's worktree, and its proof verifies. Once it commits, start the next unit's test writer, as long as the next unit's source doesn't depend on this unit's review.
 4. Review and evaluation run in parallel.
@@ -83,5 +83,5 @@ The run ends when the stop rule is observed on the target it names. Opening the 
    If any check fails, the run is partial. Say exactly which checks failed.
 3. Close every teammate, stop the watchdog and the CI watchers, and leave the target in the agreed state. List every worktree from `worktrees.tsv` with its branch and whether it's clean. Remove them only when the engineer says so.
 4. Leave the delivery the way the ground rules say. Every PR at the round cap has its human-review comment.
-5. Write the final report: units and PRs, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why.
+5. Write the final report: units and PRs, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why. Write the same `result:` line into `state.md`, under `## Mode, phase, current unit`.
 6. Lessons go to the repo's own docs, as a proposed edit for the engineer to accept, whenever the run tripped over a missing or wrong instruction there.
