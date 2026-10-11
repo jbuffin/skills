@@ -19,18 +19,28 @@ Run SKILL.md's phase 1 steps in this order. The triage comes before step 2, beca
    ```
 
    When a commit whose author or committer isn't the engineer touches a path mission-review's agent-config check names (in [`mission-review.md`](mission-review.md), phase 1 step 6), show the engineer those commits and files, and launch nobody until they say to go ahead.
-4. Wait for the checks to finish: run `gh pr checks <n> --watch` in the background or with the maximum Bash timeout. It exits 8 while checks are pending, and prints "no checks reported" and exits 1 when the PR has none, which means no check items.
-5. Gather the items into `<run>/triage/`. Record the gather time in `state.md` before the first call. Each query takes `-F owner=<owner> -F name=<repo> -F number=<n>`; `<pr>` below stands for `repository(owner:$owner,name:$name){pullRequest(number:$number){…}}` with `$owner:String!,$name:String!,$number:Int!,$endCursor:String` declared. `__typename` is `User` or `Bot`, which is how you tell a person from a bot.
-   - Review threads, with `gh api graphql --paginate` and this inside `<pr>`:
+4. Wait for the checks to finish: run `gh pr checks <n> --watch` in the background or with the maximum Bash timeout. Read its output, not its exit code, which is also non-zero when a check failed. "no checks reported" means the PR has no checks and so no check items.
+5. Gather the items into `<run>/triage/`. Record the gather time in `state.md` before the first call. `__typename` is `User` or `Bot`, which is how you tell a person from a bot.
+   - Review threads:
 
-     ```text
-     reviewThreads(first:50,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:100){pageInfo{hasNextPage} nodes{id body createdAt lastEditedAt url author{login __typename}}}}}
+     ```bash
+     gh api graphql --paginate -F owner=<owner> -F name=<repo> -F number=<n> -f query='query($owner:String!,$name:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:50,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:100){pageInfo{hasNextPage} nodes{id body createdAt lastEditedAt url author{login __typename}}}}}}}}'
      ```
 
      Keep every thread where `isResolved` is false. When a thread's `comments` has another page, fetch it all with `gh api graphql --paginate -F id=<thread id> -f query='query($id:ID!,$endCursor:String){node(id:$id){... on PullRequestReviewThread{comments(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id body createdAt lastEditedAt url author{login __typename}}}}}}'`. The thread's first comment's author decides whether it's a person's or a bot's thread.
-   - Top-level review bodies, the same way with `reviews(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id body submittedAt lastEditedAt url author{login __typename}}}`. Skip reviews with an empty body. `gh pr view <n> --json reviews` lists them too, but drops a bot's `[bot]` suffix.
-   - PR conversation comments, the same way with `comments(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id body createdAt lastEditedAt url author{login __typename}}}`. Bots such as CodeRabbit post here. `gh pr view <n> --json comments` lists them too, with the same `[bot]` caveat.
-   - Failing checks: `gh pr checks <n> --json name,bucket,link,workflow`. Keep each check whose `bucket` is `fail`. For a GitHub Actions check, the link ends `/actions/runs/<run-id>/job/<job-id>`: save its log with `gh run view --repo <owner>/<repo> --job <job-id> --log-failed > <run>/triage/<id>.log`. For any other check, save its name, description and link.
+   - Top-level review bodies. Skip reviews with an empty body. `gh pr view <n> --json reviews` lists them too, but drops a bot's `[bot]` suffix.
+
+     ```bash
+     gh api graphql --paginate -F owner=<owner> -F name=<repo> -F number=<n> -f query='query($owner:String!,$name:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){reviews(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id body submittedAt lastEditedAt url author{login __typename}}}}}}'
+     ```
+
+   - PR conversation comments. Bots such as CodeRabbit post here. `gh pr view <n> --json comments` lists them too, with the same `[bot]` caveat.
+
+     ```bash
+     gh api graphql --paginate -F owner=<owner> -F name=<repo> -F number=<n> -f query='query($owner:String!,$name:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){comments(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{id body createdAt lastEditedAt url author{login __typename}}}}}}'
+     ```
+
+   - Failing checks: `gh pr checks <n> --json name,bucket,link,workflow`. Keep each check whose `bucket` is `fail`; this form exits 0 even when one failed. For a GitHub Actions check, the link ends `/actions/runs/<run-id>/job/<job-id>`: save its log with `gh run view --repo <owner>/<repo> --job <job-id> --log-failed > <run>/triage/<id>.log`. For any other check, save its name, description and link.
 
    Give each item an ID (`t1`, `r1`, `c1`, `ci1` for a thread, a review, a comment and a check). Save each item's text, verbatim, to its own file, `<run>/triage/<id>.txt` (every comment of a thread in order, with its author), or `<id>.log` for a check. Then write `<run>/triage/items.md`: one line per item with the ID, its source (person or bot, with the login, or the check's name), the kind, `path:line` for a thread, the thread's node ID, the link and the text file's path. Record every item's ID and GitHub ID in `state.md`. Done when every unresolved thread, every non-empty review body, every PR comment and every failing check has an ID.
 6. Prepare the triager's launch:
@@ -46,7 +56,7 @@ Run SKILL.md's phase 1 steps in this order. The triage comes before step 2, beca
 
    On `DONE`, run `<teammates>/verify-report.sh <run> triager`. Done when every item ID in `items.md` has one entry in its report.
 8. Present the triage to the engineer in three groups: people's items, bots' items, and failing checks. Each entry gives the item ID, its source, its category and the triager's reasoning, and a push-back entry gives the draft reply.
-9. Plan the units (SKILL.md step 2) from the **fix** items the engineer approves in step 11. Group failing checks into units by cause, as [`modes.md`](modes.md) says. Each approved fix item is one row of the acceptance trace.
+9. Plan the units (SKILL.md step 2) from the triager's **fix** items, provisionally. Group failing checks into units by cause, as [`modes.md`](modes.md) says. Each fix item is one row of the acceptance trace. Step 11's answers settle the plan: an item that becomes a fix joins a unit and gets a row, and a fix the engineer doesn't approve leaves its unit and its row.
 10. Choose the target (SKILL.md step 3). Decide whether the steward runs: only when the fixes change something a user would touch.
 11. Run pre-flight (SKILL.md step 5).
     - The requirements manifest and the allow rules name every command phase 3 runs: `gh api graphql` (the `addPullRequestReviewThreadReply` and `resolveReviewThread` mutations) and `gh pr comment`. The probe runs a read-only `gh api graphql` query with the same command shape. A reply or resolve can't be probed without writing to the PR, so record them in `state.md` as approved but unprobed.
@@ -54,11 +64,13 @@ Run SKILL.md's phase 1 steps in this order. The triage comes before step 2, beca
       - Every **fix** item: approved as a fix, or turned into push back, a reply or no action. Only approved fix items become units.
       - Every **needs your call** item: the engineer decides it, and it becomes a fix, a reply or no action.
       - Every **push back** reply: approved as drafted, or edited.
-      - The fixed-item templates, which cite the fixing commit: one for threads, such as "Fixed in `<sha>`.", and one for review bodies and PR comments that links the item, such as "Re `<link>`: fixed in `<sha>`."
+      - The fixed-item templates, which cite the fixing commit: one for threads, such as `Fixed in <sha>.`, and one for review bodies and PR comments that links the item, such as `Re <link>: fixed in <sha>.`
       - Every **already done** item: it gets the fixed-item template, citing the commit the triager named, and its bot thread is resolved, unless the engineer says to leave it.
       - The gated actions: pushing to the PR's branch through `<team>/push-branch.sh`, posting the replies, and resolving those bot threads.
 
-      When an answer turns an item into a reply, draft that reply and get it approved too. An item that becomes a fix joins a unit and gets a trace row, as in step 9.
+      - The round-cap ground rule: in this mission, what's left at the cap goes in the final report and nothing is posted, in place of SKILL.md's round-cap PR comment.
+
+      When an answer turns an item into a reply, draft that reply and get it approved too. Update the units and the trace as step 9 says.
     - Write each approved reply to `<run>/replies/<item-id>.md` exactly as approved, with the item's link filled in and `<sha>` still open in fixed items.
 
     Launch the implementer probe (SKILL.md step 5.4), and every other teammate that writes, only once every fix item is approved or turned into something else, every needs-your-call item is answered and every reply is approved.
