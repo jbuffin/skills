@@ -1,5 +1,19 @@
 # jasonbuffin-skills
 
+## 1.1.0
+
+### Minor Changes
+
+- [#34](https://github.com/jbuffin/skills/pull/34) [`cd56724`](https://github.com/jbuffin/skills/commit/cd56724014ac7789d4498f4b281a086646567fda) Thanks [@jbuffin](https://github.com/jbuffin)! - `commodore` now works out the run's mission (`build`, `review` or `pr-feedback`) from what you point it at, confirms it with you before launching any teammate, and records it in `state.md`. Explicit wording such as "build [#17](https://github.com/jbuffin/skills/issues/17)" overrides detection. The existing flow is now the build mission, unchanged, and lives in `references/mission-build.md`.
+
+- [#34](https://github.com/jbuffin/skills/pull/34) [`cd56724`](https://github.com/jbuffin/skills/commit/cd56724014ac7789d4498f4b281a086646567fda) Thanks [@jbuffin](https://github.com/jbuffin)! - `commodore` now runs a PR-feedback mission when you point it at your own open PR, even when only CI is failing; it no longer runs your own PR as a build mission. A new read-only `triager` role (`--role triager`, `MODEL_TRIAGER=opus` in a fresh `team.env`) sorts every unresolved review thread, top-level review comment and failing check into fix, push back, needs your call or already done, and drafts the push-back replies. You see people's and bots' feedback grouped separately, approve the fixes, answer every needs-your-call item and approve every reply before you leave. The fixes then run through the usual review loop and CI in existing-PR mode and are pushed with the run's push wrapper. After that, the approved replies are posted, fixed items cite their commit, fixed bot threads are resolved, and people's threads stay open. Nothing else is posted, not even at the review-round cap. Feedback that arrives during the run is listed in the final report and not acted on.
+
+- [#34](https://github.com/jbuffin/skills/pull/34) [`cd56724`](https://github.com/jbuffin/skills/commit/cd56724014ac7789d4498f4b281a086646567fda) Thanks [@jbuffin](https://github.com/jbuffin)! - `commodore` now runs a review mission when you point it at someone else's open PR, including one from a fork. It creates detached worktrees on the PR's head (read-only for the reviewers), stops for your go-ahead when the repo's Claude Code project settings set anything beyond `permissions` deny and ask rules, when it defines MCP server commands, or when the PR changes agent config such as `CLAUDE.md` or `.claude/`, launches a fresh reviewer and security reviewer for one round on the PR's full range, who never run the PR's code, and adds the target steward only when the PR changes something a user would touch. Phase 1 skips Keychain secrets, push allow rules and the implementer probe. You get merged findings and a recommended verdict first, and nothing is posted until you approve. It then posts one GitHub review with inline comments, as `COMMENT` unless you choose `APPROVE` or `REQUEST_CHANGES`. The run never commits or pushes to the PR's branch. A finding on a file whose path contains a quote or a newline is kept in the review body, unverified and with the file name flagged.
+
+### Patch Changes
+
+- [#34](https://github.com/jbuffin/skills/pull/34) [`cd56724`](https://github.com/jbuffin/skills/commit/cd56724014ac7789d4498f4b281a086646567fda) Thanks [@jbuffin](https://github.com/jbuffin)! - `commodore` now writes a `result:` line into `state.md` when a run ends, and treats a run with that line as finished: it doesn't resume it, and a new run never reuses its directory. A new request checks only a run directory you name.
+
 ## 1.0.0
 
 ### Major Changes
