@@ -46,7 +46,7 @@ npx skills add jbuffin/skills            # all promoted skills
 
 # Claude Code plugin route
 /plugin marketplace add jbuffin/skills
-/plugin install jasonbuffin@skills
+/plugin install jasonbuffin@jbuffinskills
 ```
 
 To try an incubator skill without promoting it, point the CLI at its folder:

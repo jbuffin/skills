@@ -37,7 +37,7 @@ body:
     attributes:
       label: How you installed it
       options:
-        - Claude Code plugin (/plugin install jasonbuffin@skills)
+        - Claude Code plugin (/plugin install jasonbuffin@jbuffinskills)
         - skills CLI (npx skills add jbuffin/skills)
         - Local copy or symlink
     validations:
