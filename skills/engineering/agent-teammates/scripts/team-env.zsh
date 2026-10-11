@@ -20,8 +20,8 @@ DRIVER=${0:A:h}/drivers/$HARNESS
 REG=$D/teammates.tsv     # name id tasked-epoch|closed viewer-ref|- workdir
 mkdir -p $D/reports; touch $REG
 # Run a driver operation: drv <op> <args>. The driver is chosen by HARNESS in team.env.
-# A missing operation returns 5 with a message on stderr; the caller decides what to do.
-drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $HARNESS has no $op operation ($DRIVER)" >&2; return 5; }; $DRIVER/$op "$@"; }
+# A missing operation returns 9 (no operation can use it as its own exit code) with a message on stderr; the caller decides what to do.
+drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $HARNESS has no $op operation ($DRIVER)" >&2; return 9; }; $DRIVER/$op "$@"; }
 reg_field() { awk -v n=$1 -v f=$2 '$1==n {v=$f} END {print v}' $REG; }   # last row for a name wins
 # Names and labels become file names and registry fields: letters, digits, '.', '_' and '-' only.
 valid_name() { [[ $1 =~ '^[A-Za-z0-9._-]+$' && $1 != .* ]] || { echo "invalid name '$1': use letters, digits, '.', '_' and '-', not starting with '.'"; exit 5; }; }

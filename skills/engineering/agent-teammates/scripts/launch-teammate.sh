@@ -51,9 +51,10 @@ TOP=$(git -C $W rev-parse --show-toplevel 2>/dev/null)
 # The driver starts the session (and any viewer pane). Success prints "<id> <viewer|->", then the lines to show after "launched".
 OUT=$(drv launch $D $NAME $W $CHOSEN $P ${RO:-0})
 RC=$?
+(( RC == 9 )) && exit 5   # the driver has no launch operation; drv already said so on stderr
 (( RC != 0 )) && { print -r -- "$OUT"; exit $RC; }
 read -r ID VREF <<< ${OUT%%$'\n'*}
 [[ $VREF == - ]] && VREF=
 printf '%s %s %s %s %s\n' "$NAME" "$ID" "$(date -u +%s)" "${VREF:--}" "$W" >> $REG
 echo "launched $NAME as background session $ID in $W${RO:+ (read-only)}${VREF:+ (viewer $VREF)}"
-[[ $OUT == *$'\n'* ]] && print -r -- "${OUT#*$'\n'}"
+if [[ $OUT == *$'\n'* ]]; then print -r -- "${OUT#*$'\n'}"; fi

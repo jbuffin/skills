@@ -329,10 +329,10 @@ shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineeri
 shared_code() {  # shared_code <egrep-pattern>: matching non-comment lines in shared scripts, as file:line:text
   local f
   find $shared -path '*/drivers/claude' -prune -o -type f -print | LC_ALL=C sort | while read -r f; do
-    grep -nE -- "$1" $f | grep -vE '^[0-9]+:[[:space:]]*#' | sed "s#^#${f#$ROOT/}:#"
+    grep -nE -- "$1" $f | grep -vE '^[0-9]+:[[:space:]]*#' | sed -e 's#== \.claude ||#== DOTCLAUDE ||#' | grep -E -- "$1" | sed "s#^#${f#$ROOT/}:#"
   done
 }
-hits=$(shared_code '(^|[^-/a-z.])claude ')
+hits=$(shared_code '(^|[^-/a-z])claude ')
 [[ -z $hits ]] && pass "C1 no shared script calls claude" || fail "C1 no shared script calls claude" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
 $(print -r -- $hits | head -6)"
 hits=$(shared_code '\.jsonl|/projects|\.claude\.json')
@@ -412,6 +412,33 @@ want s1 && {
   if [[ $rc1 == 5 && $o1 == *"invalid HARNESS"* && $rc2 == 5 && $o2 == *"invalid HARNESS"* && $rc3 == 1 ]] && grep -q '^FAIL  invalid HARNESS' $SC/out && ! grep -q 'ADVISOR' $SC/out; then
     pass "S1 an invalid HARNESS in team.env is rejected (exit 5, a FAIL line in preflight, no advisor probe)"
   else fail "S1 an invalid HARNESS in team.env is rejected (exit 5, a FAIL line in preflight, no advisor probe)" "close: $rc1 '$o1'; advisor-probe: $rc2 '$o2'; preflight: $rc3 $(grep -E 'FAIL|ADVISOR' $SC/out | head -3 | tr '\n' '|')"; fi
+}
+
+# N1/N6: a test-only driver whose launch prints one line; team-init's driver-less and re-run paths.
+want n1 && {
+  cp -R $SKILLS $SB/src-oneline; mkdir -p $SB/src-oneline/agent-teammates/scripts/drivers/other
+  : > $SB/src-oneline/agent-teammates/scripts/drivers/other/driver.env
+  printf '#!/bin/sh\necho "id9 -"\n' > $SB/src-oneline/agent-teammates/scripts/drivers/other/launch; chmod +x $SB/src-oneline/agent-teammates/scripts/drivers/other/launch
+  TREE=$SB/src-oneline; mk n1-oneline HARNESS=other; TREE=$SKILLS
+  xrun $SB/src-oneline/agent-teammates/scripts/launch-teammate.sh $D t1 $SC/wt
+  if [[ $RC == 0 && $(cat $SC/out | wc -l | tr -d ' ') == 1 && $(cat $SC/out) == "launched t1 as background session id9 in "* && $(awk '{print $1, $2}' $D/teammates.tsv) == "t1 id9" ]]; then pass "N1 a driver whose launch prints one line: exit 0, registered, nothing after launched"
+  else fail "N1 a driver whose launch prints one line: exit 0, registered, nothing after launched" "exit $RC; out: $(cat $SC/out | head -c 300 | tr '\n' '|'); registry: $(cat $D/teammates.tsv | head -c 200)"; fi
+
+  mk n1-nolaunch HARNESS=other
+  xrun $AT/launch-teammate.sh $D t1 $SC/wt
+  # (the real tree has no `other` driver, so this exercises drv's missing-operation path)
+  if [[ $RC == 5 && ! -s $SC/out && ! -s $D/teammates.tsv ]]; then pass "N3 a driver with no launch: exit 5, nothing on stdout, no registry row"
+  else fail "N3 a driver with no launch: exit 5, nothing on stdout, no registry row" "exit $RC; out: $(head -c 200 $SC/out)"; fi
+
+  cp -R $SKILLS $SB/src-detect; mkdir -p $SB/src-detect/agent-teammates/scripts/drivers/other
+  printf '#!/bin/sh\necho other\n' > $SB/src-detect/agent-teammates/scripts/detect-harness.sh
+  sc n6-nodriver; xrun $SB/src-detect/commodore/scripts/team-init.sh run1 $SC/repo
+  if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out) == *"other: has no driver yet"* ]]; then pass "N6 a detected harness without a driver: exit 7, no run"
+  else fail "N6 a detected harness without a driver: exit 7, no run" "exit $RC; out: $(head -c 300 $SC/out)"; fi
+
+  SCDIR=init-rerun sc n6-rerun; SCDIR=
+  xrun CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo; xrun $CM/team-init.sh run1 $SC/repo
+  d4 n6-rerun init-rerun $SC/teams/run1
 }
 
 # ======================================================================================================================

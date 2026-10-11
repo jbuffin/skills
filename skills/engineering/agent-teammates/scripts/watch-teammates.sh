@@ -25,7 +25,7 @@ while true; do
   states=$(drv status $D)
   rc=$?
   # the driver can't report status at all: say so and stop, rather than skip every poll silently
-  (( rc == 5 )) && { echo "WATCH the $HARNESS driver has no status operation; the watchdog can't run"; exit 5; }
+  (( rc == 9 )) && { echo "WATCH the $HARNESS driver has no status operation; the watchdog can't run"; exit 5; }
   # a failed or unreadable listing says nothing about the teammates; skip the session checks this poll
   (( rc == 0 )) || { sleep 60; continue; }
   # latest registry row per teammate; a "closed" row ends the watch for that name
