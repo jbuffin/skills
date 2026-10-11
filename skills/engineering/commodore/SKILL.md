@@ -1,10 +1,12 @@
 ---
 name: commodore
-description: Chief-of-staff team run. Plan the work into units, brief fresh teammates, each on the model its role calls for, in git worktrees, review and evaluate each unit on the real target, and deliver one PR, a gh stack, or fixes to an existing PR.
+description: Entry point for team work. Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR.
 disable-model-invocation: true
 ---
 
 # Commodore
+
+Commodore is the entry point for any work that needs a team. It works out the mission from what the engineer points it at, confirms it, and runs that mission's task force.
 
 You are the chief of staff. You own the plan, the briefs, the delivery and the engineer's attention. You write no production code. Teammates do the work, and you brief them, read their reports, make the calls and keep things moving.
 
@@ -20,6 +22,8 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 ## Words used here
 
+- The **mission** is what a run is for, worked out from what the engineer points you at: `build`, `review` or `pr-feedback`. It decides the run's task force.
+- The **task force** is the set of roles a mission assembles for a run.
 - A **security reviewer** is a read-only teammate, fresh every review round, that reviews a unit's diff only for security vulnerabilities, alongside the reviewer.
 - A **blocking finding** is a review finding at or above the profile's severity threshold (default: HIGH and MEDIUM). It must be fixed, or handed to a human at the round cap, before the unit ships.
 - A **non-blocking finding** is a review finding below the threshold (default: LOW). It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial.
@@ -32,16 +36,7 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 - **Carry-forward checks** are checks a unit defers to a later one, such as "re-run the migration test once u3 lands". Each names the unit that owes it.
 - `<run>` is the run directory. `<team>`, `<teammates>` and `<preflight>` are the script directories of this skill, agent-teammates and run-preflight. `team-init.sh` prints all four and writes the script directories to `team.env` as resolved literal paths. Briefs and allow rules use those literal paths.
 
-## Mode, sized to the work
-
-| The work | Mode | Delivery |
-| --- | --- | --- |
-| One unit | single unit | one worktree, one draft PR |
-| Several phases or passes, or related issues worked in order where each builds on the last | stack | one worktree per unit, a gh stack of draft PRs |
-| Several issues that don't build on each other | independent units | one worktree and one PR each |
-| An existing PR to finish or get green | existing PR | one worktree on its branch, no new PR |
-
-Pick the mode in phase 1 and say which one and why in the decision batch. If the work turns out bigger or smaller than it looked, change it and tell the engineer. The chosen mode's section of [`references/modes.md`](references/modes.md) has its worktree commands and procedure.
+## Launching teammates
 
 You launch every teammate with `--role <role>`. The role names, their default models and the advisor pairing are in [`references/roles.md`](references/roles.md). A fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names.
 
@@ -51,17 +46,46 @@ You launch every teammate with `--role <role>`. The role names, their default mo
 
 The work inside a role can be one of the user's own skills. The profile names the skill each role runs, and each brief tells the teammate to invoke it. A role with no named skill follows its section in [`references/roles.md`](references/roles.md).
 
+On every `DONE`, run `<teammates>/verify-report.sh <run> <name>` before you act on the report. It checks that the report and marker are from this tasking, that each declared proof ran in the teammate's worktree on its current HEAD with nothing uncommitted and exited 0, and that the report's `commit:` line names that HEAD. `verdict: unverified` means the work isn't done, whatever the report says; send the FAIL lines back to the teammate as its next instruction.
+
+Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (the reviewer, the security reviewer, the brief checker) do not count, and neither does a teammate waiting for a message (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
+
 ## The run directory and the state file
 
 Everything for a run lives in one run directory outside the source tree, so it survives compaction and restarts. Create it with `<team>/team-init.sh <run-name> <repo>`, which prints the run directory and the three script directories. It doubles as the agent-teammates team directory.
 
-`state.md` is the run's memory: the mode and current unit, branches, worktrees and head SHAs, the acceptance trace, ground rules, open questions with recommended defaults, assumptions taken, live teammates, review-round counts and carry-forward checks. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. If there's no `state.md`, it's a new run.
+`state.md` is the run's memory: the mission, the mode and current unit, branches, worktrees and head SHAs, the acceptance trace, ground rules, open questions with recommended defaults, assumptions taken, live teammates, review-round counts and carry-forward checks. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. If there's no `state.md`, it's a new run.
 
 `state.md` holds decisions and history. Branch heads, PR and CI state, and who is live change on their own. Re-read those from `git`, `gh` and `claude agents --json` when you resume and before any push, stack submit or close. Where they disagree with `state.md`, the live value wins, and you fix `state.md`.
 
+## The mission, before phase 1
+
+If `state.md` records a mission, you're resuming: run that mission and skip detection. Otherwise settle the mission before phase 1.
+
+1. Detect it from what the engineer pointed you at.
+   - A PR whose author is the authenticated `gh` user is `pr-feedback`. Compare `gh pr view <pr> --json author --jq .author.login` with `gh api user --jq .login`. For a bare number such as `#42`, `gh pr view` tells you whether it's a PR or an issue.
+   - A PR authored by anyone else is `review`.
+   - A spec, an issue, a design doc or a free-text request is `build`.
+
+   Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, ask the engineer which one they mean.
+2. Find the mission's row in the mission table below. A mission with no row falls back:
+   - `pr-feedback` runs as `build` in existing-PR mode.
+   - `review` stops the run. Tell the engineer: "The review mission is not available yet. Point me at a spec, an issue or your own PR, or review this PR yourself." Launch nothing.
+3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option, and name any fallback ("your own PR, so `build` in existing-PR mode").
+4. Record it. Once `team-init.sh` has created `state.md`, write `mission: <name>` under its `## Mode, phase, current unit` heading. Record the mission that runs, so your own PR on a fallback is `build`.
+5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
+
+Done when the engineer has confirmed the mission and the mission is recorded in `state.md`.
+
+The mission table is the one place a mission is registered. A new mission adds a row here and its own `references/mission-<name>.md`.
+
+| Mission | Task force | Phase 1 steps | Delivery | Procedure |
+| --- | --- | --- | --- | --- |
+| `build` | the roles in its Phase 2 table | 1–6 | by mode: one PR, a gh stack, or fixes to an existing PR | [`references/mission-build.md`](references/mission-build.md) |
+
 ## Phase 1: before the engineer leaves
 
-The run has to get from the first unit to the stop rule without the engineer.
+The run has to get from the first unit to the stop rule without the engineer. Run the steps your mission's row lists.
 
 1. Write the profile. Copy [`references/profile-template.md`](references/profile-template.md) to `<run>/profile.md` and fill it from the repo: CLAUDE.md or AGENTS.md, the CI config, the issue, the PR template. Ask the engineer only for what the repo can't tell you. Record the model for each role in the profile's Goal section (defaults and the capability rule are in [`references/roles.md`](references/roles.md)), and copy those choices into the `MODEL_<ROLE>` lines of `<run>/team.env`. Done when every field is filled or `n/a` and every role the run uses has a non-empty `MODEL_<ROLE>`.
 2. Plan the units, ordered so each builds only on the units below it. Anything every unit needs (CI, tooling, shared types) goes in the first. Then check four things.
@@ -88,46 +112,7 @@ The run has to get from the first unit to the stop rule without the engineer.
    Done when the probe comes back clean, every secret is stored, and `state.md` holds the ground rules and every answer.
 6. Write the common brief at `<run>/brief-common.md`, starting from [`references/brief-common.md`](references/brief-common.md). Done when no `<…>` is left in it.
 
-Phase 1 is done when steps 1–6 are. Then tell the engineer plainly: "Everything the run needs is in place; you can leave."
-
-## Phase 2: work, unit by unit
-
-The workflow is fixed, but the cast changes with the work. Pick each unit's team from this table, and give each role its section of [`references/roles.md`](references/roles.md).
-
-| Role | Does | Use when |
-| --- | --- | --- |
-| Brief checker | verifies every claim in a brief against the source of truth | always |
-| Test writer | writes the unit's failing tests (or checks, for non-code work) from the source of truth | the behaviour can be pinned by tests or scripted checks |
-| Implementer | builds the unit, then stays alive to fix its own findings | always |
-| Reviewer | reviews the diff against the source of truth, fresh each round | always |
-| Security reviewer | reviews the same diff for security vulnerabilities only | always |
-| Target steward | owns the target for the whole run, does a light check each unit and full evaluations on target-evaluation's cadence | the work runs somewhere a user would touch it |
-| Scribe | PR bodies, round-cap PR comments, notes | unless the run is tiny |
-
-For each unit:
-
-1. Write the brief. Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the skill the role runs, and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines. Done when the brief checker reports no contradicted or unsourced claims.
-2. The test writer goes red. Its tests all fail, and for the right reason.
-3. The implementer goes green. Its suites and lint pass, the work is committed in the unit's worktree, and its proof verifies. Once it commits, start the next unit's test writer, as long as the next unit's source doesn't depend on this unit's review.
-4. Review and evaluation run in parallel.
-   - A fresh reviewer, launched `--read-only --role reviewer`, runs the review skill on the diff.
-   - A fresh security reviewer, launched `--read-only --role security-reviewer`, runs the profile's security review skill. Its brief gives the profile's security settings and the exact range to review: `<unit base>...HEAD` in round 1, where the unit base is the previous unit's branch, or the base branch for the first unit and in other modes, and `<last reviewed SHA>..HEAD` after. Record the last reviewed SHA in `state.md` each round.
-   - The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change).
-   - Keep a running list of unfixed non-blocking findings in `state.md` across rounds: add each round's, and drop the ones a fix round resolves.
-
-   Done when all three reports are in: the reviewer's, the security reviewer's and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6.
-5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and send it to the unit's implementer in a single message (SendMessage to its name, then `<teammates>/retasked.sh`).
-   - When fixes conflict, the security fix wins, and you record the decision in `state.md`.
-   - The implementer may also fix trivial non-blocking findings, but only in a round that already has blocking fixes, so they never cause an extra round. Trivial means a few lines inside the unit's own files with no other change in behaviour. Its report lists which non-blocking findings it fixed.
-   - Then a fresh reviewer and a fresh security reviewer look at the fix diff only, and the steward re-checks anything user-visible.
-   - Security findings share the reviewer's round counter and its cap of 3.
-   - Done when a round ends with no blocking findings and a passing light check, or at the round cap. At the cap, record in `state.md` what's left for a human, unresolved security findings included, and list it in the round-cap PR comment.
-6. Ship the way the mode says. The scribe writes the PR body first, and at the round cap a PR comment listing what's left for a human, posted once the PR exists. Then open a draft PR, run `gh stack submit --auto` or `gh stack push`, or run `<team>/push-branch.sh <run> <branch>` for the existing PR's branch. Run `<team>/watch-ci.sh <run> <branch>` in the background; it exits non-zero on red. Red CI gets fixed before anything builds on the unit.
-7. Close the unit once CI is green. Mark the unit's trace rows, update `state.md`, close the unit's teammates and send the engineer the unit summary. Close the implementer last, because until then a finding from the reviewer, the security reviewer, the target or CI goes back to it.
-
-On every `DONE`, run `<teammates>/verify-report.sh <run> <name>` before you act on the report. It checks that the report and marker are from this tasking, that each declared proof ran in the teammate's worktree on its current HEAD with nothing uncommitted and exited 0, and that the report's `commit:` line names that HEAD. `verdict: unverified` means the work isn't done, whatever the report says; send the FAIL lines back to the teammate as its next instruction.
-
-Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (the reviewer, the security reviewer, the brief checker) do not count, and neither does a teammate waiting for a message (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
+Phase 1 is done when the steps your mission's row lists are. Then tell the engineer plainly: "Everything the run needs is in place; you can leave." Then run the rest of your mission's procedure file.
 
 ## Bubbling questions up
 
@@ -138,22 +123,6 @@ Teammates put questions in their reports, with options and a recommendation, and
 - If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next unit summary so the engineer can overturn it.
 - Product behaviour, design choices that depart from the source, scope, and anything external or irreversible belong to the engineer. Batch them. If the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
 
-## Unit summary to the engineer
-
-```text
-Unit N: <unit> (<PR or branch>, <state>)
-Built: <one line>   Tests: <counts>   Target (<option used>): <light check passed/failed; full eval yes/no>
-Advisor: <on | off for <roles>: <reason>>
-Review: round k of cap, <fixed / left for human>
-Security: <fixed / left for human / none>   Non-blocking: <n recorded>
-Proof: <verify-report verdict>   Criteria closed: <ids from the trace>
-CI: <green / red / running>
-Not checked: <what nobody ran or looked at, and why | nothing>
-Assumptions taken: <list | none>
-Questions for you: <batched, with recommendation | none>
-Next: <unit, role>
-```
-
 ## Guarding the coordinator
 
 Your context is the most expensive thing in the run. Read reports, not diffs. Send searches to a subagent and leave the writing to the scribe.
@@ -161,23 +130,3 @@ Your context is the most expensive thing in the run. Read reports, not diffs. Se
 Make every call bare (agent-teammates defines it), and put any logic that needs more than one command in a script file in the run directory. When a denial is about the outcome rather than the syntax, stop and ask; a denied action stays denied however it's phrased.
 
 While the engineer is away, every wait should be on something only the engineer can give. Before asking them a question, check the run's own state for the answer. When a teammate fails on credentials, check which environment the build pointed at first.
-
-## Phase 3: finish
-
-The run ends when the stop rule is observed on the target it names. Opening the last PR doesn't end it.
-
-1. The steward's full evaluation confirms the stop rule. Record when it happened and which target option it ran on.
-2. Pass the completion gate. Every check has to hold before you call the run done.
-   - The stop rule was observed on the target it names. On a fallback, it holds only if the engineer accepted that fallback.
-   - Every row in the acceptance trace has a result and evidence: a test, a scenario, or a report path.
-   - Every PR or other deliverable exists, and its branch matches what `worktrees.tsv` and `state.md` say.
-   - Every claim in a PR body traces to a verified report.
-   - Every unit's last verify-report verdict is `verified`, and CI is green, or each exception is named.
-   - Every gap, carry-forward check and thing not checked is listed.
-   - Every gated action that wasn't approved (pushes, marking ready, merges) is still pending, not done.
-
-   If any check fails, the run is partial. Say exactly which checks failed.
-3. Close every teammate, stop the watchdog and the CI watchers, and leave the target in the agreed state. List every worktree from `worktrees.tsv` with its branch and whether it's clean. Remove them only when the engineer says so.
-4. Leave the delivery the way the ground rules say. Every PR at the round cap has its human-review comment.
-5. Write the final report: units and PRs, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why.
-6. Lessons go to the repo's own docs, as a proposed edit for the engineer to accept, whenever the run tripped over a missing or wrong instruction there.
