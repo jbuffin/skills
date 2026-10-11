@@ -87,7 +87,7 @@ The mission table is the one place a mission is registered. A new mission adds a
 | Mission | Task force | Phase 1 steps | Delivery | Procedure |
 | --- | --- | --- | --- | --- |
 | `build` | the roles in its Phase 2 table | 1–6 | by mode: one PR, a gh stack, or fixes to an existing PR | [`references/mission-build.md`](references/mission-build.md) |
-| `review` | reviewer, security reviewer, and the target steward when the PR changes something a user would touch | 1, 3 (only with the steward), 6; its own read-only worktree in place of 4 | one GitHub review | [`references/mission-review.md`](references/mission-review.md) |
+| `review` | reviewer, security reviewer, and the target steward when the PR changes something a user would touch | 1, 3 (only with the steward), 6; detached worktrees on the PR's head in place of 4 | one GitHub review | [`references/mission-review.md`](references/mission-review.md) |
 
 ## Phase 1: before the engineer leaves
 
