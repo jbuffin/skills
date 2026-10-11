@@ -13,7 +13,7 @@ body:
     attributes:
       label: Skill
       options:
-        - agent-team-build
+        - commodore
         - agent-teammates
         - run-preflight
         - target-evaluation
@@ -83,7 +83,7 @@ body:
     id: preflight
     attributes:
       label: Preflight output
-      description: For the engineering team skills, the output of `agent-team-build/scripts/team-preflight.sh` or `run-preflight/scripts/preflight.sh`, if you ran it.
+      description: For the engineering team skills, the output of `commodore/scripts/team-preflight.sh` or `run-preflight/scripts/preflight.sh`, if you ran it.
       render: shell
   - type: checkboxes
     id: redacted

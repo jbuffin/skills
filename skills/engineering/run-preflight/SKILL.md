@@ -56,7 +56,7 @@ Bash(<a push wrapper that pins the refspec> <run>:*)
 
 Pin each `secret-run.sh` rule to one service, one variable and one consumer command, and add one rule per consumer. A prefix rule on the helper alone, `Bash(<this skill>/scripts/secret-run.sh:*)`, is the one to refuse. The command runs from the tail of the helper's arguments, so it approves any command with the secret already exported (`… -- sh -c 'echo $STAGE_PASS'` would print it). The same goes for any helper that runs the command after its `--`.
 
-Force-pushes go through a wrapper that pins the refspec to the run's own branches, such as agent-team-build's `push-branch.sh`. A prefix rule on `git push --force-with-lease origin <branch-prefix>*` also matches `origin <branch-prefix>x:main`, which force-pushes main.
+Force-pushes go through a wrapper that pins the refspec to the run's own branches, such as commodore's `push-branch.sh`. A prefix rule on `git push --force-with-lease origin <branch-prefix>*` also matches `origin <branch-prefix>x:main`, which force-pushes main.
 
 Rules match the literal command, so agents make every call bare: one command, run directly by its literal absolute path, with no `;`, `&&`, pipes, `source` or shell variables. Write the paths exactly the way the agents will type them, because a symlinked skills folder resolves to a different path. Where a permission classifier judges actions by their description, add the plain phrasing the environment accepts, such as "pass the stage test user's password to the UI tests via the Keychain helper". Done when every gated action in the manifest has a rule. The engineer approves them in the section 4 batch, and then you write them to settings.
 

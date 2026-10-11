@@ -15,7 +15,7 @@ for dep in agent-teammates run-preflight target-evaluation; do
 done
 if (( $#missing )); then
   echo "missing skills next to ${SKILL:t} in ${SKILL:h}: ${missing[*]}"
-  echo "agent-team-build needs agent-teammates, run-preflight and target-evaluation installed alongside it."
+  echo "commodore needs agent-teammates, run-preflight and target-evaluation installed alongside it."
   exit 6
 fi
 RUN=${AGENT_TEAMS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/teams}/$NAME
