@@ -15,7 +15,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 
 | Skill | What it does |
 | --- | --- |
-| `agent-team-build` | Runs work as chief of staff over teammates, each on the model its role calls for, in git worktrees: plan units, brief, build, independent review, evaluation on the real target, delivered as a PR, a gh stack or fixes to an existing PR. Type `/agent-team-build`; it doesn't load on its own. |
+| `commodore` | Runs work as chief of staff over teammates, each on the model its role calls for, in git worktrees: plan units, brief, build, independent review, evaluation on the real target, delivered as a PR, a gh stack or fixes to an existing PR. Type `/commodore`; it doesn't load on its own. |
 | `agent-teammates` | Launches, watches, re-tasks and closes Claude Code background sessions (`claude --bg`) as teammates, with a report-and-marker contract, a watchdog and proof checks. |
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
@@ -59,11 +59,11 @@ npx skills add ./incubator/<name>
 
 ### Engineering team skills
 
-`skills/engineering/` holds four skills that work together: `agent-team-build` (the orchestrator),
+`skills/engineering/` holds four skills that work together: `commodore` (the orchestrator),
 `agent-teammates`, `run-preflight` and `target-evaluation`.
 
-- **Install all four together.** `agent-team-build` runs scripts from the other three by sibling path, so
-  `npx skills add jbuffin/skills --skill agent-team-build` alone leaves it broken. The plugin route always
+- **Install all four together.** `commodore` runs scripts from the other three by sibling path, so
+  `npx skills add jbuffin/skills --skill commodore` alone leaves it broken. The plugin route always
   installs all four.
 - **macOS with zsh.** The scripts are zsh, and secrets live in the macOS Keychain (`security`).
 - **Claude Code with background sessions.** Teammates run as `claude --bg` sessions and are watched with
@@ -76,9 +76,9 @@ npx skills add ./incubator/<name>
 - **Optional role skills.** The profile can name a skill per role. The examples (`/tdd`, `/code-review`,
   `/pr`) come from [mattpocock/skills](https://github.com/mattpocock/skills):
   `npx skills add mattpocock/skills`. A role with no skill named follows its section in
-  `agent-team-build/references/roles.md`.
+  `commodore/references/roles.md`.
 
-`agent-team-build/scripts/team-preflight.sh` checks most of this at the start of a run.
+`commodore/scripts/team-preflight.sh` checks most of this at the start of a run.
 
 ## Workflow
 
