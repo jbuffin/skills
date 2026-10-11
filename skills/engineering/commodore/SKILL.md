@@ -76,7 +76,7 @@ A run is finished when its `state.md` has a `result:` line, which the mission's 
 
    Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, say so and ask the engineer which one they mean.
 2. Find the mission's row in the mission table below. A mission with no row falls back: `pr-feedback` runs as `build` in existing-PR mode.
-3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option, and name any fallback ("your own PR, so `build` in existing-PR mode").
+3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option, and name any fallback ("your own PR, so `build` in existing-PR mode"). For `review` on the engineer's own PR, say that only a `COMMENT` review can be posted.
 4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away write `mission: <name>` under the new `state.md`'s `## Mode, phase, current unit` heading. Record the mission that runs, so your own PR on a fallback is `build`.
 5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
 
