@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 1.0.0
+
+### Major Changes
+
+- [#27](https://github.com/jbuffin/skills/pull/27) [`412f924`](https://github.com/jbuffin/skills/commit/412f924ee74594c3cfdafa84f75168b53c5e1ee1) Thanks [@jbuffin](https://github.com/jbuffin)! - Rename the `agent-team-build` skill to `commodore`. `/agent-team-build` (`/jasonbuffin:agent-team-build`) no longer exists, so call `/jasonbuffin:commodore`. The skill's behaviour, scripts and references are unchanged. A run started before the rename keeps the old resolved paths in its `team.env` (`SKILL=…/agent-team-build`, `TEAM_SCRIPTS=…`), because plugin installs are versioned.
+
 ## 0.3.0
 
 ### Minor Changes
