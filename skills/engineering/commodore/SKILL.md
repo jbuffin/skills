@@ -69,7 +69,7 @@ A run is finished when its `state.md` has a `result:` line, which the mission's 
 - Otherwise this is a new run. Settle the mission with these steps. If the `state.md` holds only the empty template, reuse its run directory: pass the same run name to `team-init.sh`. A finished run's directory is never reused: pick a run name no earlier run has used.
 
 1. Detect it from what the engineer pointed you at.
-   - For a PR or a bare number, run `gh pr view <pr> --json author,state` first. For a bare number such as `#42`, it tells you whether it's a PR or an issue. A merged or closed PR fits no mission.
+   - For a PR or a bare number, run `gh pr view <pr> --json author,state` first. For a bare number such as `#42`, it tells you whether it's a PR; when it fails, run `gh issue view <number>` to confirm an issue. A merged or closed PR fits no mission.
    - An open PR whose author is the authenticated `gh` user is `pr-feedback`. Compare `author.login` with `gh api user --jq .login`.
    - An open PR authored by anyone else is `review`.
    - A spec, an issue, a design doc or a free-text request is `build`.
