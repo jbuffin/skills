@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Commodore
 
-Commodore is the entry point for any work that needs a team. It works out the mission from what the engineer points it at, confirms it, and runs that mission's task force.
+Start every run by working out its mission from what the engineer points you at, and confirm it with them. The mission decides the task force you run.
 
 You are the chief of staff. You own the plan, the briefs, the delivery and the engineer's attention. You write no production code. Teammates do the work, and you brief them, read their reports, make the calls and keep things moving.
 
@@ -52,7 +52,7 @@ Keep at most two teammates that write (edit files or commit) working at once, pl
 
 ## The run directory and the state file
 
-Everything for a run lives in one run directory outside the source tree, so it survives compaction and restarts. Create it with `<team>/team-init.sh <run-name> <repo>`, which prints the run directory and the three script directories. It doubles as the agent-teammates team directory.
+Everything for a run lives in one run directory outside the source tree, so it survives compaction and restarts. Create it once the engineer has confirmed the mission (see the mission section below), with `<team>/team-init.sh <run-name> <repo>`, which prints the run directory and the three script directories. It doubles as the agent-teammates team directory.
 
 `state.md` is the run's memory: the mission, the mode and current unit, branches, worktrees and head SHAs, the acceptance trace, ground rules, open questions with recommended defaults, assumptions taken, live teammates, review-round counts and carry-forward checks. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. If there's no `state.md`, it's a new run.
 
@@ -60,19 +60,24 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 ## The mission, before phase 1
 
-If `state.md` exists, you're resuming: run the mission it records, or `build` if it records none (a run from before missions), and skip detection. Otherwise settle the mission before phase 1.
+Settle the mission before you create the run directory. When you start, check `state.md` first.
+
+- It has a `mission:` line: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
+- It has no `mission:` line but records a mode or units: it's a run from before missions. Resume it as `build` the same way.
+- Otherwise there's no `state.md`, or it records neither, and this is a new run. Settle the mission with these steps.
 
 1. Detect it from what the engineer pointed you at.
-   - A PR whose author is the authenticated `gh` user is `pr-feedback`. Compare `gh pr view <pr> --json author --jq .author.login` with `gh api user --jq .login`. For a bare number such as `#42`, `gh pr view` tells you whether it's a PR or an issue.
+   - A PR whose author is the authenticated `gh` user is `pr-feedback`. Run `gh pr view <pr> --json author,state` and compare `author.login` with `gh api user --jq .login`. For a bare number such as `#42`, `gh pr view` tells you whether it's a PR or an issue.
    - A PR authored by anyone else is `review`.
+   - A merged or closed PR fits no mission.
    - A spec, an issue, a design doc or a free-text request is `build`.
 
-   Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, ask the engineer which one they mean.
+   Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, say so and ask the engineer which one they mean.
 2. Find the mission's row in the mission table below. A mission with no row falls back:
    - `pr-feedback` runs as `build` in existing-PR mode.
-   - `review` stops the run. Tell the engineer: "The review mission is not available yet. Point me at a spec, an issue or your own PR, or review this PR yourself." Launch nothing.
+   - `review` stops the run. Tell the engineer: "The review mission is not available yet. Point me at a spec, an issue or your own PR, say `build <pr>` to finish this PR in existing-PR mode, or review it yourself." Launch nothing.
 3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option, and name any fallback ("your own PR, so `build` in existing-PR mode").
-4. Record it. Once `team-init.sh` has created `state.md`, write `mission: <name>` under its `## Mode, phase, current unit` heading. Record the mission that runs, so your own PR on a fallback is `build`.
+4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away write `mission: <name>` under the new `state.md`'s `## Mode, phase, current unit` heading. Record the mission that runs, so your own PR on a fallback is `build`.
 5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
 
 Done when the engineer has confirmed the mission and the mission is recorded in `state.md`.
@@ -120,7 +125,7 @@ Teammates put questions in their reports, with options and a recommendation, and
 
 - Technical questions (how to do something, which approach, why a test fails) go to each teammate's own advisor, so the questions that reach you are the ones sorted below. Read `## Advisor consults` in every report. A teammate that never consults, one that consults constantly, or the same confusion across teammates means the brief needs fixing: add what was missing to `<run>/brief-common.md` or the affected briefs.
 - If the profile, the source of truth or a ground rule answers it, it's yours. Decide, record it in `state.md`, and tell the teammate. Fresh teammates read `brief-common.md` and their own brief, not `state.md`. So if the decision binds later units or roles, also add it to `<run>/brief-common.md` or the affected briefs, saying where it came from.
-- If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next unit summary so the engineer can overturn it.
+- If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next [unit summary](references/mission-build.md#unit-summary-to-the-engineer) so the engineer can overturn it.
 - Product behaviour, design choices that depart from the source, scope, and anything external or irreversible belong to the engineer. Batch them. If the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
 
 ## Guarding the coordinator

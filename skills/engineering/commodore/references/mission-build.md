@@ -17,7 +17,7 @@ Pick the mode in phase 1 and say which one and why in the decision batch. If the
 
 ## Phase 2: work, unit by unit
 
-The workflow is fixed, but the cast changes with the work. Pick each unit's team from this table, and give each role its section of [`roles.md`](roles.md).
+The workflow is fixed, but the task force changes with the work. Pick each unit's team from this table, and give each role its section of [`roles.md`](roles.md).
 
 | Role | Does | Use when |
 | --- | --- | --- |
