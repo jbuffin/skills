@@ -15,7 +15,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 
 | Skill | What it does |
 | --- | --- |
-| `agent-team-build` | Runs work as chief of staff over Sonnet teammates in git worktrees: plan units, brief, build, independent review, evaluation on the real target, delivered as a PR, a gh stack or fixes to an existing PR. Type `/agent-team-build`; it doesn't load on its own. |
+| `agent-team-build` | Runs work as chief of staff over teammates, each on the model its role calls for, in git worktrees: plan units, brief, build, independent review, evaluation on the real target, delivered as a PR, a gh stack or fixes to an existing PR. Type `/agent-team-build`; it doesn't load on its own. |
 | `agent-teammates` | Launches, watches, re-tasks and closes Claude Code background sessions (`claude --bg`) as teammates, with a report-and-marker contract, a watchdog and proof checks. |
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |

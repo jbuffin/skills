@@ -13,7 +13,19 @@ Teammates run unattended, so almost everything here guards against one failure. 
 
 This can be any directory you choose, or one an orchestrating skill gives you. It holds `prompts/<name>.md` (one per teammate), `prompts/<name>.proof` (its proof commands, when it has any), `reports/` (their output), and `teammates.tsv`, a registry the scripts keep with each teammate's name, session id, tasked-at time, viewer and working directory. It can also hold two optional files.
 
-- `team.env` sets `MODEL` (default sonnet), `PERMISSION_MODE` (default auto), `STALL_MIN` (default 10, the quiet minutes before STALL), `VIEWER` (`none` by default, or `cmux` or `tmux`), and `REPO`, the engineer's checkout, inside which no teammate starts. For cmux viewers it also sets `CMUX_WORKSPACE` and `CMUX_SURFACE`, which you get from `cmux identify`.
+- `team.env` holds the settings below.
+
+  | Setting | Default | Meaning |
+  | --- | --- | --- |
+  | `MODEL` | sonnet | the model for a launch with neither `--model` nor `--role` |
+  | `MODEL_<ROLE>` | none | the model for `--role <role>`; see "Set the model explicitly" |
+  | `REQUIRE_ROLE` | unset | `1` makes every launch pass `--role` or `--model` |
+  | `ADVISOR` | opus | the built-in advisor model every teammate launches with; `none` turns it off. It has to rank at or above the teammate's model, and a Fable model accepts only `fable`. A refused pairing starts without the advisor and no error |
+  | `PERMISSION_MODE` | auto | the teammates' permission mode |
+  | `STALL_MIN` | 10 | the quiet minutes before STALL |
+  | `VIEWER` | none | `cmux` or `tmux` opens a pane per teammate; cmux also needs `CMUX_WORKSPACE` and `CMUX_SURFACE` from `cmux identify` |
+  | `REPO` | unset | the engineer's checkout, inside which no teammate starts |
+
 - `worktrees.tsv` lists `unit branch path`, so a unit name can stand in for a directory.
 
 `<teammates>` below is this skill's `scripts/` directory, as a resolved absolute path.
@@ -27,6 +39,8 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 - Wait inside a Bash command whenever you're waiting on a build, a deploy, a token expiry or a device: `until <condition>; do sleep 30; done` with a long timeout, then carry on. Ending your turn to wait means nothing wakes you.
 - Write the report, then the marker. When you're finished, write `<team-dir>/reports/<name>.md`, then create `<team-dir>/reports/<name>.done`, in that order, and wait. Every role writes both, read-only ones included.
 - Questions go in the report under `## Questions for the engineer`, each with options and a recommendation. Keep going on whatever doesn't depend on the answer.
+- Ask the advisor technical questions: how to do something, which approach, why something fails. It's a stronger model paired with your session, and you decide when to call it. Scope, product behaviour, departures from the source of truth and ground-rule questions go under `## Questions for the engineer`, and so does a problem two consults haven't moved forward: stop consulting on it and ask.
+- Every report has an `## Advisor consults` section with one line per advisor call: the question in brief, the advice in brief, and whether you followed it and why. Write `none` if you made no calls or have no advisor tool.
 - New instructions arrive as messages from the coordinator. Do them, overwrite the report, and touch the marker again.
 - Clean up only what you started, whether that's processes or files outside your directory.
 - Make every call bare: one command, by its literal absolute path, with no `;`, `&&`, pipes, `source` or shell variables, so the allow rules match it. The wait loop above is the one exception.
@@ -36,7 +50,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 ## Launch, re-task, close
 
 ```bash
-<teammates>/launch-teammate.sh [--read-only] <team-dir> <name> <workdir|unit> [prompt-file]   # claude --bg
+<teammates>/launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]   # claude --bg
 <teammates>/retasked.sh        <team-dir> <name>                                              # after sending new work
 <teammates>/close-teammate.sh  <team-dir> <name>...                                           # claude stop
 ```
@@ -49,7 +63,7 @@ Write a teammate's `prompts/<name>.proof` before launching or re-tasking it, one
 
 To give a live teammate new work, send it with the SendMessage tool, `to: <name>`, because the session name is the address. Then run `retasked.sh` so the watchdog stops counting the old marker. Teammates have to run in the same permission class as the coordinator (`PERMISSION_MODE` in `team.env`). Otherwise the message sits waiting for the engineer's approval in that session.
 
-Set the model explicitly. `--model` comes from `MODEL` and defaults to Sonnet. An in-process agent launched without a model runs on whatever model the coordinator uses.
+Set the model explicitly. The launcher picks it in this order: `--model <model>`; else, with `--role <role>`, `MODEL_<ROLE>` from `team.env` (the role uppercased, `-` and `.` as `_`, so `brief-checker` reads `MODEL_BRIEF_CHECKER`); else `MODEL`, which defaults to Sonnet. If `MODEL_<ROLE>` is unset or empty, the launch exits 5 and names the variable, and it never falls back to `MODEL`. With `REQUIRE_ROLE=1`, a launch with neither `--role` nor `--model` exits 5, so a forgotten flag fails loudly. Flags go in any order before the positional arguments. The launcher passes the model name through unchecked. An in-process agent launched without a model runs on whatever model the coordinator uses.
 
 Give each teammate its own working directory, which is usually a git worktree. The folder has to be trusted. Worktrees inside a repository the engineer has opened in Claude Code inherit its trust, and anything else fails to launch with "Workspace not trusted".
 
@@ -83,8 +97,8 @@ For a single teammate, a SendMessage with `notify_when_idle: true` gives you a o
 
 ## Fallback
 
-If `launch-teammate.sh` exits 2 (`NO_BG`, meaning background sessions aren't available or the folder isn't trusted), run the teammate as an in-process subagent. Give it an explicit `model: sonnet`, the same prompt file, the same contract and its own working directory, and verify it with `verify-report.sh … --workdir <dir>`, since it isn't in the registry. The watchdog still reports its `DONE` marker, but none of the session events. Tell the engineer what they lose. There's no dashboard and no attaching, and the teammate ends when the coordinator's session does.
+If `launch-teammate.sh` exits 2 (`NO_BG`, meaning background sessions aren't available or the folder isn't trusted), run the teammate as an in-process subagent. Give it an explicit `model=` set to the model the `NO_BG` message names, the same prompt file, the same contract and its own working directory, and verify it with `verify-report.sh … --workdir <dir>`, since it isn't in the registry. The watchdog still reports its `DONE` marker, but none of the session events. Tell the engineer what they lose. There's no dashboard and no attaching, and the teammate ends when the coordinator's session does. An in-process subagent inherits the coordinator's configured advisor (and applies the pairing check against its own model); it gets no `--advisor` from `ADVISOR`.
 
 ## Parallelism
 
-Two teammates working at once is about the useful limit for one coordinator. Past that, your context goes on reading reports. Give each exclusive resource (a device, a worktree, a test account) one long-lived owner that takes requests by message, rather than sharing it between teammates.
+Keep at most two teammates that write (edit files or commit) working at once, plus one long-lived owner of a shared target such as a device or a stage environment. Read-only teammates do not count toward the limit. The limit protects your context from too many reports and keeps writers from contending, and read-only reviewers produce the same reports whether they run in parallel or one after another. Give each exclusive resource (a device, a worktree, a test account) one long-lived owner that takes requests by message, rather than sharing it between teammates.
