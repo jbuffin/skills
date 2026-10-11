@@ -413,17 +413,18 @@ want d2 && {
 # ======================================================================================================================
 # LINT: the checks CI runs on shell files, including the files its shebang search misses.
 # ======================================================================================================================
-bad=()
-for f in ${(f)"$(git -C $ROOT ls-files 'skills/engineering/agent-teammates/scripts' 'skills/engineering/commodore/scripts' 'tests/run.sh')"} \
-         $DRV/driver.env(N) ; do
-  f=${f:A}; [[ -f $f ]] || f=$ROOT/$f
-  zsh -n $f 2>/dev/null || bad+=${f#$ROOT/}
+bad=(); sbad=()
+# Like CI: zsh -n on zsh scripts and on files with no shebang (team-env.zsh, driver.env); shellcheck on bash and sh scripts.
+for f in $(find $shared -type f | LC_ALL=C sort) $ROOT/tests/run.sh; do
+  first=$(head -1 $f)
+  case $first in
+    '#!/usr/bin/env bash'*|'#!/bin/bash'*|'#!/bin/sh'*) command -v shellcheck >/dev/null && { shellcheck $f >/dev/null 2>&1 || sbad+=${f#$ROOT/}; } ;;
+    '#!'*python*|'#!/usr/bin/env python'*) ;;
+    *) zsh -n $f 2>/dev/null || bad+=${f#$ROOT/} ;;
+  esac
 done
-for f in $DRV/*(N.); do
-  [[ $(head -1 $f) == '#!/bin/zsh'* || ${f:t} == driver.env ]] && { zsh -n $f 2>/dev/null || bad+=${f#$ROOT/}; }
-  [[ $(head -1 $f) == '#!/usr/bin/env bash'* || $(head -1 $f) == '#!/bin/bash'* || $(head -1 $f) == '#!/bin/sh'* ]] && { command -v shellcheck >/dev/null && ! shellcheck $f >/dev/null 2>&1 && bad+=${f#$ROOT/}; }
-done
-(( $#bad )) && fail "LINT zsh -n" "fails: ${(u)bad[*]}" || pass "LINT zsh -n (scripts, team-env.zsh, driver.env, run.sh)"
+(( $#sbad )) && fail "LINT shellcheck shared scripts" "fails: ${sbad[*]}" || pass "LINT shellcheck shared scripts (bash and sh shebangs)"
+(( $#bad )) && fail "LINT zsh -n" "fails: ${(u)bad[*]}" || pass "LINT zsh -n (zsh and shebang-less files, run.sh)"
 if command -v shellcheck >/dev/null; then
   shellcheck $ROOT/tests/bin/* >/dev/null 2>&1 && pass "LINT shellcheck tests/bin" || fail "LINT shellcheck tests/bin" "$(shellcheck $ROOT/tests/bin/* 2>&1 | head -8)"
 else echo "skip  LINT shellcheck tests/bin (shellcheck not installed)"; fi
