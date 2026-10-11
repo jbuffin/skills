@@ -62,11 +62,11 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 Settle the mission before you create the run directory. When you start, check `state.md` first: the one in the run directory you were running before a compaction or crash, or the one the engineer names. A new request that names no run directory has none to check, so it's a new run.
 
-A run is finished when its `state.md` has a `result:` line, which the mission's last phase writes.
+A run is finished when its `state.md` has a `result:` line, which the mission's last phase writes. A run from before missions has no such line: count it finished when its `state.md` or final report says the run is done, and ask the engineer when you can't tell.
 
 - It has a `mission:` line and the run isn't finished: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
 - It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished: it's an unfinished run from before missions. Resume it as `build` the same way. Template headings alone don't count.
-- Otherwise this is a new run. Settle the mission with these steps. If the `state.md` holds only the empty template, reuse its run directory: pass the same run name to `team-init.sh`. A finished run's directory is never reused: pick a new run name.
+- Otherwise this is a new run. Settle the mission with these steps. If the `state.md` holds only the empty template, reuse its run directory: pass the same run name to `team-init.sh`. A finished run's directory is never reused: pick a run name no earlier run has used.
 
 1. Detect it from what the engineer pointed you at.
    - For a PR or a bare number, run `gh pr view <pr> --json author,state` first. For a bare number such as `#42`, it tells you whether it's a PR or an issue. A merged or closed PR fits no mission.

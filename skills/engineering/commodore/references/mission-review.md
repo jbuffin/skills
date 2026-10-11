@@ -13,18 +13,19 @@ Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktree below in place of ste
 1. Read the PR: `gh pr view <n> --json number,url,title,body,author,baseRefName,baseRefOid,headRefOid,isCrossRepository,files,closingIssuesReferences`. Record the PR URL, `baseRefOid` and `headRefOid` in `state.md` under `## Units`. Those two SHAs are the reviewed range for the whole run.
 2. Pick the source of truth: the issue in `closingIssuesReferences`, or a spec or design the PR body links. If there is none, the PR description. Record in `state.md` which one you used and why.
 3. Decide on the target steward from `files`. Launch it only when the PR changes something a user would touch: UI, an API, a CLI's output, a skill's or tool's behaviour. Tests, CI config and internal refactors alone don't count. Record the call and the reason in `state.md`. When the PR is from a fork (`isCrossRepository` is true), the steward would run code from outside the repo on this machine, so ask the engineer first and skip the steward if they say no.
-4. Write the profile (SKILL.md step 1). Fill what applies and set the rest to `n/a`. The stop rule is "one review posted on the PR, or the engineer declines to post". Set `MODEL_<ROLE>` only for the roles this run launches.
-5. Create a read-only worktree on the PR's head. This works the same for a PR from a fork:
+4. Check the PR for agent config. Every teammate starts a session in the review worktree, which loads that checkout's `.claude/` (settings, hooks, skills, agents), `.mcp.json`, `CLAUDE.md` and `AGENTS.md` as its own. When `files` touches any of them, tell the engineer which ones, and launch nobody until they explicitly say to go ahead.
+5. Write the profile (SKILL.md step 1). Fill what applies and set the rest to `n/a`. The stop rule is "one review posted on the PR, or the engineer declines to post". Set `MODEL_<ROLE>` only for the roles this run launches.
+6. Create a read-only worktree on the PR's head. This works the same for a PR from a fork:
 
    ```bash
    git -C <repo> fetch origin pull/<n>/head <baseRefName>
-   git -C <repo> worktree add --detach <WORKTREES_DIR>/<run>-review <headRefOid>
+   git -C <repo> worktree add --detach <WORKTREES_DIR>/<run-name>-review <headRefOid>
    ```
 
    Use the `headRefOid` from step 1, never `FETCH_HEAD`, which other sessions share and can move. `<WORKTREES_DIR>` is the literal path from `team.env`. Record the worktree path in `state.md` under `## Units`. Don't add it to `worktrees.tsv`: that file lists the run's own branches, and this worktree has none.
-6. Choose the target (SKILL.md step 3), only when the steward runs.
-7. Check the advisor: run `<team>/advisor-probe.sh <run> <model>` once per distinct model this run launches. On `ADVISOR OFF`, follow "When the advisor is off" in [`roles.md`](roles.md).
-8. Write the common brief (SKILL.md step 6). Delivery is "no PR; the coordinator posts one GitHub review". Every teammate leaves the worktree as it found it: no edits, commits or pushes.
+7. Choose the target (SKILL.md step 3), only when the steward runs.
+8. Check the advisor: run `<team>/advisor-probe.sh <run> <model>` once per distinct model this run launches. On `ADVISOR OFF`, follow "When the advisor is off" in [`roles.md`](roles.md).
+9. Write the common brief (SKILL.md step 6). Delivery is "no PR; the coordinator posts one GitHub review". Every teammate leaves the worktree as it found it: no edits, commits or pushes.
 
 Phase 1 is done when `state.md` holds the PR's two SHAs, the source of truth, the steward call and the worktree path. Tell the engineer the review is starting.
 
@@ -40,8 +41,8 @@ Tell both reviewers to give each finding as `path:line`, with the line number in
 Launch them fresh, passing the worktree directory in place of a unit:
 
 ```bash
-<teammates>/launch-teammate.sh --read-only --role reviewer <run> u1-reviewer <WORKTREES_DIR>/<run>-review
-<teammates>/launch-teammate.sh --read-only --role security-reviewer <run> u1-security-reviewer <WORKTREES_DIR>/<run>-review
+<teammates>/launch-teammate.sh --read-only --role reviewer <run> u1-reviewer <WORKTREES_DIR>/<run-name>-review
+<teammates>/launch-teammate.sh --read-only --role security-reviewer <run> u1-security-reviewer <WORKTREES_DIR>/<run-name>-review
 ```
 
 When the steward runs, launch it with `--role target-steward` and the same directory, and ask for a light check on the PR's head (the reported findings get the source `target`).
