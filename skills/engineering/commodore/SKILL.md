@@ -54,7 +54,7 @@ Keep at most two teammates that write (edit files or commit) working at once, pl
 
 Everything for a run lives in one run directory outside the source tree, so it survives compaction and restarts. Create it once the engineer has confirmed the mission (see the mission section below), with `<team>/team-init.sh <run-name> <repo>`, which prints the run directory and the three script directories. It doubles as the agent-teammates team directory.
 
-`state.md` is the run's memory: the mission, the mode and current unit, branches, worktrees and head SHAs, the acceptance trace, ground rules, open questions with recommended defaults, assumptions taken, live teammates, review-round counts and carry-forward checks. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. If there's no `state.md`, it's a new run.
+`state.md` is the run's memory: the mission, the mode and current unit, branches, worktrees and head SHAs, the acceptance trace, ground rules, open questions with recommended defaults, assumptions taken, live teammates, review-round counts and carry-forward checks. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. Whether it's a new run or a resume is decided in the mission section below.
 
 `state.md` holds decisions and history. Branch heads, PR and CI state, and who is live change on their own. Re-read those from `git`, `gh` and `claude agents --json` when you resume and before any push, stack submit or close. Where they disagree with `state.md`, the live value wins, and you fix `state.md`.
 
@@ -63,19 +63,19 @@ Everything for a run lives in one run directory outside the source tree, so it s
 Settle the mission before you create the run directory. When you start, check `state.md` first.
 
 - It has a `mission:` line: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
-- It has no `mission:` line but records a mode or units: it's a run from before missions. Resume it as `build` the same way.
-- Otherwise there's no `state.md`, or it records neither, and this is a new run. Settle the mission with these steps.
+- It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished (no phase 3 final report yet): it's an unfinished run from before missions. Resume it as `build` the same way. Template headings alone don't count.
+- Otherwise this is a new run. Settle the mission with these steps. If a `state.md` already exists, reuse its run directory: pass the same run name to `team-init.sh`.
 
 1. Detect it from what the engineer pointed you at.
-   - A PR whose author is the authenticated `gh` user is `pr-feedback`. Run `gh pr view <pr> --json author,state` and compare `author.login` with `gh api user --jq .login`. For a bare number such as `#42`, `gh pr view` tells you whether it's a PR or an issue.
-   - A PR authored by anyone else is `review`.
-   - A merged or closed PR fits no mission.
+   - Run `gh pr view <pr> --json author,state` first. For a bare number such as `#42`, it tells you whether it's a PR or an issue. A merged or closed PR fits no mission.
+   - An open PR whose author is the authenticated `gh` user is `pr-feedback`. Compare `author.login` with `gh api user --jq .login`.
+   - An open PR authored by anyone else is `review`.
    - A spec, an issue, a design doc or a free-text request is `build`.
 
    Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, say so and ask the engineer which one they mean.
 2. Find the mission's row in the mission table below. A mission with no row falls back:
    - `pr-feedback` runs as `build` in existing-PR mode.
-   - `review` stops the run. Tell the engineer: "The review mission is not available yet. Point me at a spec, an issue or your own PR, say `build <pr>` to finish this PR in existing-PR mode, or review it yourself." Launch nothing.
+   - `review` stops the run. Tell the engineer: "The review mission is not available yet. Point me at a spec, an issue or your own PR, or review this PR yourself." Launch nothing.
 3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option, and name any fallback ("your own PR, so `build` in existing-PR mode").
 4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away write `mission: <name>` under the new `state.md`'s `## Mode, phase, current unit` heading. Record the mission that runs, so your own PR on a fallback is `build`.
 5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
