@@ -11,3 +11,5 @@
 **Task force**: the set of roles a mission assembles for a run. _Avoid_: team composition, cast.
 
 **Triager**: a read-only teammate on a PR-feedback mission that sorts each review comment and failing check on the engineer's own PR into fix, push back, needs the engineer's call, or already done. _Avoid_: comment reviewer.
+
+**Harness**: the agent CLI a run is started from (Claude Code, Codex or Copilot CLI). The coordinator and every teammate in the run use it, and it decides how teammates are launched, messaged, watched and stopped. _Avoid_: runtime, backend, agent CLI.
