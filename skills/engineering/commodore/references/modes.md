@@ -39,7 +39,7 @@ Several issues that don't build on each other. Each gets one worktree and one PR
 
 ## Existing PR
 
-A PR to finish or get green. There's no new PR, just one worktree on the PR's branch.
+A PR to finish or get green. The [PR-feedback mission](mission-pr-feedback.md) always delivers this way. There's no new PR, just one worktree on the PR's branch.
 
 ```bash
 <team>/unit-worktree.sh <run> pr <unit> <pr-number>

@@ -15,7 +15,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 
 | Skill | What it does |
 | --- | --- |
-| `commodore` | Runs work as chief of staff over teammates, each on the model its role calls for, in git worktrees: plan units, brief, build, independent review, evaluation on the real target, delivered as a PR, a gh stack or fixes to an existing PR. Type `/commodore`; it doesn't load on its own. |
+| `commodore` | Entry point for team work: works out the mission from what you point it at, then runs it as chief of staff over teammates, each on the model its role calls for, in git worktrees. The build mission plans units, briefs, builds, reviews independently and evaluates on the real target, delivered as a PR, a gh stack or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve it. The PR-feedback mission triages the comments and failing checks on your own PR, fixes what you approve and posts the replies you approve. Type `/commodore`; it doesn't load on its own. |
 | `agent-teammates` | Launches, watches, re-tasks and closes Claude Code background sessions (`claude --bg`) as teammates, with a report-and-marker contract, a watchdog and proof checks. |
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
@@ -61,6 +61,12 @@ npx skills add ./incubator/<name>
 
 `skills/engineering/` holds four skills that work together: `commodore` (the orchestrator),
 `agent-teammates`, `run-preflight` and `target-evaluation`.
+
+`commodore` starts every run by working out its mission from what you point it at, and confirms it
+with you before anyone starts. A spec, an issue or a request is a build mission. Someone else's PR is a
+review mission: one read-only round, and one GitHub review posted only after you approve the findings.
+Your own PR is a PR-feedback mission: a triager sorts its review comments and failing checks, you decide
+and approve every reply before you leave, and the fixes and replies land on the PR.
 
 - **Install all four together.** `commodore` runs scripts from the other three by sibling path, so
   `npx skills add jbuffin/skills --skill commodore` alone leaves it broken. The plugin route always
