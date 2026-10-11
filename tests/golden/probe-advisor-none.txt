@@ -1,0 +1,32 @@
+## argv
+claude cwd=@SB@/w/probe-advisor-none/cwd [agents] [--json]
+claude cwd=@SB@/w/probe-advisor-none/wt [--bg] [-n] [advisor-probe-opus] [--model] [opus] [--permission-mode] [auto] [You are a probe. Consult your advisor exactly once, on this question: is 17 a prime number? Then write the word done to @SB@/w/probe-advisor-none/run/advisor-probe-opus.marker and stop. Do nothing else.]
+claude cwd=@SB@/w/probe-advisor-none/cwd [stop] [9a1b0c2d]
+## stdout
+ADVISOR ON opus
+## exit
+0
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./team.env
+  | RUN=@SB@/w/probe-advisor-none/run
+  | REPO=@SB@/w/probe-advisor-none/repo
+  | WORKTREE=@SB@/w/probe-advisor-none/repo
+  | WORKTREES_DIR=@SB@/w/probe-advisor-none/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/probe-advisor-none/cfg
+  | MODE=single
+  | ADVISOR=none
+./worktrees.tsv
+  | u1 branch-u1 @SB@/w/probe-advisor-none/wt

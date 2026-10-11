@@ -1,0 +1,9 @@
+#!/bin/sh
+# Fake `tmux` for tests/run.sh: logs argv to $FAKE_LOG; `split-window` prints a pane id, like `-P -F '#{pane_id}'`.
+{
+  printf 'tmux'
+  for a in "$@"; do printf ' [%s]' "$a"; done
+  printf '\n'
+} >> "${FAKE_LOG:?}"
+if [ "$1" = split-window ]; then echo '%7'; fi
+exit 0
