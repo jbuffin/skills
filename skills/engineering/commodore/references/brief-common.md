@@ -36,7 +36,7 @@ Secrets reach a command only through run-preflight's helper, as a bare call: `<p
 
 ## Asking the advisor
 
-<Drop this section when the preflight printed `ADVISOR n/a`.>
+<Drop this section when the harness has no advisor, which the preflight shows as `ADVISOR n/a`.>
 
 Your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. The teammate contract below says what to ask it and how to log each call; this section says when. If you have no advisor tool, skip it. You decide whether to call it; these are the moments it helps most:
 
