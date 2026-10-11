@@ -1,6 +1,6 @@
 ---
 name: commodore
-description: Entry point for team work. Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve the findings.
+description: Entry point for team work. Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve the findings. The PR-feedback mission triages the review comments and failing checks on your own PR, fixes what you approve, and posts the replies you approve.
 disable-model-invocation: true
 ---
 
@@ -70,14 +70,14 @@ A run is finished when its `state.md` has a `result:` line, which the mission's 
 
 1. Detect it from what the engineer pointed you at.
    - For a PR or a bare number, run `gh pr view <pr> --json author,state` first. For a bare number such as `#42`, it tells you whether it's a PR; when it fails, run `gh issue view <number>` to confirm an issue. A merged or closed PR fits no mission.
-   - An open PR whose author is the authenticated `gh` user is `pr-feedback`. Compare `author.login` with `gh api user --jq .login`.
+   - An open PR whose author is the authenticated `gh` user is `pr-feedback`, even when it has no comments and only CI is failing. Compare `author.login` with `gh api user --jq .login`.
    - An open PR authored by anyone else is `review`.
    - A spec, an issue, a design doc or a free-text request is `build`.
 
    Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, say so and ask the engineer which one they mean.
-2. Find the mission's row in the mission table below. A mission with no row falls back: `pr-feedback` runs as `build` in existing-PR mode.
-3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option, and name any fallback ("your own PR, so `build` in existing-PR mode"). For `review` on the engineer's own PR, say that only a `COMMENT` review can be posted.
-4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away write `mission: <name>` under the new `state.md`'s `## Mode, phase, current unit` heading. Record the mission that runs, so your own PR on a fallback is `build`.
+2. Find the mission's row in the mission table below.
+3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option. For `review` on the engineer's own PR, say that only a `COMMENT` review can be posted.
+4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away write `mission: <name>` under the new `state.md`'s `## Mode, phase, current unit` heading.
 5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
 
 Done when the engineer has confirmed the mission and the mission is recorded in `state.md`.
@@ -88,6 +88,7 @@ The mission table is the one place a mission is registered. A new mission adds a
 | --- | --- | --- | --- | --- |
 | `build` | the roles in its Phase 2 table | 1–6 | by mode: one PR, a gh stack, or fixes to an existing PR | [`references/mission-build.md`](references/mission-build.md) |
 | `review` | reviewer, security reviewer, and the target steward when the PR changes something a user would touch | 1, 3 (only with the steward), 6; detached worktrees on the PR's head in place of 4 | one GitHub review | [`references/mission-review.md`](references/mission-review.md) |
+| `pr-feedback` | triager, then the roles in the build mission's Phase 2 table for the fix units | all six, with the triage between 1 and 2 and the worktree from 4 created before it | fixes pushed to the PR's own branch in existing-PR mode, then the approved replies | [`references/mission-pr-feedback.md`](references/mission-pr-feedback.md) |
 
 ## Phase 1: before the engineer leaves
 

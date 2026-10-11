@@ -11,7 +11,7 @@ Read this file before phase 1 in [`SKILL.md`](../SKILL.md). Phase 1 runs all six
 | One unit | single unit | one worktree, one draft PR |
 | Several phases or passes, or related issues worked in order where each builds on the last | stack | one worktree per unit, a gh stack of draft PRs |
 | Several issues that don't build on each other | independent units | one worktree and one PR each |
-| An existing PR to finish or get green | existing PR | one worktree on its branch, no new PR |
+| Fixes to an existing PR: the [PR-feedback mission](mission-pr-feedback.md)'s delivery, or a PR the engineer explicitly asked to build on | existing PR | one worktree on its branch, no new PR |
 
 Pick the mode in phase 1 and say which one and why in the decision batch. If the work turns out bigger or smaller than it looked, change it and tell the engineer. The chosen mode's section of [`modes.md`](modes.md) has its worktree commands and procedure.
 

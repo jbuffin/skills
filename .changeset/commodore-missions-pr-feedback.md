@@ -1,0 +1,5 @@
+---
+"jasonbuffin-skills": minor
+---
+
+`commodore` now runs a PR-feedback mission when you point it at your own open PR, even when only CI is failing; it no longer runs your own PR as a build mission. A new read-only `triager` role (`--role triager`, `MODEL_TRIAGER=opus` in a fresh `team.env`) sorts every unresolved review thread, top-level review comment and failing check into fix, push back, needs your call or already done, and drafts the push-back replies. You see people's and bots' feedback grouped separately, answer every needs-your-call item and approve every reply before you leave. The fixes then run through the usual review loop and CI in existing-PR mode and are pushed with the run's push wrapper. After that, the approved replies are posted, fixed items cite their commit, fixed bot threads are resolved, and people's threads stay open. Feedback that arrives during the run is listed in the final report and not acted on. The review mission's agent-config check now also stops when the repo's project settings set anything other than `permissions`.

@@ -78,6 +78,7 @@ MODEL_TEST_WRITER=sonnet
 MODEL_IMPLEMENTER=sonnet
 MODEL_REVIEWER=opus
 MODEL_SECURITY_REVIEWER=opus
+MODEL_TRIAGER=opus
 MODEL_TARGET_STEWARD=sonnet
 MODEL_SCRIBE=sonnet
 MODE=            # single | stack | independent | pr
