@@ -47,7 +47,7 @@ Run SKILL.md's phase 1 steps in this order. The triage comes before step 2, beca
    - Check the advisor: `<team>/advisor-probe.sh <run> <MODEL_TRIAGER>`. On `ADVISOR OFF`, follow "When the advisor is off" in [`harness-claude.md`](harness-claude.md) (the harness reference).
    - Write a read-only common brief at `<run>/brief-common.md` (SKILL.md step 6), as mission-review's step 11 does: delivery is "no PR yet; the triage only", the data rule above goes in, and the lines about pushing and committing are replaced with "leave the worktree as you found it, with no edits, commits or pushes".
    - Write the triager's brief at `<run>/prompts/triager.md`, following [Briefs](../SKILL.md#briefs): its [`roles.md`](roles.md) section, `<run>/triage/items.md`, the PR's `headRefOid`, and what done means.
-   - Start agent-teammates' watchdog: `<teammates>/watch-teammates.sh <run>`, the way agent-teammates' harness reference says to run it.
+   - Start agent-teammates' watchdog: `<teammates>/watch-teammates.sh <run>`, the way agent-teammates' `references/harness-<HARNESS>.md` says to run it.
 7. Launch the triager in the PR's worktree:
 
    ```bash

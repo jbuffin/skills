@@ -6,7 +6,7 @@ Read this when the run's `HARNESS` is `claude`, which is the default when `team.
 
 A teammate is a full Claude Code session started in the background with `claude --bg`. It runs under Claude Code's background daemon, so it keeps going when a terminal closes or the laptop sleeps, and the engineer can watch it from any terminal.
 
-## `team.env` settings that are Claude-only
+## Claude defaults and Claude-only settings
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -14,8 +14,6 @@ A teammate is a full Claude Code session started in the background with `claude 
 | `ADVISOR` | opus | the built-in advisor model every teammate launches with; `none` turns it off. It has to rank at or above the teammate's model, and a Fable model accepts only `fable`. A refused pairing starts without the advisor and no error |
 | `PERMISSION_MODE` | auto | the teammates' permission mode |
 | `VIEWER` | none | `cmux` or `tmux` opens a pane per teammate running `claude attach <id>`; cmux also needs `CMUX_WORKSPACE` and `CMUX_SURFACE` from `cmux identify` |
-
-`VIEWER` is Claude-only. The pane is a window onto the session. Closing it never stops the teammate.
 
 The launcher passes the model name through unchecked. An in-process agent launched without a model runs on whatever model the coordinator uses.
 

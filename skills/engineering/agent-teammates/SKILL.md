@@ -1,13 +1,13 @@
 ---
 name: agent-teammates
-description: Run teammates as background agent sessions on a harness (Claude Code is the supported harness today; Codex and Copilot CLI are planned). Launch, re-task, watch with a watchdog, verify their proof, and close them. Use when work is handed to parallel agent sessions that run unattended, including from an orchestrating skill.
+description: Run teammates as background agent sessions on a harness (Claude Code is the supported harness today). Launch, re-task, watch with a watchdog, verify their proof, and close them. Use when work is handed to parallel agent sessions that run unattended, including from an orchestrating skill.
 ---
 
 # Agent teammates
 
 A teammate is a full agent session started in the background on the run's **harness**, the agent CLI the run starts in. It has its own name, model, permission mode and working directory, and it gets one prompt file. It keeps going when a terminal closes or the laptop sleeps, and the engineer can watch it from any terminal.
 
-The scripts in this skill are harness-neutral. Each calls the harness's **driver** (`scripts/drivers/<HARNESS>/`) for launch, status, tail, stop and the advisor probe. Everything that depends on the harness is in a reference file. Read `references/harness-<HARNESS>.md`, with `HARNESS` from the run's `team.env`. With no `team.env`, or no `HARNESS` line in it, the harness is `claude`: read [`references/harness-claude.md`](references/harness-claude.md). It covers how a teammate starts, how you send it new work, how you watch it, the model and advisor settings, and the fallback when sessions can't start.
+The scripts in this skill are harness-neutral. Each calls the harness's **driver** (`scripts/drivers/<HARNESS>/`) for launch, status, tail and stop. Everything that depends on the harness is in a reference file. Read `references/harness-<HARNESS>.md`, with `HARNESS` from the run's `team.env`. With no `team.env`, or no `HARNESS` line in it, the harness is `claude`: read [`references/harness-claude.md`](references/harness-claude.md). It covers how a teammate starts, how you send it new work, how you watch it, the model and advisor settings, and the fallback when sessions can't start.
 
 Teammates run unattended, so almost everything here guards against one failure. A teammate stops and nobody notices. It ends its turn "to wait" and nothing wakes it up. Or it sits on a prompt. Or it stalls mid-turn, still "working" but doing nothing. Or it drifts off and never reports. The contract and the watchdog below cover all four.
 
@@ -19,6 +19,7 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
 
   | Setting | Default | Meaning |
   | --- | --- | --- |
+  | `HARNESS` | claude | the harness; selects `scripts/drivers/<HARNESS>` and `references/harness-<HARNESS>.md` |
   | `MODEL` | the harness reference | the model for a launch with neither `--model` nor `--role` |
   | `MODEL_<ROLE>` | none | the model for `--role <role>`; see "Set the model explicitly" |
   | `REQUIRE_ROLE` | unset | `1` makes every launch pass `--role` or `--model` |
@@ -43,7 +44,8 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
   - `LIVE_MESSAGING=1`: wait for messages.
   - `LIVE_MESSAGING=0`: exit. The coordinator resumes your session for the next job.
 - Questions go in the report under `## Questions for the engineer`, each with options and a recommendation. Keep going on whatever doesn't depend on the answer.
-- If your harness gives you an advisor, ask it technical questions: how to do something, which approach, why something fails. It's a stronger model paired with your session, and you decide when to call it. Scope, product behaviour, departures from the source of truth and ground-rule questions go under `## Questions for the engineer`, and so does a problem two consults haven't moved forward: stop consulting on it and ask.
+- If your harness gives you an advisor, ask it technical questions: how to do something, which approach, why something fails. It's a stronger model paired with your session, and you decide when to call it.
+- Scope, product behaviour, departures from the source of truth and ground-rule questions go under `## Questions for the engineer`, and so does a problem two advisor consults haven't moved forward: stop consulting and ask.
 - Every report has an `## Advisor consults` section with one line per advisor call: the question in brief, the advice in brief, and whether you followed it and why. Write `none` if you made no calls or have no advisor.
 - New instructions:
   - `LIVE_MESSAGING=1`: they arrive as messages from the coordinator. Do them, overwrite the report, and touch the marker again.
@@ -71,11 +73,11 @@ To give a live teammate new work (`LIVE_MESSAGING=1`), send it a message the way
 
 Set the model explicitly. The launcher picks it in this order: `--model <model>`; else, with `--role <role>`, `MODEL_<ROLE>` from `team.env` (the role uppercased, `-` and `.` as `_`, so `brief-checker` reads `MODEL_BRIEF_CHECKER`); else `MODEL`, whose default the harness reference gives. If `MODEL_<ROLE>` is unset or empty, the launch exits 5 and names the variable, and it never falls back to `MODEL`. With `REQUIRE_ROLE=1`, a launch with neither `--role` nor `--model` exits 5, so a forgotten flag fails loudly. Flags go in any order before the positional arguments. The launcher passes the model name through unchecked.
 
-Give each teammate its own working directory, which is usually a git worktree. The harness may require the folder to be trusted; the reference says how.
+Give each teammate its own working directory, which is usually a git worktree. The reference says which folders are trusted.
 
 Re-task instead of relaunching when the teammate's context is worth keeping, like an implementer fixing review findings on its own work. Relaunch fresh when independence matters (a reviewer) or the context has gone bad.
 
-Close teammates with `close-teammate.sh`. The reference lists what never to run in its place. A closed teammate stays closed. `retasked.sh` refuses it, so launch a new one.
+Close teammates with `close-teammate.sh`. Close only with `close-teammate.sh`; some harness commands also delete worktrees. The reference lists what never to run in its place. A closed teammate stays closed. `retasked.sh` refuses it, so launch a new one.
 
 ## What the engineer sees
 
