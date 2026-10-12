@@ -40,21 +40,21 @@ Make every call **bare**: one command, run directly by its literal absolute path
 Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING`. When you paste the contract, keep only the variant lines for the run's value.
 
 - Wait inside a Bash command whenever you're waiting on a build, a deploy, a token expiry or a device: `until <condition>; do sleep 30; done` with a long timeout, then carry on. Ending your turn to wait means nothing wakes you.
-- Write the report, then the marker. When you're finished, write `<team-dir>/reports/<name>.md`, then create `<team-dir>/reports/<name>.done`, in that order. Every role writes both, except a read-only teammate on Codex (`--read-only` with `HARNESS=codex`): its sandbox can't write files, so its final message is its report and the driver writes the marker after a completed turn. Then:
+- Write the report, then the marker. When you're finished, write `<team-dir>/reports/<name>.md`, then create `<team-dir>/reports/<name>.done`, in that order. Every role writes both, except a read-only teammate on Codex or Copilot (`--read-only` with `HARNESS=codex` or `copilot`): it can't write files, so its final message is its report, and the driver writes the report and marker after a completed turn. Then:
   - `LIVE_MESSAGING=1`: wait for messages.
   - `LIVE_MESSAGING=0`: exit. The coordinator resumes your session for the next job.
 - Questions go in the report under `## Questions for the engineer`, each with options and a recommendation. Keep going on whatever doesn't depend on the answer.
 - If your harness gives you an advisor, ask it technical questions: how to do something, which approach, why something fails. It's a stronger model paired with your session, and you decide when to call it.
 - Scope, product behaviour, departures from the source of truth and ground-rule questions go under `## Questions for the engineer`, and so does a problem you can't move forward:
   - with an advisor: one that two advisor consults haven't moved forward; stop consulting and ask;
-  - without one (Codex): a problem you can't move forward on your own; stop and ask.
+  - without one: a problem you can't move forward on your own; stop and ask.
 - Every report has an `## Advisor consults` section with one line per advisor call: the question in brief, the advice in brief, and whether you followed it and why. Write `none` if you made no calls or have no advisor.
 - New instructions:
   - `LIVE_MESSAGING=1`: they arrive as messages from the coordinator. Do them, overwrite the report, and touch the marker again.
   - `LIVE_MESSAGING=0`: they arrive when the coordinator resumes your session with the next job. Do it, overwrite the report, touch the marker again, and exit.
 - Clean up only what you started, whether that's processes or files outside your directory.
 - Make every call bare: one command, by its literal absolute path, with no `;`, `&&`, pipes, `source` or shell variables, so the allow rules match it. The wait loop above is the one exception.
-- No proof, no done. A read-only Codex teammate has no proof and nothing to run. Otherwise, if `<team-dir>/prompts/<name>.proof` exists, run each proof in it as `<teammates>/evidence.sh <team-dir> <name> <label>`, after your last commit and again in every round. It runs the declared command and logs its output, head SHA and exit code, and the coordinator checks those logs against your HEAD. Your own summary of a run isn't evidence.
+- No proof, no done. A read-only teammate on Codex or Copilot has no proof and nothing to run. Otherwise, if `<team-dir>/prompts/<name>.proof` exists, run each proof in it as `<teammates>/evidence.sh <team-dir> <name> <label>`, after your last commit and again in every round. It runs the declared command and logs its output, head SHA and exit code, and the coordinator checks those logs against your HEAD. Your own summary of a run isn't evidence.
 - Keep the report short. Say what you did, the files you touched, one `commit: <sha>` line if you committed, each proof label with its result, what you didn't check and why, where you departed from the brief and why, and your start and end times (`date -u`).
 
 ## Launch, re-task, close
@@ -68,7 +68,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 
 Names use letters, digits, `.`, `_` and `-`; the scripts refuse anything else.
 
-Give each teammate only what its job needs. Launch a teammate that only reads the source (a reviewer, a brief checker, a probe that only reads) with `--read-only`. On Claude that denies the file-editing tools inside its working directory and still lets it write its report in the team directory. Bash isn't covered, so the brief still says read-only. The flag catches slips. It isn't a sandbox. On Codex the flag selects a read-only sandbox, which changes how the teammate reports and what you check after its turn; the harness reference's "Sandbox per role" covers both.
+Give each teammate only what its job needs. Launch a teammate that only reads the source (a reviewer, a brief checker, a probe that only reads) with `--read-only`. On Claude that denies the file-editing tools inside its working directory and still lets it write its report in the team directory. Bash isn't covered, so the brief still says read-only. The flag catches slips. It isn't a sandbox. On Codex the flag selects a read-only sandbox, and on Copilot it removes the write tools and limits the shell to an allowlist. On both it changes how the teammate reports and what you check after its turn; the harness reference covers both.
 
 Write a teammate's `prompts/<name>.proof` before launching or re-tasking it, one `<label> <command>` per line. A proof file that changes after the tasking fails verification, so a teammate can't rewrite its own proof. An exact allow rule per proof (`Bash(<teammates>/evidence.sh <team-dir> <name> <label>)`) approves it without approving anything else. A prefix rule on `evidence.sh` would approve any command, because the `--` form runs whatever follows.
 
@@ -92,7 +92,7 @@ With `VIEWER` set, launching also opens a pane attached to the session. That pan
 
 ## Watch
 
-Run `<teammates>/watch-teammates.sh [--until-event <max-min>] <team-dir>` (the flag goes first, and only on Codex) for as long as any teammate is live, the way the harness reference says, so its events reach you. Re-arm it whenever it ends or expires and someone is still live. Every minute it reads the harness's session status, the markers and each teammate's session activity time, and it emits these events.
+Run `<teammates>/watch-teammates.sh [--until-event <max-min>] <team-dir>` (the flag goes first, and only where the harness reference says) for as long as any teammate is live, the way the harness reference says, so its events reach you. Re-arm it whenever it ends or expires and someone is still live. Every minute it reads the harness's session status, the markers and each teammate's session activity time, and it emits these events.
 
 | Event | Meaning | Do |
 | --- | --- | --- |
@@ -106,8 +106,8 @@ When a report looks untrustworthy, the brief or its proof was weak. Sharpen it a
 
 ## Fallback
 
-If `launch-teammate.sh` exits 2 (`NO_BG`: the harness can't run a background session here), follow the harness reference's fallback. Tell the engineer what they lose. Codex never exits 2: its reference says what to do when a launch fails.
+If `launch-teammate.sh` exits 2 (`NO_BG`: the harness can't run a background session here), follow the harness reference's fallback. Tell the engineer what they lose. Codex and Copilot never exit 2: their references say what to do when a launch fails.
 
 ## Parallelism
 
-Keep at most two teammates that write (edit files or commit) working at once, plus one long-lived owner of a shared target such as a device or a stage environment. Read-only teammates do not count toward the limit. The limit protects your context from too many reports and keeps writers from contending, and read-only reviewers produce the same reports whether they run in parallel or one after another. Give each exclusive resource (a device, a worktree, a test account) one long-lived owner that takes requests by message, rather than sharing it between teammates.
+Keep at most two teammates that write (edit files or commit) working at once, plus one long-lived owner of a shared target such as a device or a stage environment. Read-only teammates do not count toward the limit. The limit protects your context from too many reports and keeps writers from contending, and read-only reviewers produce the same reports whether they run in parallel or one after another. Give each exclusive resource (a device, a worktree, a test account) one long-lived owner that takes requests from you as new jobs, rather than sharing it between teammates.

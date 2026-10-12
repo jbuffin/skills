@@ -41,7 +41,7 @@ Put every prompt and message file in the team directory. A file anywhere else is
 
 A read-only teammate can't write its report, so the contract's "write the report, then the marker" doesn't apply to it. Its launch and re-task prompts tell it that its final message is its report. When its run exits 0 with a non-empty final message, the driver writes `<team-dir>/reports/<name>.md`, then `<team-dir>/reports/<name>.done`. A run that fails or ends with no message gets neither, so the watchdog reports it `BLOCKED`.
 
-Give a read-only Copilot role no `.proof` file. It can't run `evidence.sh`, so `verify-report.sh` would never pass it. Writers write their own report, marker and evidence.
+Give a read-only Copilot role no `.proof` file. It can't run `evidence.sh`, so `verify-report.sh` would never pass it. Still run `verify-report.sh` on its `DONE`: with no proof it checks that the report and marker are from this tasking. Writers write their own report, marker and evidence.
 
 ## Security caveats
 
@@ -79,7 +79,7 @@ To give a teammate its next job:
 
 A teammate that is stuck mid-turn can't be nudged. Close it with `close-teammate.sh` and relaunch it fresh with the stuck step spelled out.
 
-When you paste the teammate contract into a brief, keep the `LIVE_MESSAGING=0` lines and drop the advisor line. For a read-only teammate, replace the report-and-marker line with "Your final message is your report. Write no files.", which matches what its launch prompt says.
+When you paste the teammate contract into a brief, keep the `LIVE_MESSAGING=0` lines, drop the advisor line and the "with an advisor" variant of the unresolved-problem line, and keep the read-only exception for a read-only role.
 
 ## Run the watchdog
 

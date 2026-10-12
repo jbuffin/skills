@@ -15,7 +15,7 @@ A teammate is a full Claude Code session started in the background with `claude 
 | `PERMISSION_MODE` | auto | the teammates' permission mode |
 | `VIEWER` | none | `cmux` or `tmux` opens a pane per teammate running `claude attach <id>`; cmux also needs `CMUX_WORKSPACE` and `CMUX_SURFACE` from `cmux identify` |
 
-The launcher passes the model name through unchecked. An in-process agent launched without a model runs on whatever model the coordinator uses.
+An in-process agent launched without a model runs on whatever model the coordinator uses.
 
 ## Send new work
 
