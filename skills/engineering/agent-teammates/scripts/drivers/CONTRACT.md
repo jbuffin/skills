@@ -21,7 +21,7 @@ Starts a background session named `<name>` in `<workdir>` (an existing directory
 
 - 1: sessions couldn't be listed, the session started with no id, or the harness CLI isn't on `PATH`.
 - 2: no background session can run. The last line starts `NO_BG:` and names what to do instead.
-- 5: a live session already has `<name>`, or the harness refuses an input, such as a `TEAMMATE_EFFORT` it doesn't accept (Copilot does).
+- 5: a live session already has `<name>`, or the harness refuses an input, such as a malformed `TEAMMATE_EFFORT` (Copilot does).
 
 Optional input: the environment variable `TEAMMATE_EFFORT`, set on every launch call (empty when the launch has no `--role` or the role has no `EFFORT_<ROLE>` in `team.env`), is the reasoning effort for harnesses that take one. Drivers may ignore it.
 
