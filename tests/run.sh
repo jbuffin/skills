@@ -487,7 +487,7 @@ want resend && {
   verdict "RESEND contract send text: returns once the job has started, without waiting for the turn"
   print -r -- $snd | grep -qiE 'non-zero' && print -r -- $snd | grep -qiE "couldn't|could not|cannot|can't" || P+="the send text doesn't say it exits non-zero if it couldn't start the job"
   verdict "RESEND contract send text: exits non-zero if it couldn't start the job"
-  sed -n 1,5p $CT | grep -q 'retask\.sh' || P+="the contract's opening doesn't mention retask.sh reading the SEND= line"
+  sed -n 1,3p $CT | grep -q 'retask\.sh' || P+="the contract's opening doesn't mention retask.sh reading the SEND= line"
   verdict "RESEND contract opening says retask.sh reads the SEND= line"
   [[ ! -e ${DE:h}/send ]] && grep -q '^SEND=tool$' $DE || P+="the Claude driver must keep SEND=tool and have no send executable"
   verdict "RESEND the Claude driver keeps SEND=tool and no send executable"
