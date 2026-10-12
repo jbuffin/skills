@@ -487,6 +487,29 @@ want resend && {
   verdict "RESEND SKILL.md re-tasking section points LIVE_MESSAGING=0 and SEND=script at retask.sh"
 }
 
+# commodore re-tasks a live teammate the way agent-teammates' re-tasking section says. Key phrases only.
+want commodore-retask && {
+  CMD=$ROOT/skills/engineering/commodore
+  mb=$CMD/references/mission-build.md
+  phase2=$(awk '/^## Phase 2/{p=1; next} p && /^## /{p=0} p' $mb)
+  rule=$(print -r -- $phase2 | awk '/^1\. /{exit} {print}')
+  print -r -- $rule | grep -q 'agent-teammates' || P+="the Phase 2 text before the per-unit steps never mentions agent-teammates"
+  print -r -- $rule | grep -qiE 're-?task' || P+="the Phase 2 text before the per-unit steps never says re-task"
+  verdict "COMMODORE-RETASK Phase 2 has one rule: every re-task of a live teammate follows agent-teammates' re-tasking section"
+  step5=$(print -r -- $phase2 | grep -E '^5\. ')
+  [[ -n $step5 ]] || P+="no Phase 2 step 5"
+  print -r -- $step5 | grep -qE 'retask\.sh' || P+="step 5 never mentions retask.sh"
+  print -r -- $step5 | grep -q 'agent-teammates' || P+="step 5 never points at agent-teammates"
+  print -r -- $step5 | grep -qiE 'file' || P+="step 5 doesn't write the merged findings to a file"
+  verdict "COMMODORE-RETASK Phase 2 step 5 writes the findings to a file and defers to agent-teammates' re-tasking section"
+  vl=$(grep 'verdict: unverified' $CMD/SKILL.md)
+  print -r -- $vl | grep -qiE 're-?task' || P+="SKILL.md's verify-FAIL line doesn't say re-task"
+  print -r -- $vl | grep -q 'next instruction' && P+="SKILL.md's verify-FAIL line still says 'next instruction'"
+  verdict "COMMODORE-RETASK SKILL.md verify-FAIL line re-tasks the teammate"
+  grep -qE 'fix-round message|by message' $CMD/references/roles.md && P+="roles.md still says 'fix-round message' or 'by message'"
+  verdict "COMMODORE-RETASK roles.md holds under both LIVE_MESSAGING variants"
+}
+
 # ======================================================================================================================
 # C1: nothing outside drivers/claude calls claude or reads its transcripts.
 # ======================================================================================================================
