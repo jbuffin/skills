@@ -1,7 +1,6 @@
 ## argv
 ## stdout
 transcript: @SB@/w/tail-ok/cfg/projects/p1/b7e2a911.jsonl  (last write 7 min ago)
-SAID  Reading the brief
 TOOL  Read: /x/brief.md
 TOOL  Bash: List files
 TOOL  Bash: git status

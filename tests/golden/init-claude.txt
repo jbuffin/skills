@@ -39,7 +39,6 @@ preflight: @SB@/src/skills/engineering/run-preflight/scripts
   | # The repository (any checkout of it). Nobody works here: every unit gets its own worktree
   | # (scripts/unit-worktree.sh), and teammates start in their unit's worktree.
   | REPO=@SB@/w/init-claude/repo
-  | WORKTREE=@SB@/w/init-claude/repo
   | WORKTREES_DIR=@SB@/w/init-claude/repo/.claude/worktrees
   | SKILL=@SB@/src/skills/engineering/commodore
   | SKILLS_DIR=@SB@/src/skills/engineering

@@ -22,6 +22,8 @@
 #       shape. Driven through the shared scripts against tests/bin/copilot.
 #   CODEX  The Codex driver (turn-based): launch, send/retask, status, tail, stop, preflight, the read-only marker, effort
 #       plumbing and the driver's shape. Assertion style (no goldens); `tests/run.sh codex` runs just these.
+#   U4  Tail output per the driver contract, codex without its CLI, codex .state without PERM, copilot effort validation,
+#       REPO over WORKTREE. The tail-* and init-* goldens were edited by hand to match; `--record` would revert them.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -1138,21 +1140,19 @@ cpwant cp-effort-empty && {
 }
 
 cpwant cp-effort-hostile && {
+  # Copilot CLI 1.0.95 takes none minimal low medium high xhigh max, so a hostile value is refused (U4), never launched.
   cpmk cp-effort-hostile "EFFORT_REVIEWER='a b \$(touch effort-pwned) \"q\"'"
   txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
-  await 10 cp_settled 1
-  txrun $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
-  await 10 cp_settled 2
+  /bin/sleep 0.3
   reap_fakes
-  cp_eff_runs t1
   P=()
-  want="a b \$(touch effort-pwned) \"q\""
-  for c in $L $R; do [[ $(cp_eff_of $c) == $want ]] || P+="${c:t}: --reasoning-effort is '$(cp_eff_of $c)', want the one element '$want'"; done
-  [[ -z $L ]] && P+="no launch call"
+  [[ $RC == 5 ]] || P+="exit $RC, want 5"
+  st=($D/copilot-*(N)); (( $#st )) && P+="state file written: ${(j: :)st:t}"
+  cl=($SC/fake/copilot.call.*(N)); (( $#cl )) && P+="copilot was called ${#cl} time(s)"
   # The payload's path is relative, so an evaluation would create it in whichever directory the script ran in.
   hit=$(find $SB $PWD -name effort-pwned 2>/dev/null)
   [[ -n $hit ]] && P+="the effort was evaluated: ${hit//$'\n'/ } exists"
-  cpverdict "CP effort: an effort with spaces and shell syntax is one argv element and never evaluated"
+  cpverdict "CP effort: an effort with spaces and shell syntax is refused with exit 5 and never evaluated"
 }
 
 # ---- AC7: ADVISOR n/a (copilot). A scratch tree whose detection says copilot (the real signal is COPILOT_CLI=1, checked by C3).
@@ -2118,6 +2118,176 @@ want codex-shape && {
   (( $#bad )) && fail "CODEX D2 wrong arity exits 5 with the usage line" "${(j:; :)bad}" || pass "CODEX D2 wrong arity exits 5 with the usage line"
   grep -rEn 'dangerously-bypass|danger-full-access' $CDRV >/dev/null 2>&1 && fail "CODEX D2 the driver never names a bypass or danger-full-access" "$(grep -rEn 'dangerously-bypass|danger-full-access' $CDRV | head -3)" || pass "CODEX D2 the driver never names a bypass or danger-full-access"
   grep -qE '^#.*TEAMMATE_EFFORT' $DRV/driver.env && pass "CODEX D2 the Claude driver.env documents TEAMMATE_EFFORT as an optional input" || fail "CODEX D2 the Claude driver.env documents TEAMMATE_EFFORT as an optional input" "no comment line in ${DRV#$ROOT/}/driver.env mentions TEAMMATE_EFFORT"
+}
+
+# ======================================================================================================================
+# U4: the driver and script cleanup (#63). Tail output per the driver contract (the last n TOOL lines, then the latest
+# SAID), a malformed events line, codex's missing CLI, copilot's effort validation, a codex .state without PERM, and
+# REPO as the one name for the checkout (WORKTREE only as a fallback). Checks marked "guard" pass before the change
+# and pin behaviour that must survive it. The claude tail goldens (tail-*) and init goldens (init-*) were edited by
+# hand to the new output; `--record` would revert them.
+# ======================================================================================================================
+# Copilot tail: no fake copilot run, only the events.jsonl a session leaves. cptail_fix <scenario> [bad]: w1 registered,
+# the file written (with a malformed line between the second and third tool calls when [bad] is given), mtime 7 min old.
+CPTID=5c1f0a2e-0000-4000-8000-000000000001
+cptail_fix() {
+  cpmk $1; reg w1 $CPTID 1789999000 - $SC/wt
+  local sd=$SC/home/.copilot/session-state/$CPTID; mkdir -p $sd
+  {
+    echo '{"type":"session.start","data":{"sessionId":"x"},"id":"1","parentId":null,"timestamp":"t"}'
+    echo '{"type":"assistant.message","data":{"content":"Early note","toolRequests":[]},"id":"2","parentId":null,"timestamp":"t"}'
+    echo '{"type":"tool.execution_start","data":{"toolCallId":"a","toolName":"bash","arguments":{"command":"ls","description":"Run ls"}},"id":"3","parentId":null,"timestamp":"t"}'
+    echo '{"type":"tool.execution_complete","data":{"toolCallId":"a","success":true},"id":"4","parentId":null,"timestamp":"t"}'
+    echo '{"type":"tool.execution_start","data":{"toolCallId":"b","toolName":"bash","arguments":{"command":"git diff"}},"id":"5","parentId":null,"timestamp":"t"}'
+    [[ -n $2 ]] && echo '{"type":"tool.execution_start","data":{"toolCallId":"x","toolName":"bash","argum'
+    echo '{"type":"tool.execution_start","data":{"toolCallId":"c","toolName":"view","arguments":{"path":"/x/c.md"}},"id":"6","parentId":null,"timestamp":"t"}'
+    echo '{"type":"assistant.message","data":{"content":"","toolRequests":[{"toolCallId":"d","name":"bash"}]},"id":"7","parentId":null,"timestamp":"t"}'
+    echo '{"type":"tool.execution_start","data":{"toolCallId":"d","toolName":"bash","arguments":{"command":"git status"}},"id":"8","parentId":null,"timestamp":"t"}'
+    echo '{"type":"assistant.message","data":{"content":"Final word","toolRequests":[]},"id":"9","parentId":null,"timestamp":"t"}'
+  } > $sd/events.jsonl
+  settime $((NOW - 420)) $sd/events.jsonl
+}
+cptail_is() {  # cptail_is <line>...: stdout is the transcript line, then exactly these lines
+  [[ $RC == 0 ]] || P+="exit $RC, want 0 (stderr: $(head -c 200 $SC/err | tr '\n' '|'))"
+  [[ $(head -1 $SC/out) == "transcript: "* ]] || P+="first line isn't 'transcript: ...': $(head -1 $SC/out)"
+  [[ "$(tail -n +2 $SC/out)" == "${(F)@}" ]] || P+="lines after the transcript line: $(tail -n +2 $SC/out | tr '\n' '|'); want ${(j:|:)@}"
+}
+cpwant cp-u4-tail && {
+  cptail_fix cp-u4-tail
+  xrun $AT/teammate-tail.sh $D w1
+  cptail_is "TOOL  bash: Run ls" "TOOL  bash: git diff" "TOOL  view: /x/c.md" "TOOL  bash: git status" "SAID  Final word"
+  verdict "U4 copilot tail: every TOOL line, then the latest SAID only (not an earlier message)"
+  xrun $AT/teammate-tail.sh $D w1 2
+  cptail_is "TOOL  view: /x/c.md" "TOOL  bash: git status" "SAID  Final word"
+  verdict "U4 copilot tail n=2: the last 2 TOOL lines, then the latest SAID"
+}
+cpwant cp-u4-tail-bad && {
+  cptail_fix cp-u4-tail-bad bad
+  xrun $AT/teammate-tail.sh $D w1
+  cptail_is "TOOL  bash: Run ls" "TOOL  bash: git diff" "TOOL  view: /x/c.md" "TOOL  bash: git status" "SAID  Final word"
+  verdict "U4 copilot tail: a malformed JSON line mid-file is skipped, the lines after it still show"
+}
+
+# Codex without the CLI: PATH holds the fakes except codex.
+mk_nocx() {
+  local f; mkdir -p $SC/nocx
+  for f in $SB/bin/*(N); do [[ ${f:t} == codex ]] || ln -sf $f $SC/nocx/${f:t}; done
+  NOCX=$SC/nocx:/usr/bin:/bin:/usr/sbin:/sbin
+  [[ -z $(env -i PATH=$NOCX /bin/sh -c 'command -v codex') ]] || P+="sanity: codex still resolves on the no-codex PATH"
+}
+want codex-u4-nocodex && {
+  cx_sc codex-u4-launch-nocodex; mk_nocx
+  xrunb 20 PATH=$NOCX $AT/launch-teammate.sh --role implementer $D t1 $SC/wt
+  [[ $RC == 1 ]] || P+="launch exit $RC (want 1)"
+  out_has "codex is not on PATH"
+  left=($D/codex-*(N)); (( $#left )) && P+="launch left files behind: ${(j: :)left:t}"
+  [[ -s $D/teammates.tsv ]] && P+="registry has a row: $(tr '\n' '|' < $D/teammates.tsv)"
+  verdict "U4 codex launch without codex on PATH: exit 1, 'codex is not on PATH', no files, no registry row"
+
+  cx_sc codex-u4-send-nocodex; mk_nocx
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the turn never reported done (status: '$(cx_state $THR)')"
+    print -r -- "second job" > $SC/msg.md; cp $D/teammates.tsv $SC/tsv.before
+    xrunb 20 PATH=$NOCX $AT/retask.sh $D t1 $SC/msg.md
+    [[ $RC == 1 ]] || P+="retask exit $RC (want 1)"
+    out_has "codex is not on PATH"; tsv_same
+  }
+  verdict "U4 codex send without codex on PATH: exit 1, 'codex is not on PATH', registry untouched"
+}
+
+# Codex state: no PERM. The first check reads the driver's own state file (white-box; the CODEX section is otherwise
+# black-box). The second is a guard: an old state file that still has a PERM= line loads in status, send and tail.
+want codex-u4-state && {
+  cx_sc codex-u4-state
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the turn never reported done (status: '$(cx_state $THR)')"
+    st=$D/codex-$THR.state
+    [[ -f $st ]] || P+="no state file $st"
+    grep -q '^PERM=' $st 2>/dev/null && P+="the state file has a PERM= line: $(grep '^PERM=' $st)"
+  }
+  verdict "U4 codex launch writes no PERM line to its .state (white-box)"
+
+  print -r -- "PERM=auto" >> $D/codex-$THR.state
+  [[ $(cx_state $THR) == done ]] || P+="status with a stale PERM= line says '$(cx_state $THR)' (want done)"
+  xrun $AT/teammate-tail.sh $D t1
+  [[ $RC == 0 ]] || P+="tail exit $RC"
+  print -r -- "next" > $SC/msg.md
+  xrunb 20 FAKE_CODEX_MODE=ok $AT/retask.sh $D t1 $SC/msg.md
+  cx_ok "retask with a stale PERM= line" && { cx_resumed || P+="no resume call after retask"; }
+  verdict "U4 guard: a codex .state with a stale PERM= line still loads (status, tail, send)"
+}
+
+# Copilot effort: Copilot CLI 1.0.95 takes none minimal low medium high xhigh max. Anything else, or a newline, exits 5
+# from launch before any state file, registry row or copilot call exists.
+want_nl() { (source $D/team.env >/dev/null 2>&1; [[ $EFFORT_IMPLEMENTER == *$'\n'* ]]); }
+typeset -a BADEFF; BADEFF=(
+  "newline-between|EFFORT_IMPLEMENTER=\$'high\nlow'|nl" "newline-trailing|EFFORT_IMPLEMENTER=\$'high\n'|nl"
+  "upper|EFFORT_IMPLEMENTER=HIGH|" "space|EFFORT_IMPLEMENTER='very high'|" "unknown|EFFORT_IMPLEMENTER=ultra|" )
+cpwant cp-u4-effort-invalid && {
+  for spec in $BADEFF; do
+    parts=("${(@s:|:)spec}")
+    cpmk cp-u4-effort-$parts[1] "$parts[2]"
+    P=()
+    [[ $parts[3] == nl ]] && { want_nl || P+="sanity: team.env's effort has no newline"; }
+    txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+    /bin/sleep 0.3
+    [[ $RC == 5 ]] || P+="exit $RC, want 5"
+    msg=$(cat $SC/out $SC/err); [[ ${msg//$SB/} == *[Ee]ffort* ]] || P+="no message naming the effort: $(print -r -- $msg | head -c 200 | tr '\n' '|')"
+    st=($D/copilot-*(N)); (( $#st )) && P+="state file written: ${(j: :)st:t}"
+    cl=($SC/fake/copilot.call.*(N)); (( $#cl )) && P+="copilot was called ${#cl} time(s)"
+    [[ -s $D/teammates.tsv ]] && P+="registry has a row"
+    reap_fakes
+    cpverdict "U4 copilot launch refuses effort '$parts[1]' with exit 5, before any state file or run"
+  done
+}
+cpwant cp-u4-effort-valid && {
+  P=()
+  for v in none minimal low medium high xhigh max ''; do
+    cpmk cp-u4-effort-ok-${v:-empty} "EFFORT_IMPLEMENTER=$v"
+    txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch ${v:-empty}"
+    await 10 cp_settled 1
+    [[ $RC == 0 ]] || P+="'$v': exit $RC, want 0"
+    cp_load; got=absent; (( $#RUNS )) && { cparse $RUNS[1]; got=${F[--reasoning-effort]-absent}; }
+    [[ $got == ${v:-absent} ]] || P+="'$v': --reasoning-effort is '$got', want '${v:-absent}'"
+    reap_fakes
+  done
+  cpverdict "U4 guard: each of none minimal low medium high xhigh max, and the empty effort, still launches with that effort"
+}
+
+# REPO, with WORKTREE only a fallback. team-init writes REPO alone; watch-ci.sh reads either.
+want u4-init && {
+  sc u4-init; xrun CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo
+  grep -q '^REPO=' $SC/teams/run1/team.env 2>/dev/null || P+="team.env has no REPO= line (exit $RC)"
+  grep -q '^WORKTREE=' $SC/teams/run1/team.env 2>/dev/null && P+="team.env still has a WORKTREE= line"
+  verdict "U4 team-init writes REPO and no WORKTREE= line"
+}
+u4_ci() {  # u4_ci <scenario> <sed-expression|->: a repo with a commit on branch feat, a stub gh, and the team.env edited by the expression
+  mk $1; mk_repo
+  local g=(env -i PATH=/usr/bin:/bin HOME=$SC/home GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C $SC/repo -c user.name=t -c user.email=t@example.com)
+  $g commit -q --allow-empty -m one; $g branch -M feat
+  SHA=$($g rev-parse feat)
+  mkdir -p $SC/ghbin
+  printf '%s\n' '#!/bin/sh' 'echo "$*" >> "$FAKE_DIR/gh.log"' 'case "$1 $2" in' '  "run list") echo 4242 ;;' '  "run watch") exit 0 ;;' \
+    '  "run view") echo "success | build: success" ;;' 'esac' > $SC/ghbin/gh
+  chmod +x $SC/ghbin/gh
+  sed -i.bak $2 $D/team.env; rm -f $D/team.env.bak
+}
+u4_ci_check() {
+  [[ $RC == 0 ]] || P+="exit $RC, want 0; out: $(head -c 200 $SC/out | tr '\n' '|')"
+  [[ $(<$SC/out) == "success | build: success" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+  grep -qF ".headSha==\"$SHA\"" $SC/fake/gh.log 2>/dev/null || P+="gh was not asked for the head sha $SHA of feat: $(head -c 200 $SC/fake/gh.log 2>/dev/null | tr '\n' '|')"
+}
+want u4-watch-ci && {
+  u4_ci u4-watch-ci-repo '/^WORKTREE=/d'
+  grep -q '^REPO=' $D/team.env && ! grep -q '^WORKTREE=' $D/team.env || P+="fixture: want a team.env with REPO only"
+  xrun PATH=$SC/ghbin:$SANDBOX_PATH $CM/watch-ci.sh $D feat ci.yml; u4_ci_check
+  verdict "U4 watch-ci.sh works from a team.env that has REPO and no WORKTREE"
+  u4_ci u4-watch-ci-worktree '/^REPO=/d'
+  grep -q '^WORKTREE=' $D/team.env && ! grep -q '^REPO=' $D/team.env || P+="fixture: want a team.env with WORKTREE only"
+  xrun PATH=$SC/ghbin:$SANDBOX_PATH $CM/watch-ci.sh $D feat ci.yml; u4_ci_check
+  verdict "U4 guard: watch-ci.sh still works from an old team.env that has WORKTREE and no REPO"
 }
 
 # ======================================================================================================================
