@@ -111,14 +111,14 @@ else
     why=
     if [[ $hp != /* ]]; then why="is the relative path '$hp', so each worktree has its own tracked hooks"
     else
-      hp=${hp:A}; top=$(git -C $repo rev-parse --show-toplevel 2>/dev/null)
-      roots=($top)
+      # the roots a writer can write; the run's own checkout (REPO) isn't one, since writers never work there
+      hp=${hp:A}; roots=($1/reports)
       [[ $wtdir != - ]] && roots+=($wtdir)
       [[ -f $1/worktrees.tsv ]] && roots+=(${(f)"$(awk 'NF>=3 {print $3}' $1/worktrees.tsv)"})
       for w in $roots; do [[ -n $w && ( $hp == ${w:A} || $hp == ${w:A}/* ) ]] && { why="is $hp, inside $w, which a writer can write"; break; }; done
     fi
     if [[ -n $why ]]; then
-      echo "FAIL  codex: core.hooksPath in $repo $why, so a writer can edit a hook and run it outside the sandbox through the git commit rule. Fix: $fix, or point it at an absolute path outside the repo and every worktree. This closes only the hooksPath route: the git add and git commit rules still give a writer unsandboxed code execution (see #66)"
+      echo "FAIL  codex: core.hooksPath in $repo $why, so a writer can edit a hook and run it outside the sandbox through the git commit rule. Fix: $fix, or point it at an absolute path outside the repo and every worktree. This narrows the tracked-hooks route only; it doesn't cover every writable root (/tmp and \$TMPDIR aren't checked), and the git add and git commit rules still give a writer unsandboxed code execution (see #66)"
       fail=1
     fi
   fi

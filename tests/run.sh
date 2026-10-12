@@ -1389,11 +1389,13 @@ want codex-preflight && {
   [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="~/hooks (absolute once git expands it) was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
   verdict "CODEX AC2 preflight: a ~/ core.hooksPath is absolute and passes"
 
-  cxp codex-pf-hooks-inside; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/repo/.githooks; cxp_run
-  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'inside') ]] || P+="an absolute core.hooksPath inside the worktree wasn't a FAIL: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  cxp codex-pf-hooks-inside; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/worktrees/u1/.githooks; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'inside') ]] || P+="an absolute core.hooksPath inside the worktrees dir wasn't a FAIL: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  cxp codex-pf-hooks-main; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/repo/.githooks; cxp_run
+  [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="an absolute core.hooksPath in the main checkout (REPO) was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
   cxp codex-pf-hooks-wtsv; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/elsewhere/u1/hooks; print -r -- "u1 - $SC/elsewhere/u1" > $D/worktrees.tsv; cxp_run
   [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'inside') ]] || P+="a hooksPath inside a worktree in worktrees.tsv wasn't a FAIL: exit $RC"
-  verdict "CODEX AC2 preflight: an absolute core.hooksPath inside the repo or a worktree is a FAIL"
+  verdict "CODEX AC2 preflight: an absolute core.hooksPath inside a worktree is a FAIL; one in the main checkout passes"
 
   cxp codex-pf-hooks-global; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; print -r -- $'[core]\n\thooksPath = rel-hooks' > $SC/gitconfig
   BASE=( ${BASE:#GIT_CONFIG_GLOBAL=*} GIT_CONFIG_GLOBAL=$SC/gitconfig ); cxp_run
