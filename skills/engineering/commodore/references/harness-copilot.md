@@ -1,18 +1,18 @@
 # Commodore on Copilot CLI
 
-Read this when the run's `HARNESS` is `copilot`. agent-teammates has its own `references/harness-copilot.md` for launching, re-tasking, the read-only checks, session storage and watching. Read it too, before your first launch and on every resume.
+Read this when the run's `HARNESS` is `copilot`. agent-teammates has its own `references/harness-copilot.md` for launching, re-tasking, the security caveats, session storage and watching.
 
 ## Default model per role
 
 Launch every teammate with `--role <role>`. A fresh `team.env` from `team-init.sh` holds these defaults, and the profile overrides them:
 
-| `--role` | Default model | Default effort |
-| --- | --- | --- |
-| `implementer`, `test-writer`, `target-steward` | `claude-sonnet-5.5` | empty |
-| `reviewer`, `security-reviewer`, `brief-checker`, `triager` | `claude-opus-5.5` | empty |
-| `scribe` | `claude-haiku-5.5` | empty |
+| `--role` | Default model |
+| --- | --- |
+| `implementer`, `test-writer`, `target-steward` | `claude-sonnet-5.5` |
+| `reviewer`, `security-reviewer`, `brief-checker`, `triager` | `claude-opus-5.5` |
+| `scribe` | `claude-haiku-5.5` |
 
-Every `EFFORT_<ROLE>` is empty, so a launch passes no `--reasoning-effort`. The driver passes the flag on launch and resume only when the role's effort is set, because some models reject it. Set one in the profile (and `EFFORT_<ROLE>` in `team.env`) only for a model that takes it. `MODEL` in `team.env` is `claude-sonnet-5.5`, the fallback for a launch without `--role`.
+Efforts default to empty. Set one in the profile only for a model that takes it; see the `EFFORT_<ROLE>` row in agent-teammates' settings. `MODEL` in `team.env` is `claude-sonnet-5.5`, the fallback for a launch without `--role`.
 
 A launch that fails to start has no fallback on Copilot: there's no `NO_BG` and no in-process subagent. agent-teammates' harness reference says what to do on exit 1.
 
@@ -37,7 +37,7 @@ Run `<teammates>/drivers/copilot/status <run>` when you resume and before any pu
 
 An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round, as on any harness.
 
-Run the three checks in agent-teammates' "Security caveats" (the state file, the `team.env` checksum and `git status --porcelain`) before each read-only re-task and any `close-teammate.sh`, and again after each read-only turn before you act on its report. The checks are the state-file checksum, the `team.env` checksum and the git config checksum, then `git status --porcelain`. Hold the baselines in your own context, not in the run directory, and launch read-only teammates in a linked worktree (the default). If one check fails, the run stops and you tell the engineer.
+Before you act on a read-only teammate's report, read agent-teammates' "Security caveats".
 
 Run the watchdog in its bounded mode, as agent-teammates' "Run the watchdog" says. `DONE` can arrive before `status` reads `done`, so check `status` before you re-task.
 
@@ -59,4 +59,4 @@ The rest of the skill is written for Claude Code. On Copilot, apply these.
 
 Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Copilot the flag set follows `--read-only`, not the role. Their shell may run `gh pr view`, `gh pr diff` and `gh issue view`, plus `git log`, `git show`, `git diff` and `git status`, with any arguments, so `--output=<file>` writes a file (see "Security caveats" in agent-teammates' reference). agent-teammates' "How a read-only teammate reports" covers their report. Give them no `.proof`.
 
-The flags are guardrails, not a sandbox, and a writer runs as the engineer. Read agent-teammates' "Security caveats" and put them to the engineer in the decision batch before an unattended run, then record the answer in `state.md`. The review mission raises the stakes, because the PR is someone else's and its text and code are untrusted: the reviewers read hostile text with a shell in reach, and the target steward is a writer that runs the PR's code.
+`--read-only` on Copilot is a guardrail against mistakes, not a boundary, and a writer runs as the engineer. Read agent-teammates' "Security caveats" and put them to the engineer in the decision batch before an unattended run, then record the answer in `state.md`. Tell the engineer that until Copilot's OS sandbox (#49) lands, the review mission on Copilot is for trusted PRs only: a PR from someone else carries untrusted text and code, the reviewers read it with a shell in reach that can write any path, and the target steward is a writer that runs the PR's code.

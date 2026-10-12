@@ -38,7 +38,7 @@ Make every call **bare**: one command, run directly by its literal absolute path
 
 ## The teammate contract
 
-Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING` (the driver contract is `scripts/drivers/CONTRACT.md`). When you paste the contract, keep only the variant lines for the run's value. On a `LIVE_MESSAGING=0` harness (Codex, Copilot), that means the `LIVE_MESSAGING=0` lines; also drop the advisor line and the "with an advisor" variant of the unresolved-problem line, and for a read-only role keep the read-only exception.
+Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING` (the driver contract is `scripts/drivers/CONTRACT.md`). When you paste the contract, keep only the variant lines for the run's `LIVE_MESSAGING` value. When the preflight prints `ADVISOR n/a`, drop the advisor line and the "with an advisor" variant of the unresolved-problem line. For a read-only role, keep the read-only exception.
 
 - Wait inside a Bash command whenever you're waiting on a build, a deploy, a token expiry or a device: `until <condition>; do sleep 30; done` with a long timeout, then carry on. Ending your turn to wait means nothing wakes you.
 - Write the report, then the marker. When you're finished, write `<team-dir>/reports/<name>.md`, then create `<team-dir>/reports/<name>.done`, in that order. Every role writes both, except a read-only teammate on Codex or Copilot (`--read-only` with `HARNESS=codex` or `copilot`): it can't write files, so its final message is its report, and the driver writes the report and marker after a completed turn. Then:

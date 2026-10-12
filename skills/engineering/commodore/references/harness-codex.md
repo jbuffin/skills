@@ -1,6 +1,6 @@
 # Commodore on Codex
 
-Read this when the run's `HARNESS` is `codex`. agent-teammates has its own `references/harness-codex.md` for launching, re-tasking, the rule lines and watching. Read it too, before your first launch and on every resume.
+Read this when the run's `HARNESS` is `codex`. agent-teammates has its own `references/harness-codex.md` for launching, re-tasking, the rule lines and watching.
 
 ## Default model per role
 
