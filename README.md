@@ -30,6 +30,8 @@ incubator/<name>/SKILL.md    In development. Not in a discovery path, and marked
 templates/SKILL.template.md  Starting point used by scripts/new-skill.sh.
 templates/AGENTS.template.md Generic AGENTS.md starting point for other repos.
 scripts/                     new-skill, promote, validate, and the check-* scripts CI runs.
+tests/                       tests/run.sh, its goldens and the fake harness CLIs in tests/bin.
+docs/                        Agent docs (docs/agents) and ADRs (docs/adr).
 .githooks/                   Optional pre-commit hook.
 .claude-plugin/              Claude Code plugin + marketplace manifests.
 .changeset/                  Pending changesets; they become CHANGELOG.md entries on release.
@@ -136,6 +138,7 @@ CI (`.github/workflows/validate.yml`) runs on every push and pull request:
 | workflows | `actionlint` |
 | plugin | `claude plugin validate .` |
 | discovery | `scripts/check-discovery.sh`: `npx skills` finds exactly the promoted skills |
+| tests | `tests/run.sh`: the team skills' scripts against fake harness CLIs (claude, codex, copilot), no network |
 
 Other workflows:
 

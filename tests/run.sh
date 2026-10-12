@@ -1,9 +1,9 @@
 #!/bin/zsh
 # usage: tests/run.sh [--record] [name-filter]
 # Deterministic checks for the team skills' harness seam (agent-teammates + commodore). Exits 0 only when every check
-# passes. No network, no real `claude` or `codex`: tests/bin holds fakes (claude, codex, date, sleep, tmux, cmux, and a
-# stat shim on Linux) that go first on PATH, and every script under test runs under `env -i` with an explicit
-# environment inside a scratch directory.
+# passes. No network, no real `claude`, `codex` or `copilot`: tests/bin holds fakes (claude, codex, copilot, date, sleep,
+# tmux, cmux, and a stat shim on Linux) that go first on PATH, and every script under test runs under `env -i` with an
+# explicit environment inside a scratch directory.
 #
 #   D4  The scripts' behaviour matches goldens in tests/golden, recorded from the reference commit (dfb39c8) with
 #       `tests/run.sh --record`. A golden holds the fake claude's argv log (with cwd), stdout, exit code, and the
@@ -11,9 +11,15 @@
 #       one `HARNESS=claude` line in team.env (added by team-init; stripped so a golden fits both sides of the change).
 #       The clock is the fake date (FAKE_NOW) and file mtimes are set with touch, so nothing else varies.
 #       Not compared: stderr.
-#   C1  No shared script calls `claude` or reads Claude transcript paths.
+#   C1  No shared script calls `claude` or `copilot`, or reads their transcript paths.
+#   C2  Claude-only words appear only in the two harness-claude.md files. C6  The Markdown lint and the descriptions.
 #   C3  team-init detects the harness. C4  team-preflight checks HARNESS against the environment.
+#   S1  HARNESS comes from team.env alone. N1/N3/N6  team-init with a driver-less or test-only driver, and its re-runs.
 #   D1  The advisor operation and the `ADVISOR n/a (<harness>)` path. D2  The Claude driver's shape.
+#   D3  The Claude default table lives in commodore's harness-claude.md.
+#   RESEND  retask.sh gives a teammate its next job through the driver's `send`.
+#   CP  The Copilot driver: launch, resume, status, tail, close, the read-only flags, effort plumbing and the driver's
+#       shape. Driven through the shared scripts against tests/bin/copilot.
 #   CODEX  The Codex driver (turn-based): launch, send/retask, status, tail, stop, preflight, the read-only marker, effort
 #       plumbing and the driver's shape. Assertion style (no goldens); `tests/run.sh codex` runs just these.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.

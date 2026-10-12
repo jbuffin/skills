@@ -7,7 +7,7 @@ description: Run teammates as background agent sessions. Launch, re-task, watch 
 
 A teammate is a full agent session started in the background on the run's **harness**, the agent CLI the run starts in. It has its own name, model, permission mode and working directory, and it gets one prompt file. It keeps going when a terminal closes or the laptop sleeps, and the harness reference says how the engineer sees it.
 
-The scripts in this skill are harness-neutral. Each calls the harness's **driver** (`scripts/drivers/<HARNESS>/`) for launch, status, tail and stop. Everything that depends on the harness is in a reference file. Read `references/harness-<HARNESS>.md`, with `HARNESS` from the run's `team.env`. With no `team.env`, or no `HARNESS` line in it, the harness is `claude`: read [`references/harness-claude.md`](references/harness-claude.md). It covers how a teammate starts, how you send it new work, how you watch it, the model and advisor settings, and the fallback when sessions can't start.
+The scripts in this skill are harness-neutral. Each calls the harness's **driver** (`scripts/drivers/<HARNESS>/`) for launch, status, tail, send and stop. Everything that depends on the harness is in a reference file. Read `references/harness-<HARNESS>.md`, with `HARNESS` from the run's `team.env`. With no `team.env`, or no `HARNESS` line in it, the harness is `claude`: read [`references/harness-claude.md`](references/harness-claude.md). It covers how a teammate starts, how you send it new work, how you watch it, the model and advisor settings, and the fallback when sessions can't start.
 
 Teammates run unattended, so almost everything here guards against one failure. A teammate stops and nobody notices. It ends its turn "to wait" and nothing wakes it up. Or it sits on a prompt. Or it stalls mid-turn, still "working" but doing nothing. Or it drifts off and never reports. The contract and the watchdog below cover all four.
 
@@ -38,7 +38,7 @@ Make every call **bare**: one command, run directly by its literal absolute path
 
 ## The teammate contract
 
-Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING`. When you paste the contract, keep only the variant lines for the run's value.
+Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING`. When you paste the contract, keep only the variant lines for the run's value. On a `LIVE_MESSAGING=0` harness (Codex, Copilot), that means the `LIVE_MESSAGING=0` lines; also drop the advisor line and the "with an advisor" variant of the unresolved-problem line, and for a read-only role keep the read-only exception.
 
 - Wait inside a Bash command whenever you're waiting on a build, a deploy, a token expiry or a device: `until <condition>; do sleep 30; done` with a long timeout, then carry on. Ending your turn to wait means nothing wakes you.
 - Write the report, then the marker. When you're finished, write `<team-dir>/reports/<name>.md`, then create `<team-dir>/reports/<name>.done`, in that order. Every role writes both, except a read-only teammate on Codex or Copilot (`--read-only` with `HARNESS=codex` or `copilot`): it can't write files, so its final message is its report, and the driver writes the report and marker after a completed turn. Then:

@@ -54,8 +54,8 @@ body:
     id: environment
     attributes:
       label: Agent and environment
-      description: The output of `claude --version`, your OS version, and your shell.
-      placeholder: Claude Code 2.1.x, macOS 15.5, zsh
+      description: The harness (Claude Code, Codex or Copilot CLI) and the output of its `--version`, your OS version, and your shell.
+      placeholder: Claude Code 2.1.x or Copilot CLI 1.0.x, macOS 15.5, zsh
     validations:
       required: true
   - type: textarea

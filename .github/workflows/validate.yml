@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: tests/run.sh (fake claude on PATH; no network)
+      - name: tests/run.sh (fake harness CLIs on PATH; no network)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq zsh >/dev/null
