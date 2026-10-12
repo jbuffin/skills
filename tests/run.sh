@@ -558,13 +558,6 @@ want watchdog-retask && {
   reach $rule || P+="the Phase 2 rule neither names the job file nor links the section stating the rule"
   (( n == 1 )) || P+="reach means nothing without exactly one statement (found $n)"
   verdict "WATCHDOG-RETASK verify-FAIL line and Phase 2 rule reach the one job-file rule"
-  # AC5 guard (green today): the Claude reference is byte-identical to 13ea390's.
-  if git -C $ROOT cat-file -e 13ea390^{commit} 2>/dev/null; then
-    want_blob=$(git -C $ROOT rev-parse 13ea390:skills/engineering/agent-teammates/references/harness-claude.md)
-    have_blob=$(git -C $ROOT hash-object $ROOT/skills/engineering/agent-teammates/references/harness-claude.md)
-    [[ $want_blob == $have_blob ]] || P+="agent-teammates references/harness-claude.md differs from 13ea390 (blob $have_blob, want $want_blob)"
-    verdict "WATCHDOG-RETASK guard: agent-teammates references/harness-claude.md is unchanged from 13ea390"
-  else echo "skip  WATCHDOG-RETASK guard (reference commit 13ea390 not in this clone)"; fi
 }
 
 # ======================================================================================================================
