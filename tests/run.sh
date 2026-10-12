@@ -1130,6 +1130,13 @@ want codex-watch-bounded && {
   [[ $(<$SC/out) == "WATCH timeout 1" ]] || P+="run 3: '$(tr '\n' '|' < $SC/out)' (want no second BLOCKED within 10 minutes)"
   verdict "CODEX watch --until-event: BLOCKED fires across two bounded runs and doesn't repeat within 10 minutes"
 
+  mk watch-bound-failed; mkdir -p $D/reports; reg t1 d0e1f2a3 $((NOW - 600)) - $SC/wt
+  : > $D/reports/t1.done; settime $((NOW - 100)) $D/reports/t1.done
+  xrun FAKE_AGENTS_FAIL=1 $AT/watch-teammates.sh --until-event 5 $D
+  [[ $RC == 0 && $(<$SC/out) == "DONE t1" ]] || P+="exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want exit 0, 'DONE t1' right after the poll whose status failed)"
+  (( $(polls) == 1 )) || P+="polled $(polls) times (want 1)"
+  verdict "CODEX watch --until-event: an event printed in a poll whose status failed ends the run"
+
   mk watch-bound-usage
   xrun $AT/watch-teammates.sh --until-event $D
   [[ $RC == 5 ]] || P+="--until-event without a number: exit $RC (want 5)"
@@ -1371,12 +1378,35 @@ want codex-preflight && {
 
   hk_repo() { git -C $SC/repo config core.hooksPath $1; }
   cxp codex-pf-hooks-rel; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo .githooks; cxp_run
-  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'relative' | grep 'unset') ]] || P+="a relative core.hooksPath wasn't a FAIL naming the problem and the fix: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'relative' | grep 'unset' | grep '#66') ]] || P+="a relative core.hooksPath wasn't a FAIL naming the problem, the fix and #66: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
   verdict "CODEX AC2 preflight: a relative core.hooksPath in the run's repo is a FAIL"
 
   cxp codex-pf-hooks-abs; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo /opt/hooks; cxp_run
   [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="an absolute core.hooksPath was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
-  verdict "CODEX AC2 preflight: an absolute core.hooksPath is fine"
+  verdict "CODEX AC2 preflight: an absolute core.hooksPath outside the worktrees is fine"
+
+  cxp codex-pf-hooks-tilde; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo '~/hooks'; cxp_run
+  [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="~/hooks (absolute once git expands it) was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a ~/ core.hooksPath is absolute and passes"
+
+  cxp codex-pf-hooks-inside; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/repo/.githooks; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'inside') ]] || P+="an absolute core.hooksPath inside the worktree wasn't a FAIL: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  cxp codex-pf-hooks-wtsv; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/elsewhere/u1/hooks; print -r -- "u1 - $SC/elsewhere/u1" > $D/worktrees.tsv; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'inside') ]] || P+="a hooksPath inside a worktree in worktrees.tsv wasn't a FAIL: exit $RC"
+  verdict "CODEX AC2 preflight: an absolute core.hooksPath inside the repo or a worktree is a FAIL"
+
+  cxp codex-pf-hooks-global; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; print -r -- $'[core]\n\thooksPath = rel-hooks' > $SC/gitconfig
+  BASE=( ${BASE:#GIT_CONFIG_GLOBAL=*} GIT_CONFIG_GLOBAL=$SC/gitconfig ); cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep "$SC/gitconfig") && -z $(grep '^FAIL' $SC/out | grep -- '--unset') ]] || P+="a global relative hooksPath: want a FAIL naming the origin and no --unset: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a global core.hooksPath gets its origin in the fix, not --unset"
+
+  cxp codex-pf-hooks-norepo; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; sed -i.bak -e '/^REPO=/d' -e '/^WORKTREE=/d' $D/team.env; cxp_run
+  grep '^WARN' $SC/out | grep -q 'neither REPO nor WORKTREE' || P+="no WARN when team.env sets neither REPO nor WORKTREE: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: no REPO or WORKTREE gives a WARN, not a silent pass"
+
+  cxp codex-pf-hooks-giterr; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; print -r -- $'[core' > $SC/repo/.git/config; cxp_run
+  grep '^WARN' $SC/out | grep -q 'core.hooksPath wasn.t checked' || P+="no WARN when git config fails: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a git config error gives a WARN, not a silent pass"
 
   cxp codex-pf-nocodex; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; cxp_run PATH=/usr/bin:/bin:/usr/sbin:/sbin
   [[ $RC == 1 ]] || P+="exit $RC (want 1)"

@@ -89,17 +89,38 @@ for who, need in NEEDED:
         broad.setdefault(tuple(covering[0][0]), []).append(" ".join(need))
 for r, needs in broad.items():
     print('WARN  codex: prefix_rule(pattern=[%s], decision="allow") is broader than needed; it covers %s' % (q(r), ", ".join(needs)))
-if not fail and not broad: print("OK    codex rules cover what read-only roles and writers need")
+if not fail and not broad: print("OK    codex rules cover what writers need (read-only roles run without rules)")
 sys.exit(fail)
 PY
-# A rule runs `git commit` outside the sandbox, and git then runs the hooks core.hooksPath names. A relative path is tracked
-# in each worktree, so a writer can edit a hook and run it unsandboxed through the rule.
-repo=$(unset REPO WORKTREE; source $1/team.env; print -r -- ${REPO:-$WORKTREE})
-if [[ -n $repo ]]; then
-  hp=$(git -C $repo config core.hooksPath 2>/dev/null)
-  if [[ -n $hp && $hp != /* ]]; then
-    echo "FAIL  codex: core.hooksPath is the relative path '$hp' in $repo, so each worktree has its own tracked hooks; a writer can edit one and then run it outside the sandbox through the git commit rule. Unset it (git -C $repo config --unset core.hooksPath) or point it at an absolute path outside every worktree"
-    fail=1
+# The git add and git commit rules run those commands outside the sandbox, so a writer can run code of its own through them
+# (a nested repo's hooks or core.fsmonitor, a rewritten .git file, a hooks directory it can write; see #66). Codex writers
+# therefore run with the engineer's permissions. This check closes only the route through core.hooksPath, as defence in depth:
+# git runs the hooks that setting names, and a path the writer can write is code it can run.
+read -r repo wtdir < <(unset REPO WORKTREE WORKTREES_DIR; source $1/team.env; print -r -- "${REPO:-${WORKTREE:--}} ${WORKTREES_DIR:--}")
+if [[ $repo == - ]]; then
+  echo "WARN  codex: team.env sets neither REPO nor WORKTREE, so core.hooksPath wasn't checked"
+else
+  cfg=$(git -C $repo config --type=path --show-origin core.hooksPath 2>&1); rc=$?
+  if (( rc == 1 )) && [[ -z $cfg ]]; then :   # unset
+  elif (( rc != 0 )); then
+    echo "WARN  codex: core.hooksPath wasn't checked; git -C $repo config failed: ${cfg%%$'\n'*}"
+  else
+    origin=${cfg%%$'\t'*}; hp=${cfg#*$'\t'}
+    if git -C $repo config --local core.hooksPath >/dev/null 2>&1; then fix="unset it (git -C $repo config --unset core.hooksPath)"
+    else fix="it is set in $origin; change it there"; fi
+    why=
+    if [[ $hp != /* ]]; then why="is the relative path '$hp', so each worktree has its own tracked hooks"
+    else
+      hp=${hp:A}; top=$(git -C $repo rev-parse --show-toplevel 2>/dev/null)
+      roots=($top)
+      [[ $wtdir != - ]] && roots+=($wtdir)
+      [[ -f $1/worktrees.tsv ]] && roots+=(${(f)"$(awk 'NF>=3 {print $3}' $1/worktrees.tsv)"})
+      for w in $roots; do [[ -n $w && ( $hp == ${w:A} || $hp == ${w:A}/* ) ]] && { why="is $hp, inside $w, which a writer can write"; break; }; done
+    fi
+    if [[ -n $why ]]; then
+      echo "FAIL  codex: core.hooksPath in $repo $why, so a writer can edit a hook and run it outside the sandbox through the git commit rule. Fix: $fix, or point it at an absolute path outside the repo and every worktree. This closes only the hooksPath route: the git add and git commit rules still give a writer unsandboxed code execution (see #66)"
+      fail=1
+    fi
   fi
 fi
 exit $fail
