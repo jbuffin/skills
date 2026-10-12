@@ -566,7 +566,7 @@ want watchdog-retask && {
 shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineering/commodore/scripts )
 shared_code() {  # shared_code <egrep-pattern>: matching non-comment lines in shared scripts, as file:line:text
   local f
-  find $shared -path '*/drivers/claude' -prune -o -type f -print | LC_ALL=C sort | while read -r f; do
+  find $shared \( -path '*/drivers/claude' -o -path '*/drivers/codex' \) -prune -o -type f -print | LC_ALL=C sort | while read -r f; do
     grep -nE -- "$1" $f | grep -vE '^[0-9]+:[[:space:]]*#' | sed -e 's#== \.claude ||#== DOTCLAUDE ||#' | grep -E -- "$1" | sed "s#^#${f#$ROOT/}:#"
   done
 }
@@ -575,6 +575,12 @@ hits=$(shared_code '(^|[^-/a-z])claude ')
 $(print -r -- $hits | head -6)"
 hits=$(shared_code '\.jsonl|/projects|\.claude\.json')
 [[ -z $hits ]] && pass "C1 no shared script reads Claude transcript or config paths" || fail "C1 no shared script reads Claude transcript or config paths" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
+$(print -r -- $hits | head -6)"
+hits=$(shared_code '(^|[^-/a-z])codex ')
+[[ -z $hits ]] && pass "C1 no shared script calls codex" || fail "C1 no shared script calls codex" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
+$(print -r -- $hits | head -6)"
+hits=$(shared_code '\.codex/')
+[[ -z $hits ]] && pass "C1 no shared script reads ~/.codex paths" || fail "C1 no shared script reads ~/.codex paths" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
 $(print -r -- $hits | head -6)"
 
 # ======================================================================================================================
@@ -589,14 +595,56 @@ want c3 && {
   if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *claude* ]]; then pass "C3 no harness detected: exit 7, no run, names claude"
   else fail "C3 no harness detected: exit 7, no run, names claude" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
 
-  for h in codex copilot; do
+  for h in copilot; do
     sc c3-$h; xrun HARNESS=$h $CM/team-init.sh run1 $SC/repo
     if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"$h: not supported yet"* ]]; then pass "C3 HARNESS=$h: not supported yet, exit 7"
     else fail "C3 HARNESS=$h: not supported yet, exit 7" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
   done
   sc c3-codex-inside-claude; xrun HARNESS=codex CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo
-  if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"codex: not supported yet"* ]]; then pass "C3 HARNESS=codex wins over CLAUDECODE=1"
-  else fail "C3 HARNESS=codex wins over CLAUDECODE=1" "exit $RC (want 7); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
+  n=$(grep -c '^HARNESS=codex$' $SC/teams/run1/team.env 2>/dev/null)
+  [[ $RC == 0 && $n == 1 ]] && pass "C3 HARNESS=codex wins over CLAUDECODE=1" || fail "C3 HARNESS=codex wins over CLAUDECODE=1" "exit $RC, ${n:-0} HARNESS=codex lines in team.env (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"
+
+  # The Codex team.env defaults.
+  sc c3-codex; xrun CODEX_THREAD_ID=019e-test $CM/team-init.sh run1 $SC/repo
+  E=$SC/teams/run1/team.env
+  n=$(grep -c '^HARNESS=codex$' $E 2>/dev/null)
+  [[ $RC == 0 && $n == 1 ]] && pass "C3 CODEX_THREAD_ID writes HARNESS=codex once" || fail "C3 CODEX_THREAD_ID writes HARNESS=codex once" "exit $RC, ${n:-0} HARNESS=codex lines in team.env (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"
+  miss=()
+  for r in IMPLEMENTER TEST_WRITER TARGET_STEWARD; do for kv in MODEL_$r=gpt-6.1-sol EFFORT_$r=medium; do grep -qx -- $kv $E 2>/dev/null || miss+=($kv); done; done
+  for r in REVIEWER SECURITY_REVIEWER BRIEF_CHECKER TRIAGER; do for kv in MODEL_$r=gpt-6-astra EFFORT_$r=high; do grep -qx -- $kv $E 2>/dev/null || miss+=($kv); done; done
+  for kv in MODEL_SCRIBE=gpt-6-luna EFFORT_SCRIBE=medium MODEL=gpt-6.1-sol VIEWER=none; do grep -qx -- $kv $E 2>/dev/null || miss+=($kv); done
+  [[ -z $miss ]] && pass "C3 Codex team.env has every MODEL_/EFFORT_ default, MODEL and VIEWER=none" || fail "C3 Codex team.env has every MODEL_/EFFORT_ default, MODEL and VIEWER=none" "missing lines: ${miss[*]}"
+  bad=$(grep -nE '^(ADVISOR|PERMISSION_MODE|CLAUDE_CONFIG_DIR)=' $E 2>/dev/null)
+  [[ -f $E && -z $bad ]] && pass "C3 Codex team.env has no ADVISOR, PERMISSION_MODE or CLAUDE_CONFIG_DIR line" || fail "C3 Codex team.env has no ADVISOR, PERMISSION_MODE or CLAUDE_CONFIG_DIR line" "${bad:-no team.env written (exit $RC)}"
+  [[ -f $E ]] && ! grep -qiE 'Claude Code|cmux' $E && pass "C3 Codex team.env doesn't mention Claude Code or cmux" || fail "C3 Codex team.env doesn't mention Claude Code or cmux" "${$(grep -niE 'Claude Code|cmux' $E 2>/dev/null | head -3):-no team.env written (exit $RC)}"
+  sc c3-claude-noeffort; xrun CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo
+  ! grep -q '^EFFORT_' $SC/teams/run1/team.env && grep -q '^ADVISOR=opus$' $SC/teams/run1/team.env && pass "C3 Claude team.env has no EFFORT_ lines and keeps ADVISOR=opus" || fail "C3 Claude team.env has no EFFORT_ lines and keeps ADVISOR=opus" "$(grep -E '^(EFFORT_|ADVISOR)' $SC/teams/run1/team.env | head -3 | tr '\n' ' ')"
+
+  sc c3-both; xrun CLAUDECODE=1 CODEX_THREAD_ID=019e-test $CM/team-init.sh run1 $SC/repo
+  if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"more than one harness detected"* ]]; then pass "C3 CLAUDECODE=1 and CODEX_THREAD_ID: exit 7, more than one harness, no run"
+  else fail "C3 CLAUDECODE=1 and CODEX_THREAD_ID: exit 7, more than one harness, no run" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
+
+  sc c3-cmux-codex; xrun CMUX_CODEX_HOOK=1 CMUX_CODEX_SESSION=x $CM/team-init.sh run1 $SC/repo
+  if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"no supported harness detected"* ]]; then pass "C3 only CMUX_CODEX_* set detects nothing"
+  else fail "C3 only CMUX_CODEX_* set detects nothing" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
+
+  sc c3-codex-empty; xrun CODEX_THREAD_ID= $CM/team-init.sh run1 $SC/repo
+  if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"no supported harness detected"* ]]; then pass "C3 empty CODEX_THREAD_ID detects nothing"
+  else fail "C3 empty CODEX_THREAD_ID detects nothing" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
+
+  sc c3-cmux-codex-claude; xrun CMUX_CODEX_HOOK=1 CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo
+  n=$(grep -c '^HARNESS=claude$' $SC/teams/run1/team.env 2>/dev/null)
+  [[ $RC == 0 && $n == 1 ]] && pass "C3 CMUX_CODEX_* with CLAUDECODE=1 detects claude only" || fail "C3 CMUX_CODEX_* with CLAUDECODE=1 detects claude only" "exit $RC, ${n:-0} HARNESS=claude lines (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"
+  sc c3-codex-empty-claude; xrun CODEX_THREAD_ID= CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo
+  n=$(grep -c '^HARNESS=claude$' $SC/teams/run1/team.env 2>/dev/null)
+  [[ $RC == 0 && $n == 1 ]] && pass "C3 empty CODEX_THREAD_ID with CLAUDECODE=1 detects claude only" || fail "C3 empty CODEX_THREAD_ID with CLAUDECODE=1 detects claude only" "exit $RC, ${n:-0} HARNESS=claude lines (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"
+
+  # team-preflight on a team.env that team-init wrote for Codex: the advisor check is n/a, and it isn't skipped.
+  sc c3-codex-preflight; xrun CODEX_THREAD_ID=019e-test $CM/team-init.sh run1 $SC/repo
+  D=$SC/teams/run1
+  xrun CODEX_THREAD_ID=019e-test $CM/team-preflight.sh $D
+  if grep -q '^OK    ADVISOR n/a (codex)' $SC/out && [[ -f $D/team.env ]] && ! grep -q '^ADVISOR=' $D/team.env; then pass "C3 team-preflight on a Codex team.env prints OK ADVISOR n/a (codex), no ADVISOR= line"
+  else fail "C3 team-preflight on a Codex team.env prints OK ADVISOR n/a (codex), no ADVISOR= line" "ADVISOR lines in output: $(grep ADVISOR $SC/out | head -3 | tr '\n' '|'); ADVISOR= lines in team.env: $(grep -c '^ADVISOR=' $D/team.env 2>/dev/null)"; fi
 }
 
 # ======================================================================================================================
@@ -618,7 +666,12 @@ want c4 && {
   pf_case "C4 baseline: no HARNESS line is treated as claude" c4-baseline - CLAUDECODE=1 pass -
   pf_case "C4 HARNESS=claude in claude passes" c4-match HARNESS=claude CLAUDECODE=1 pass -
   pf_case "C4 HARNESS=claude with no harness detected fails" c4-claude-none HARNESS=claude - fail claude
-  pf_case "C4 HARNESS=codex inside claude fails" c4-codex-in-claude HARNESS=codex CLAUDECODE=1 fail codex
+  pf_case "C4 HARNESS=codex inside claude fails the mismatch check" c4-codex-in-claude HARNESS=codex CLAUDECODE=1 fail "this environment is claude"
+  # Other checks may still fail for Codex until the driver's own preflight exists: only the harness check is asserted.
+  HL=HARNESS=codex; pf_sc c4-codex-match; HL=
+  xrun CODEX_THREAD_ID=019e-test $CM/team-preflight.sh $D
+  line=$(grep -E '^(FAIL|WARN)' $SC/out | grep -iE 'HARNESS|harness|this environment is|has no driver|not supported' | head -1)
+  [[ -z $line ]] && grep -q '^OK    ' $SC/out && pass "C4 HARNESS=codex with CODEX_THREAD_ID passes the harness check" || fail "C4 HARNESS=codex with CODEX_THREAD_ID passes the harness check" "exit $RC; harness line: ${line:-none}; first lines: $(head -3 $SC/out | tr '\n' '|')"
   pf_case "C4 HARNESS=bogus (no driver) fails" c4-no-driver HARNESS=bogus CLAUDECODE=1 fail bogus
 }
 
