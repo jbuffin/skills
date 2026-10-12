@@ -16,6 +16,6 @@ printf '%s\n' "name=$NAME" "workdir=${W:A}" "model=$CHOSEN" "ro=$RO" > $F
 # A read-only teammate can't write files; the driver writes its report from its final message.
 MSG=
 [[ $RO == 1 ]] && MSG=" Your final message is your report: write no files; the driver saves it."
-cp_start $D $ID "You are teammate $NAME. Read $P and do exactly what it says.$MSG" || exit 1
+cp_start $D $ID "You are teammate $NAME. Read $P and do exactly what it says.$MSG" || { rm -f $F $F.*; exit 1; }
 echo "$ID -"
 echo "  watch: teammate-tail.sh $D $NAME   ·   output: $F.out"

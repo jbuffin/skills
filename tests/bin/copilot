@@ -10,6 +10,8 @@
 #                          stay: write the turn up to its tool call, then idle until killed or $FAKE_COPILOT_STAY_MAX
 #                                seconds (default 60) have passed
 #                          silent: the context-overflow symptom: exit 0, print nothing, write no final message
+#                          stderr: like silent, but print the message to stderr
+#                          fail: like silent, but print an error to stderr and exit 1
 #   FAKE_COPILOT_SAY       the final message (default OK)
 #   FAKE_COPILOT_TS        epoch of every event and of events.jsonl's mtime (default $FAKE_NOW, else the real clock)
 #   FAKE_COPILOT_DONE      a path: the run creates that file (a teammate's .done marker) before it ends

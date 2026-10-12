@@ -1028,6 +1028,48 @@ cpwant cp-round1 && {
   cpverdict "CP a silent read-only resume doesn't rewrite the report from the earlier turn's message"
 }
 
+# ---- Fix round 2: state files are untrusted (a writer can write the team dir), and ro fails closed ---------------
+cpwant cp-round2 && {
+  cpmk cp-state-payload
+  id=11111111-2222-4333-8444-555555555555
+  printf '%s\n' "name=x" "workdir=$SC/wt" "model=m" "ro=0" "pid=1" "pgid=1" 'started=a[$(touch '$SC'/pwned1)]' 'resumed=a[$(touch '$SC'/pwned2)]' > $D/copilot-$id
+  xrun $AT/drivers/copilot/status $D; cpnote "status"
+  P=()
+  [[ -e $SC/pwned1 || -e $SC/pwned2 ]] && P+="a command in a state file's started= or resumed= ran in status"
+  grep -q "^$id - " $SC/out || P+="no row for the session; stdout: $(head -c 200 $SC/out)"
+  [[ $(awk -v i=$id '$1==i {print $4}' $SC/out) == - ]] || P+="last activity is '$(awk -v i=$id '$1==i {print $4}' $SC/out)', want - (no usable number)"
+  printf '%s\n' "name=x" "workdir=$SC/wt" "model=m" "ro=0" 'pid=a[$(touch '$SC'/pwned3)]' 'pgid=a[$(touch '$SC'/pwned3)]' > $D/copilot-$id
+  xrun $AT/drivers/copilot/status $D; xrun $AT/drivers/copilot/stop $D $id
+  [[ -e $SC/pwned3 ]] && P+="a command in a state file's pid= or pgid= ran"
+  cpverdict "CP a state file's started/resumed/pid/pgid are never evaluated as arithmetic"
+
+  # a blank ro in the state file fails closed to the read-only flags on resume
+  cpmk cp-ro-closed
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1
+  sed -i.bak 's/^ro=.*/ro=/' $D/copilot-$(cp_id w1)
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (blank ro)"
+  await 10 cp_settled 2
+  cp_load
+  P=()
+  (( $#RUNS == 2 )) || P+="want 2 runs, got $#RUNS"
+  if (( $#RUNS == 2 )); then
+    cparse $RUNS[2]
+    hasv --deny-tool write || P+="the resume with a blank ro has no --deny-tool=write"
+    hasf --allow-all-tools && P+="the resume with a blank ro passes --allow-all-tools"
+  fi
+  cpverdict "CP a blank ro in the state file gets the read-only flags (fails closed)"
+  reap_fakes
+
+  # a failed read-only run doesn't replace the report or touch the marker
+  cpmk cp-report-failed
+  txrun FAKE_COPILOT_MODE=fail FAKE_COPILOT_SAY=late $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1 (fails)"
+  /bin/sleep 1
+  P=()
+  [[ ! -e $D/reports/t1.md && ! -e $D/reports/t1.done ]] || P+="a failed run wrote a report or marker: $(ls $D/reports | tr '\n' ' ')"
+  cpverdict "CP a read-only run that exits non-zero writes no report and no marker"
+}
+
 # ---- AC7: ADVISOR n/a (copilot). detect-harness.sh knows only claude (#63), so a scratch tree whose detection says copilot.
 cpwant cp-ac7 && {
   cp -R $SKILLS $SB/src-cop; printf '#!/bin/sh\necho copilot\n' > $SB/src-cop/agent-teammates/scripts/detect-harness.sh
