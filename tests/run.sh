@@ -1124,11 +1124,6 @@ want c3 && {
   if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *claude* ]]; then pass "C3 no harness detected: exit 7, no run, names claude"
   else fail "C3 no harness detected: exit 7, no run, names claude" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
 
-  for h in copilot; do
-    sc c3-$h; xrun HARNESS=$h $CM/team-init.sh run1 $SC/repo
-    if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"$h: not supported yet"* ]]; then pass "C3 HARNESS=$h: not supported yet, exit 7"
-    else fail "C3 HARNESS=$h: not supported yet, exit 7" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
-  done
   sc c3-copilot; xrun HARNESS=copilot $CM/team-init.sh run1 $SC/repo
   n=$(grep -c '^HARNESS=copilot$' $SC/teams/run1/team.env 2>/dev/null)
   [[ $RC == 0 && $n == 1 ]] && pass "C3 HARNESS=copilot preset: exit 0, HARNESS=copilot once in team.env" || fail "C3 HARNESS=copilot preset: exit 0, HARNESS=copilot once in team.env" "exit $RC, ${n:-0} HARNESS=copilot lines in team.env (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"
