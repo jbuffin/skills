@@ -29,6 +29,8 @@ The workflow is fixed, but the task force changes with the work. Pick each unit'
 | Target steward | owns the target for the whole run, does a light check each unit and full evaluations on target-evaluation's cadence | the work runs somewhere a user would touch it |
 | Scribe | PR bodies, round-cap PR comments, notes | unless the run is tiny |
 
+Every re-task of a live teammate follows agent-teammates' re-tasking section in its `SKILL.md`: a fix round, a steward request, a CI fix, a late finding sent back to the implementer. That section picks between `<teammates>/retask.sh` and `<teammates>/retasked.sh` for the run's harness. Write the new job to a file first.
+
 For each unit:
 
 1. Write the brief, following [Briefs](../SKILL.md#briefs) in SKILL.md. Done when the brief checker reports no contradicted or unsourced claims.
@@ -41,7 +43,7 @@ For each unit:
    - Keep a running list of unfixed non-blocking findings in `state.md` across rounds: add each round's, and drop the ones a fix round resolves.
 
    Done when all three reports are in: the reviewer's, the security reviewer's and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6.
-5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and send it to the unit's implementer in a single message, the way agent-teammates' `references/harness-<HARNESS>.md` says to send new work, then run `<teammates>/retasked.sh`.
+5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and write it to a file in the run directory. Re-task the unit's implementer with that file, the way agent-teammates' re-tasking section says (`retask.sh` or `retasked.sh`).
    - When fixes conflict, the security fix wins, and you record the decision in `state.md`.
    - The implementer may also fix trivial non-blocking findings, but only in a round that already has blocking fixes, so they never cause an extra round. Trivial means a few lines inside the unit's own files with no other change in behaviour. Its report lists which non-blocking findings it fixed.
    - Then a fresh reviewer and a fresh security reviewer look at the fix diff only, and the steward re-checks anything user-visible.

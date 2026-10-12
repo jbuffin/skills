@@ -50,7 +50,7 @@ You launch every teammate with `--role <role>`. The role names and the capabilit
 
 The work inside a role can be one of the user's own skills. The profile names the skill each role runs, and each brief tells the teammate to invoke it. A role with no named skill follows its section in [`references/roles.md`](references/roles.md).
 
-On every `DONE`, run `<teammates>/verify-report.sh <run> <name>` before you act on the report. It checks that the report and marker are from this tasking, that each declared proof ran in the teammate's worktree on its current HEAD with nothing uncommitted and exited 0, and that the report's `commit:` line names that HEAD. `verdict: unverified` means the work isn't done, whatever the report says; send the FAIL lines back to the teammate as its next instruction.
+On every `DONE`, run `<teammates>/verify-report.sh <run> <name>` before you act on the report. It checks that the report and marker are from this tasking, that each declared proof ran in the teammate's worktree on its current HEAD with nothing uncommitted and exited 0, and that the report's `commit:` line names that HEAD. `verdict: unverified` means the work isn't done, whatever the report says; re-task the teammate with the FAIL lines as its next job, the way agent-teammates' re-tasking section says.
 
 Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (the reviewer, the security reviewer, the brief checker) do not count, and neither does a teammate waiting for a message (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
 
