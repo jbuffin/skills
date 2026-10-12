@@ -1132,7 +1132,7 @@ cpwant cp-effort-empty && {
 }
 
 cpwant cp-effort-hostile && {
-  cpmk cp-effort-hostile "EFFORT_REVIEWER='a b \$(touch $SC/pwned) \"q\"'"
+  cpmk cp-effort-hostile "EFFORT_REVIEWER='a b \$(touch effort-pwned) \"q\"'"
   txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
   await 10 cp_settled 1
   txrun $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
@@ -1140,10 +1140,12 @@ cpwant cp-effort-hostile && {
   reap_fakes
   cp_eff_runs t1
   P=()
-  want="a b \$(touch $SC/pwned) \"q\""
+  want="a b \$(touch effort-pwned) \"q\""
   for c in $L $R; do [[ $(cp_eff_of $c) == $want ]] || P+="${c:t}: --reasoning-effort is '$(cp_eff_of $c)', want the one element '$want'"; done
   [[ -z $L ]] && P+="no launch call"
-  [[ -e $SC/pwned ]] && P+="the effort was evaluated: $SC/pwned exists"
+  # The payload's path is relative, so an evaluation would create it in whichever directory the script ran in.
+  hit=$(find $SB $PWD -name effort-pwned 2>/dev/null)
+  [[ -n $hit ]] && P+="the effort was evaluated: ${hit//$'\n'/ } exists"
   cpverdict "CP effort: an effort with spaces and shell syntax is one argv element and never evaluated"
 }
 
