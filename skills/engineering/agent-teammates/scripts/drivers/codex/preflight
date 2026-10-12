@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: preflight <run-dir>   (see driver.env)
+# usage: preflight <run-dir>   (see ../CONTRACT.md)
 [[ $# -eq 1 && -f $1/team.env ]] || { sed -n 2p $0; exit 5; }
 fail=0
 command -v codex >/dev/null && echo "OK    codex found" || { echo "FAIL  codex not on PATH"; fail=1; }

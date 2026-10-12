@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: tail <team-dir> <label> <session-id> <n>   (see driver.env)
+# usage: tail <team-dir> <label> <session-id> <n>   (see ../CONTRACT.md)
 [[ $# -eq 4 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; W=$2; id=$3; N=$4
 DRVDIR=${0:A:h}

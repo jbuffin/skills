@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: stop <team-dir> <session-id>   (see driver.env)
+# usage: stop <team-dir> <session-id>   (see ../CONTRACT.md)
 [[ $# -eq 2 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}
 DRVDIR=${0:A:h}

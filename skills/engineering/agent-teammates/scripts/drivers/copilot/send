@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: send <team-dir> <session-id> <message-file>   (see ../claude/driver.env)
+# usage: send <team-dir> <session-id> <message-file>   (see ../CONTRACT.md)
 [[ $# -eq 3 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; ID=$2; M=${3:A}
 source ${0:A:h:h:h}/team-env.zsh

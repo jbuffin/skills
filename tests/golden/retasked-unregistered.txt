@@ -1,6 +1,6 @@
 ## argv
 ## stdout
-ghost is not registered in @SB@/w/retask-unregistered/run/teammates.tsv
+ghost is not registered in @SB@/w/retasked-unregistered/run/teammates.tsv
 ## exit
 5
 ## files
@@ -9,10 +9,10 @@ ghost is not registered in @SB@/w/retask-unregistered/run/teammates.tsv
   | do the thing
 ./reports/
 ./team.env
-  | RUN=@SB@/w/retask-unregistered/run
-  | REPO=@SB@/w/retask-unregistered/repo
-  | WORKTREE=@SB@/w/retask-unregistered/repo
-  | WORKTREES_DIR=@SB@/w/retask-unregistered/worktrees
+  | RUN=@SB@/w/retasked-unregistered/run
+  | REPO=@SB@/w/retasked-unregistered/repo
+  | WORKTREE=@SB@/w/retasked-unregistered/repo
+  | WORKTREES_DIR=@SB@/w/retasked-unregistered/worktrees
   | SKILL=@SB@/src/skills/engineering/commodore
   | SKILLS_DIR=@SB@/src/skills/engineering
   | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
@@ -23,6 +23,6 @@ ghost is not registered in @SB@/w/retask-unregistered/run/teammates.tsv
   | MODEL=sonnet
   | ADVISOR=opus
   | PERMISSION_MODE=auto
-  | CLAUDE_CONFIG_DIR=@SB@/w/retask-unregistered/cfg
+  | CLAUDE_CONFIG_DIR=@SB@/w/retasked-unregistered/cfg
   | MODE=single
 ./teammates.tsv

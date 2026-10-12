@@ -23,7 +23,7 @@
 #   CODEX  The Codex driver (turn-based): launch, send/retask, status, tail, stop, preflight, the read-only marker, effort
 #       plumbing and the driver's shape. Assertion style (no goldens); `tests/run.sh codex` runs just these.
 #   U4  Tail output per the driver contract, codex without its CLI, codex .state without PERM, copilot effort validation,
-#       REPO over WORKTREE. The tail-* and init-* goldens were edited by hand to match; `--record` would revert them.
+#       REPO over WORKTREE. The RESEND and D2 checks read drivers/CONTRACT.md. The tail-* and init-* goldens were edited by hand to match; `--record` would revert them.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -204,9 +204,9 @@ want launch-missing-prompt && { mk launch-missing-prompt; xrun $AT/launch-teamma
 want launch-invalid-name && { mk launch-invalid-name; xrun $AT/launch-teammate.sh $D .bad $SC/wt; d4 launch-invalid-name; }
 
 # ---- retasked.sh, close-teammate.sh ---------------------------------------------------------------------------------
-want retask-ok && { mk retask-ok; reg t1 c51dbe46 1789999000 - $SC/wt; xrun $AT/retasked.sh $D t1; d4 retask-ok; }
-want retask-closed && { mk retask-closed; reg t1 c51dbe46 closed - $SC/wt; xrun $AT/retasked.sh $D t1; d4 retask-closed; }
-want retask-unregistered && { mk retask-unregistered; xrun $AT/retasked.sh $D ghost; d4 retask-unregistered; }
+want retasked-ok && { mk retasked-ok; reg t1 c51dbe46 1789999000 - $SC/wt; xrun $AT/retasked.sh $D t1; d4 retasked-ok; }
+want retasked-closed && { mk retasked-closed; reg t1 c51dbe46 closed - $SC/wt; xrun $AT/retasked.sh $D t1; d4 retasked-closed; }
+want retasked-unregistered && { mk retasked-unregistered; xrun $AT/retasked.sh $D ghost; d4 retasked-unregistered; }
 want close-stopped && { mk close-stopped; reg t1 c51dbe46 1789999000 - $SC/wt; xrun $AT/close-teammate.sh $D t1; d4 close-stopped; }
 want close-not-running && { mk close-not-running; reg t1 c51dbe46 1789999000 - $SC/wt; xrun FAKE_STOP_RC=1 $AT/close-teammate.sh $D t1; d4 close-not-running; }
 want close-stop-rc9 && { SCDIR=close-not-running; mk close-stop-rc9; SCDIR=; reg t1 c51dbe46 1789999000 - $SC/wt; xrun FAKE_STOP_RC=9 $AT/close-teammate.sh $D t1; d4 close-stop-rc9 close-not-running; }
@@ -476,18 +476,19 @@ want resend && {
 # RESEND docs: the contract's send text, and SKILL.md. Key phrases only.
 want resend && {
   DE=$ROOT/skills/engineering/agent-teammates/scripts/drivers/claude/driver.env
-  snd=$(awk '/^#   send /{p=1; print; next} p && /^#   [a-z]/{p=0} p && /^#/{print}' $DE)
-  [[ -n $snd ]] || P+="no '#   send' entry in ${DE#$ROOT/}"
+  CT=$ROOT/skills/engineering/agent-teammates/scripts/drivers/CONTRACT.md
+  snd=$(awk '/^### send$/{p=1; next} p && /^#/{p=0} p{print}' $CT)
+  [[ -n $snd ]] || P+="no '### send' section in ${CT#$ROOT/}"
   print -r -- $snd | grep -qi 'resum' || P+="the send text doesn't say it resumes the session"
   print -r -- $snd | grep -qi 'exit' || P+="the send text doesn't mention the process having exited"
-  verdict "RESEND driver.env send text: gives the session its next job, resuming it if its process exited"
+  verdict "RESEND contract send text: gives the session its next job, resuming it if its process exited"
   print -r -- $snd | grep -qiE 'without waiting' || P+="the send text doesn't say it returns without waiting for the turn"
   print -r -- $snd | grep -qiE 'once .*(started|start)' || P+="the send text doesn't say it returns once the job has started"
-  verdict "RESEND driver.env send text: returns once the job has started, without waiting for the turn"
+  verdict "RESEND contract send text: returns once the job has started, without waiting for the turn"
   print -r -- $snd | grep -qiE 'non-zero' && print -r -- $snd | grep -qiE "couldn't|could not|cannot|can't" || P+="the send text doesn't say it exits non-zero if it couldn't start the job"
-  verdict "RESEND driver.env send text: exits non-zero if it couldn't start the job"
-  sed -n 1,3p $DE | grep -q 'retask\.sh' || P+="the header's opening doesn't mention retask.sh reading the SEND= line"
-  verdict "RESEND driver.env header opening says retask.sh reads the SEND= line"
+  verdict "RESEND contract send text: exits non-zero if it couldn't start the job"
+  sed -n 1,5p $CT | grep -q 'retask\.sh' || P+="the contract's opening doesn't mention retask.sh reading the SEND= line"
+  verdict "RESEND contract opening says retask.sh reads the SEND= line"
   [[ ! -e ${DE:h}/send ]] && grep -q '^SEND=tool$' $DE || P+="the Claude driver must keep SEND=tool and have no send executable"
   verdict "RESEND the Claude driver keeps SEND=tool and no send executable"
 
@@ -1409,8 +1410,8 @@ want d2 && {
   [[ ! -e $DRV/send ]] && pass "D2 no send executable" || fail "D2 no send executable" "${DRV#$ROOT/}/send exists; send goes through the SendMessage tool"
   if [[ -f $DRV/driver.env ]] && grep -q '^LIVE_MESSAGING=1$' $DRV/driver.env && grep -q '^SEND=tool$' $DRV/driver.env; then pass "D2 driver.env declares LIVE_MESSAGING=1 and SEND=tool"
   else fail "D2 driver.env declares LIVE_MESSAGING=1 and SEND=tool" "${DRV#$ROOT/}/driver.env: $([[ -f $DRV/driver.env ]] && echo "lacks LIVE_MESSAGING=1 or SEND=tool" || echo missing)"; fi
-  undoc=(); for op in launch status tail stop advisor-probe preflight; do grep -E '^#' $DRV/driver.env 2>/dev/null | grep -q -- "$op" || undoc+=$op; done
-  (( $#undoc )) && fail "D2 driver.env header documents every operation" "no header comment mentions: ${undoc[*]}" || pass "D2 driver.env header documents every operation"
+  undoc=(); for op in launch status tail stop send advisor-probe preflight; do grep -E '^### ' ${DRV:h}/CONTRACT.md 2>/dev/null | grep -q -- "$op" || undoc+=$op; done
+  (( $#undoc )) && fail "D2 CONTRACT.md documents every operation" "no section heading mentions: ${undoc[*]}" || pass "D2 CONTRACT.md documents every operation"
 }
 
 # ======================================================================================================================
@@ -2117,7 +2118,7 @@ want codex-shape && {
   done
   (( $#bad )) && fail "CODEX D2 wrong arity exits 5 with the usage line" "${(j:; :)bad}" || pass "CODEX D2 wrong arity exits 5 with the usage line"
   grep -rEn 'dangerously-bypass|danger-full-access' $CDRV >/dev/null 2>&1 && fail "CODEX D2 the driver never names a bypass or danger-full-access" "$(grep -rEn 'dangerously-bypass|danger-full-access' $CDRV | head -3)" || pass "CODEX D2 the driver never names a bypass or danger-full-access"
-  grep -qE '^#.*TEAMMATE_EFFORT' $DRV/driver.env && pass "CODEX D2 the Claude driver.env documents TEAMMATE_EFFORT as an optional input" || fail "CODEX D2 the Claude driver.env documents TEAMMATE_EFFORT as an optional input" "no comment line in ${DRV#$ROOT/}/driver.env mentions TEAMMATE_EFFORT"
+  grep -qE '^Optional input:.*TEAMMATE_EFFORT' ${DRV:h}/CONTRACT.md && pass "CODEX D2 CONTRACT.md documents TEAMMATE_EFFORT as an optional input" || fail "CODEX D2 CONTRACT.md documents TEAMMATE_EFFORT as an optional input" "no 'Optional input:' paragraph in ${DRV:h}/CONTRACT.md mentions TEAMMATE_EFFORT"
 }
 
 # ======================================================================================================================
@@ -2294,8 +2295,8 @@ want u4-watch-ci && {
 # LINT: the checks CI runs on shell files, including the files its shebang search misses.
 # ======================================================================================================================
 bad=(); sbad=()
-# Like CI: zsh -n on zsh scripts and on files with no shebang (team-env.zsh, driver.env); shellcheck on bash and sh scripts.
-for f in $(find $shared -type f | LC_ALL=C sort) $ROOT/tests/run.sh; do
+# Like CI: zsh -n on zsh scripts and on files with no shebang (team-env.zsh, driver.env), Markdown excepted; shellcheck on bash and sh scripts.
+for f in $(find $shared -type f ! -name '*.md' | LC_ALL=C sort) $ROOT/tests/run.sh; do
   first=$(head -1 $f)
   case $first in
     '#!/usr/bin/env bash'*|'#!/bin/bash'*|'#!/bin/sh'*) command -v shellcheck >/dev/null && { shellcheck $f >/dev/null 2>&1 || sbad+=${f#$ROOT/}; } ;;

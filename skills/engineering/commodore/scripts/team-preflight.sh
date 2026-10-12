@@ -46,6 +46,7 @@ if [[ $MODE == stack ]]; then
 fi
 # The built-in advisor comes on silently or not at all in a background session, so probe it once per distinct
 # teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment).
+# ADVISOR_PROBE is a test seam: an executable that replaces advisor-probe.sh, called as `<probe> <run-dir> <model>`.
 if [[ $ADVISOR == none ]]; then
   ok "advisor check skipped (ADVISOR=none)"
 elif [[ -z $harness_ok ]]; then

@@ -149,7 +149,6 @@ HARNESS=$HARNESS
 # The repository (any checkout of it). Nobody works here: every unit gets its own worktree
 # (scripts/unit-worktree.sh), and teammates start in their unit's worktree.
 REPO=$WT
-WORKTREE=$WT
 WORKTREES_DIR=$WT/.claude/worktrees
 SKILL=$SKILL
 SKILLS_DIR=${SKILL:h}

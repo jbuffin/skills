@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: status <team-dir>   (see ../claude/driver.env)
+# usage: status <team-dir>   (see ../CONTRACT.md)
 [[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh

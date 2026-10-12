@@ -25,7 +25,7 @@ done
 D=${1:A}; NAME=$2; W=$3; P=${${4:-$1/prompts/$2.md}:A}
 source ${0:A:h}/team-env.zsh
 valid_name $NAME
-# Choose the model before anything else, so a refused launch never calls claude.
+# Choose the model before anything else, so a refused launch never calls the driver.
 if [[ -n $ROLE ]]; then
   valid_name $ROLE
   ROLE_VAR=MODEL_${${(U)ROLE}//[-.]/_}

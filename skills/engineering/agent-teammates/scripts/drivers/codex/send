@@ -1,10 +1,11 @@
 #!/bin/zsh
-# usage: send <team-dir> <session-id> <message-file>   (see driver.env)
+# usage: send <team-dir> <session-id> <message-file>   (see ../CONTRACT.md)
 [[ $# -eq 3 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; MSG=${3:A}
 DRVDIR=${0:A:h}
 source ${DRVDIR:h:h}/team-env.zsh
 source $DRVDIR/lib.zsh
+command -v codex >/dev/null || { echo "codex is not on PATH"; exit 1; }
 state_load $2 || { echo "no Codex session $2 under $D"; exit 1; }
 [[ -s $MSG ]] || { echo "message file $MSG is missing or empty"; exit 1; }
 turn_alive && { echo "session $2 ($NAME) is still running its turn; send again when it has finished"; exit 1; }

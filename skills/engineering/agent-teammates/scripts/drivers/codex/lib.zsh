@@ -1,8 +1,8 @@
 # Sourced by the Codex driver's operations, with D set to the team directory and DRVDIR to this directory.
 # A session's state is <team-dir>/codex-<thread-id>.state: zsh assignments for NAME THREAD PID PGID MODEL EFFORT RO
-# WORKDIR EVENTS ERRLOG PERM CXHOME STOPPED. PID is the process-group leader of the session's latest turn (codex itself
+# WORKDIR EVENTS ERRLOG CXHOME STOPPED. PID is the process-group leader of the session's latest turn (codex itself
 # for a writer, the `turn` wrapper for a read-only role); PGID equals it. EVENTS is the --json log of every turn.
-STATE_VARS=(NAME THREAD PID PGID MODEL EFFORT RO WORKDIR EVENTS ERRLOG PERM CXHOME STOPPED)
+STATE_VARS=(NAME THREAD PID PGID MODEL EFFORT RO WORKDIR EVENTS ERRLOG CXHOME STOPPED)
 state_file() { print -r -- $D/codex-$1.state; }
 state_save() {
   local f=$(state_file $THREAD) v
@@ -26,7 +26,7 @@ turn_alive() {
 rollout_of() { print -r -- $CXHOME/sessions/*/*/*/rollout-*-$THREAD.jsonl(NOm[1]); }
 # toml_str <value>: a TOML basic string, for -c values.
 toml_str() { print -rn -- "\"${${1//\\/\\\\}//\"/\\\"}\""; }
-# sandbox_args launch|resume: sets SANDBOX to codex's sandbox flags for the role (RO, D, PERM are set). `exec resume` takes
+# sandbox_args launch|resume: sets SANDBOX to codex's sandbox flags for the role (RO and D are set). `exec resume` takes
 # no -s, so a resumed turn passes the same choice as -c config. A read-only role gets --ignore-rules: an allow rule runs its
 # command outside the sandbox, which would let it write and reach the network.
 sandbox_args() {

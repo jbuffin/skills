@@ -174,4 +174,4 @@ Close teammates with `close-teammate.sh`. It stops the turn's process group and 
 There is no `NO_BG` on Codex: a launch exits 1 or 5, never 2, so the in-process subagent fallback in `SKILL.md` doesn't apply.
 
 - Exit `5` means the launch was refused. Handle it as "Launch, re-task, close" says.
-- Exit `1` means codex printed no `thread.started`. Retry the launch once. If it fails again, stop that unit and ask the engineer, attaching `<team-dir>/codex-<name>.<n>.err` (the launch output names it). Don't do the teammate's role yourself: that breaks the independence the roles exist for.
+- Exit `1` with "codex is not on PATH" means the CLI is missing: stop and ask the engineer to install it. Any other exit `1` means codex printed no `thread.started`. Retry the launch once. If it fails again, stop that unit and ask the engineer, attaching `<team-dir>/codex-<name>.<n>.err` (the launch output names it). Don't do the teammate's role yourself: that breaks the independence the roles exist for.

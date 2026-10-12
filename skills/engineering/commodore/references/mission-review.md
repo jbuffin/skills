@@ -14,7 +14,7 @@ Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktrees below in place of st
 
 1. Read the PR: `gh pr view <n> --json number,url,title,body,author,baseRefName,baseRefOid,headRefOid,isCrossRepository,closingIssuesReferences`. Record the PR URL, `baseRefOid` and `headRefOid` in `state.md` under `## Units`. Those two SHAs are the reviewed range for the whole run. The PR's `url` names its base repository, `<owner>/<repo>`.
 2. Check the repositories against that base repository, and record the results in `state.md`:
-   - Clone: `<repo>` must be a local clone of the base repository, or of a fork of it. When it isn't, ask the engineer for the path to a clone, or for leave to clone it, before step 4, and set `REPO`, `WORKTREE` and `WORKTREES_DIR` in `team.env` to that clone. Never fetch another repository's `pull/<n>/head` into an unrelated checkout.
+   - Clone: `<repo>` must be a local clone of the base repository, or of a fork of it. When it isn't, ask the engineer for the path to a clone, or for leave to clone it, before step 4, and set `REPO` and `WORKTREES_DIR` in `team.env` to that clone. Never fetch another repository's `pull/<n>/head` into an unrelated checkout.
    - Fetch: when `git -C <repo> remote get-url origin` isn't the base repository, use the base repository's URL in place of `origin` in step 4's fetch.
    - Post: when `gh repo view --json nameWithOwner` isn't the base repository, write the base repository's `<owner>/<repo>` in place of `{owner}/{repo}` in phase 3.
 3. Pick the source of truth: the issue in `closingIssuesReferences`, or a spec or design the PR body links. If there is none, the PR description. Record in `state.md` which one you used and why; the briefs and the report to the engineer name it too.

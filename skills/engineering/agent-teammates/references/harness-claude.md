@@ -1,6 +1,6 @@
 # Teammates on Claude Code
 
-Read this when the run's `HARNESS` is `claude`, which is the default when `team.env` has no `HARNESS` line. This harness declares `LIVE_MESSAGING=1` and `SEND=tool` in `scripts/drivers/claude/driver.env`: a live teammate takes new work by message, and sending is a tool call, not a script.
+Read this when the run's `HARNESS` is `claude`, which is the default when `team.env` has no `HARNESS` line. This harness declares `LIVE_MESSAGING=1` and `SEND=tool` in `scripts/drivers/claude/driver.env`: a live teammate takes new work by message, and sending is a tool call, not a script. The operations and exit codes every driver follows are in `scripts/drivers/CONTRACT.md`.
 
 ## What a teammate is
 

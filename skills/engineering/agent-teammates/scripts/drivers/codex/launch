@@ -1,15 +1,16 @@
 #!/bin/zsh
-# usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see driver.env)
+# usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see ../CONTRACT.md)
 [[ $# -eq 6 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
 DRVDIR=${0:A:h}
 source ${DRVDIR:h:h}/team-env.zsh
 source $DRVDIR/lib.zsh
-WORKDIR=$W; MODEL=$CHOSEN   # team-env.zsh sets MODEL to the run's default
+command -v codex >/dev/null || { echo "codex is not on PATH"; exit 1; }
+WORKDIR=$W; MODEL=$CHOSEN  # team-env.zsh sets MODEL to the run's default
 live_named $NAME && { echo "a live Codex session is already named $NAME; close it first or pick another name"; exit 5; }
 
-# TEAMMATE_EFFORT is the role's EFFORT_<ROLE> (empty: pass none). PERMISSION_MODE is recorded for `send`, never mapped.
-EFFORT=$TEAMMATE_EFFORT; PERM=$PERMISSION_MODE; CXHOME=${CODEX_HOME:-$HOME/.codex}; STOPPED=; THREAD=
+# TEAMMATE_EFFORT is the role's EFFORT_<ROLE> (empty: pass none).
+EFFORT=$TEAMMATE_EFFORT; CXHOME=${CODEX_HOME:-$HOME/.codex}; STOPPED=; THREAD=
 EVENTS=$D/codex-$NAME.$$.events; ERRLOG=$D/codex-$NAME.$$.err
 : > $EVENTS; : > $ERRLOG
 sandbox_args launch
