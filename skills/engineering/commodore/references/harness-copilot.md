@@ -14,7 +14,7 @@ Launch every teammate with `--role <role>`. A fresh `team.env` from `team-init.s
 
 Efforts default to empty. Set one in the profile only for a model that takes it; see the `EFFORT_<ROLE>` row in agent-teammates' settings. `MODEL` in `team.env` is `claude-sonnet-5.5`, the fallback for a launch without `--role`.
 
-A launch that fails to start has no fallback on Copilot: there's no `NO_BG` and no in-process subagent. agent-teammates' harness reference says what to do on exit 1.
+When a launch fails, see agent-teammates' "Fallback when a launch fails".
 
 ## The capability rule on Copilot
 
@@ -27,7 +27,6 @@ There is no advisor on Copilot. The preflight prints `ADVISOR n/a (copilot)`, an
 - Drop "Asking the advisor" from `<run>/brief-common.md`, and drop the contract's "If your harness gives you an advisor…" line.
 - Teammates write `none` under `## Advisor consults`. Don't expect consults, and don't read their absence as a brief problem.
 - The advisor bullet in "Bubbling questions up" doesn't apply. Sort technical questions with the rest.
-- Skip "When the advisor is off". It never applies.
 
 ## Who is live
 
@@ -35,15 +34,15 @@ Run `<teammates>/drivers/copilot/status <run>` when you resume and before any pu
 
 ## Fix rounds
 
-An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round, as on any harness.
+An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round.
 
-Before you act on a read-only teammate's report, read agent-teammates' "Security caveats".
+A read-only teammate's surprising report stays unverified until `teammate-tail.sh` shows the turn that produced it.
 
 Run the watchdog in its bounded mode, as agent-teammates' "Run the watchdog" says. `DONE` can arrive before `status` reads `done`, so check `status` before you re-task.
 
 ## Sessions and closing
 
-Sessions stay in `~/.copilot/session-state/`, stopping keeps them, and Copilot has no delete command. Close teammates with `close-teammate.sh`, and never run in its place any of the commands agent-teammates' "Closing" lists. Don't delete a session by hand.
+Close teammates with `close-teammate.sh`. Sessions stay in `~/.copilot/session-state/`. See agent-teammates' "Closing".
 
 ## Where commodore says X, on Copilot do Y
 
@@ -59,4 +58,4 @@ The rest of the skill is written for Claude Code. On Copilot, apply these.
 
 Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Copilot the flag set follows `--read-only`, not the role. Their shell may run `gh pr view`, `gh pr diff` and `gh issue view`, plus `git log`, `git show`, `git diff` and `git status`, with any arguments, so `--output=<file>` writes a file (see "Security caveats" in agent-teammates' reference). agent-teammates' "How a read-only teammate reports" covers their report. Give them no `.proof`.
 
-`--read-only` on Copilot is a guardrail against mistakes, not a boundary, and a writer runs as the engineer. Read agent-teammates' "Security caveats" and put them to the engineer in the decision batch before an unattended run, then record the answer in `state.md`. Tell the engineer in the decision batch that until Copilot's OS sandbox (#49) lands, read-only Copilot teammates should read only text from the engineer or trusted people. That rules out the review mission (someone else's PR) and the PR-feedback mission's triager, which reads other people's comments, review bodies and bot output: they read it with a shell in reach that can write any path. The target steward is a writer that runs the PR's code.
+Before an unattended run on Copilot, tell the engineer in the decision batch that until Copilot's OS sandbox (#49) lands, any teammate that reads text from people other than the engineer is unsafe: read-only teammates can write any path, and writers run as the engineer. That rules out the review mission (someone else's PR) and the PR-feedback mission's triager and fix units on comments from untrusted people. Record the answer in `state.md`. Agent-teammates' "Security caveats" has the detail.
