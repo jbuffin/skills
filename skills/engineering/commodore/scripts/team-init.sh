@@ -85,6 +85,33 @@ MODEL_SCRIBE=gpt-6-luna
 EFFORT_SCRIBE=medium
 EOF
 ) ;;
+  copilot) HARNESS_SETTINGS=$(cat <<'EOF'
+# Teammates are Copilot CLI sessions (agent-teammates), one turn at a time. Copilot teammates have no viewer panes.
+VIEWER=none
+MODEL=claude-sonnet-5.5
+# Fill from the profile:
+# MODEL is the fallback for a teammate launched without --role. REQUIRE_ROLE=1 makes every launch pass --role or --model.
+# MODEL_<ROLE> is the model for --role <role>; an empty one refuses that launch.
+# EFFORT_<ROLE> is the reasoning effort for --role <role>; empty passes no --reasoning-effort, which some models reject.
+REQUIRE_ROLE=1
+MODEL_BRIEF_CHECKER=claude-opus-5.5
+EFFORT_BRIEF_CHECKER=
+MODEL_TEST_WRITER=claude-sonnet-5.5
+EFFORT_TEST_WRITER=
+MODEL_IMPLEMENTER=claude-sonnet-5.5
+EFFORT_IMPLEMENTER=
+MODEL_REVIEWER=claude-opus-5.5
+EFFORT_REVIEWER=
+MODEL_SECURITY_REVIEWER=claude-opus-5.5
+EFFORT_SECURITY_REVIEWER=
+MODEL_TRIAGER=claude-opus-5.5
+EFFORT_TRIAGER=
+MODEL_TARGET_STEWARD=claude-sonnet-5.5
+EFFORT_TARGET_STEWARD=
+MODEL_SCRIBE=claude-haiku-5.5
+EFFORT_SCRIBE=
+EOF
+) ;;
   *) HARNESS_SETTINGS=$(cat <<EOF
 # Teammates are Claude Code background sessions (agent-teammates). VIEWER: none | cmux | tmux; optional panes that
 # attach to each teammate; closing one never stops it.

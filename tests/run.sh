@@ -568,7 +568,7 @@ want watchdog-retask && {
 
 # ======================================================================================================================
 # CP: the Copilot driver (#40), driven through the shared scripts against tests/bin/copilot, with HARNESS=copilot and
-# MODEL_<ROLE> written into team.env (detection and team-init defaults are #63). Every `copilot -p` call lands in
+# MODEL_<ROLE> written into team.env (the cp-effort scenario also pins reasoning effort, #63). Every `copilot -p` call lands in
 # $FAKE_DIR/copilot.call.<n> (cwd first, then argv, NUL-separated) and is parsed into flag -> values, so the checks accept
 # `--f v`, `--f=v`, variadic and comma-separated tool lists. The fake exits on its own, stays alive until killed
 # (FAKE_COPILOT_MODE=stay), or prints nothing (silent). Everything the driver does after `launch` returns is
@@ -1070,7 +1070,86 @@ cpwant cp-round2 && {
   cpverdict "CP a read-only run that exits non-zero writes no report and no marker"
 }
 
-# ---- AC7: ADVISOR n/a (copilot). detect-harness.sh knows only claude (#63), so a scratch tree whose detection says copilot.
+# ---- Reasoning effort (#63): TEAMMATE_EFFORT from EFFORT_<ROLE> is recorded at launch and passed as one --reasoning-effort
+# argv element, in the fixed head before the variadic tool lists, on launch and on every resume; empty means no flag.
+cp_eff_runs() {  # cp_eff_runs <name>: sets L (the launch call) and R (the resume call) for a teammate, by its session id
+  local id=$(cp_id $1) c; L=; R=; cp_load
+  for c in $RUNS; do cparse $c; [[ ${F[--session-id]} == $id ]] || continue; [[ -z $L ]] && L=$c || R=$c; done
+}
+cp_eff_of() { cparse $1; print -r -- "${F[--reasoning-effort]-<absent>}"; }
+cpwant cp-effort && {
+  cpmk cp-effort EFFORT_REVIEWER=high EFFORT_IMPLEMENTER=medium
+  txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 2
+  # A later team.env edit and a caller's TEAMMATE_EFFORT must not change a resume: send reuses what launch recorded.
+  print -r -- "EFFORT_REVIEWER=low" >> $D/team.env
+  txrun TEAMMATE_EFFORT=low $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
+  await 10 cp_settled 3
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1"
+  await 10 cp_settled 4
+  reap_fakes
+  P=()
+  cp_eff_runs t1; t1l=$L; t1r=$R
+  cp_eff_runs w1; w1l=$L; w1r=$R
+  [[ -n $t1l && -n $t1r && -n $w1l && -n $w1r ]] || P+="want a launch and a resume call for each of t1 and w1, matched by session id"
+  [[ -n $t1l ]] && [[ $(cp_eff_of $t1l) == high ]] || P+="t1 launch: --reasoning-effort is '$([[ -n $t1l ]] && cp_eff_of $t1l)', want high (EFFORT_REVIEWER)"
+  [[ -n $w1l ]] && [[ $(cp_eff_of $w1l) == medium ]] || P+="w1 launch: --reasoning-effort is '$([[ -n $w1l ]] && cp_eff_of $w1l)', want medium (EFFORT_IMPLEMENTER)"
+  cpverdict "CP effort: a launch passes --reasoning-effort <effort> once, for a read-only and a writer teammate"
+
+  P=()
+  [[ -n $t1r ]] && [[ $(cp_eff_of $t1r) == high ]] || P+="t1 resume: --reasoning-effort is '$([[ -n $t1r ]] && cp_eff_of $t1r)', want high (recorded at launch, not the later EFFORT_REVIEWER=low or TEAMMATE_EFFORT=low)"
+  [[ -n $w1r ]] && [[ $(cp_eff_of $w1r) == medium ]] || P+="w1 resume: --reasoning-effort is '$([[ -n $w1r ]] && cp_eff_of $w1r)', want medium (recorded at launch)"
+  cpverdict "CP effort: send reuses the effort recorded at launch on a resume, read-only and writer"
+
+  P=()
+  for c in $t1l $t1r $w1l $w1r; do
+    cparse $c; ai=${CARGS[(i)--reasoning-effort]}; av=${CARGS[(i)--available-tools]}
+    if (( ai > $#CARGS )); then P+="${c:t}: no --reasoning-effort in argv"
+    elif (( ai > av )); then P+="${c:t}: --reasoning-effort (argv index $ai) isn't in the fixed head before --available-tools (index $av)"; fi
+  done
+  [[ -n $t1l ]] || P+="no launch call to check"
+  cpverdict "CP effort: --reasoning-effort sits in the fixed head, before the variadic tool lists"
+}
+
+cpwant cp-effort-empty && {
+  cpmk cp-effort-empty EFFORT_REVIEWER= EFFORT_IMPLEMENTER=
+  txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 2
+  txrun $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
+  await 10 cp_settled 3
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1"
+  await 10 cp_settled 4
+  reap_fakes; cp_load
+  P=()
+  (( $#RUNS == 4 )) || P+="want 4 copilot -p calls (a launch and a resume each), got $#RUNS"
+  for c in $RUNS; do cparse $c
+    hasf --reasoning-effort && P+="${c:t}: passes --reasoning-effort (${F[--reasoning-effort]}) although the effort is empty"
+    [[ ${(j: :)CARGS} == *reasoning* ]] && P+="${c:t}: argv mentions reasoning: ${(j: :)CARGS[1,12]}"
+  done
+  cpverdict "CP effort: an empty effort passes no --reasoning-effort on launch or resume"
+}
+
+cpwant cp-effort-hostile && {
+  cpmk cp-effort-hostile "EFFORT_REVIEWER='a b \$(touch effort-pwned) \"q\"'"
+  txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  await 10 cp_settled 1
+  txrun $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
+  await 10 cp_settled 2
+  reap_fakes
+  cp_eff_runs t1
+  P=()
+  want="a b \$(touch effort-pwned) \"q\""
+  for c in $L $R; do [[ $(cp_eff_of $c) == $want ]] || P+="${c:t}: --reasoning-effort is '$(cp_eff_of $c)', want the one element '$want'"; done
+  [[ -z $L ]] && P+="no launch call"
+  # The payload's path is relative, so an evaluation would create it in whichever directory the script ran in.
+  hit=$(find $SB $PWD -name effort-pwned 2>/dev/null)
+  [[ -n $hit ]] && P+="the effort was evaluated: ${hit//$'\n'/ } exists"
+  cpverdict "CP effort: an effort with spaces and shell syntax is one argv element and never evaluated"
+}
+
+# ---- AC7: ADVISOR n/a (copilot). A scratch tree whose detection says copilot (the real signal is COPILOT_CLI=1, checked by C3).
 cpwant cp-ac7 && {
   cp -R $SKILLS $SB/src-cop; printf '#!/bin/sh\necho copilot\n' > $SB/src-cop/agent-teammates/scripts/detect-harness.sh
   TREE=$SB/src-cop; cpmk cp-ac7; TREE=$SKILLS; mk_repo
@@ -1150,6 +1229,48 @@ want c3 && {
   sc c3-both; xrun CLAUDECODE=1 CODEX_THREAD_ID=019e-test $CM/team-init.sh run1 $SC/repo
   if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"more than one harness detected"* ]]; then pass "C3 CLAUDECODE=1 and CODEX_THREAD_ID: exit 7, more than one harness, no run"
   else fail "C3 CLAUDECODE=1 and CODEX_THREAD_ID: exit 7, more than one harness, no run" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
+
+  # Copilot detection (#63): COPILOT_CLI=1 is the signal. Copilot passes its parent's environment through, so a Copilot
+  # started from a Claude Code shell sets both, and detection names both rather than picking one.
+  sc c3-det-copilot; xrun COPILOT_CLI=1 $AT/detect-harness.sh
+  [[ $RC == 0 && $(<$SC/out) == copilot ]] && pass "C3 detect-harness.sh with COPILOT_CLI=1 prints copilot and nothing else" || fail "C3 detect-harness.sh with COPILOT_CLI=1 prints copilot and nothing else" "exit $RC; stdout: $(head -c 200 $SC/out | tr '\n' '|') (want 'copilot')"
+  sc c3-det-copilot-claude; xrun COPILOT_CLI=1 CLAUDECODE=1 $AT/detect-harness.sh
+  [[ $RC == 0 && ${(j:,:)${(o)${(f)"$(<$SC/out)"}}} == claude,copilot ]] && pass "C3 detect-harness.sh with COPILOT_CLI=1 and CLAUDECODE=1 prints both claude and copilot" || fail "C3 detect-harness.sh with COPILOT_CLI=1 and CLAUDECODE=1 prints both claude and copilot" "exit $RC; stdout: $(head -c 200 $SC/out | tr '\n' '|') (want the two lines claude and copilot, either order)"
+  sc c3-det-copilot-off; xrun COPILOT_CLI=0 $AT/detect-harness.sh
+  [[ $RC == 0 && $(<$SC/out) != *copilot* ]] && pass "C3 detect-harness.sh with COPILOT_CLI=0 doesn't print copilot" || fail "C3 detect-harness.sh with COPILOT_CLI=0 doesn't print copilot" "stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+
+  sc c3-copilot-detected; xrun COPILOT_CLI=1 $CM/team-init.sh run1 $SC/repo
+  n=$(grep -c '^HARNESS=copilot$' $SC/teams/run1/team.env 2>/dev/null)
+  [[ $RC == 0 && $n == 1 ]] && pass "C3 COPILOT_CLI=1 writes HARNESS=copilot once" || fail "C3 COPILOT_CLI=1 writes HARNESS=copilot once" "exit $RC, ${n:-0} HARNESS=copilot lines in team.env (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"
+
+  sc c3-copilot-claude; xrun COPILOT_CLI=1 CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo
+  if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"more than one harness detected"* ]]; then pass "C3 COPILOT_CLI=1 and CLAUDECODE=1: exit 7, more than one harness, no run"
+  else fail "C3 COPILOT_CLI=1 and CLAUDECODE=1: exit 7, more than one harness, no run" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
+
+  # The Copilot team.env defaults. Driven from the HARNESS=copilot preset, which works today, so these fail on the missing
+  # defaults and not on the missing detection (the COPILOT_CLI=1 checks above cover that).
+  sc c3-copilot-defaults; xrun HARNESS=copilot $CM/team-init.sh run1 $SC/repo
+  E=$SC/teams/run1/team.env
+  miss=()
+  for r in IMPLEMENTER TEST_WRITER TARGET_STEWARD; do grep -qx -- MODEL_$r=claude-sonnet-5.5 $E 2>/dev/null || miss+=(MODEL_$r=claude-sonnet-5.5); done
+  for r in REVIEWER SECURITY_REVIEWER BRIEF_CHECKER TRIAGER; do grep -qx -- MODEL_$r=claude-opus-5.5 $E 2>/dev/null || miss+=(MODEL_$r=claude-opus-5.5); done
+  grep -qx -- MODEL_SCRIBE=claude-haiku-5.5 $E 2>/dev/null || miss+=(MODEL_SCRIBE=claude-haiku-5.5)
+  [[ -z $miss ]] && pass "C3 Copilot team.env has every MODEL_<ROLE> default" || fail "C3 Copilot team.env has every MODEL_<ROLE> default" "missing lines: ${miss[*]}"
+  miss=()
+  for r in IMPLEMENTER TEST_WRITER TARGET_STEWARD REVIEWER SECURITY_REVIEWER BRIEF_CHECKER TRIAGER SCRIBE; do grep -qx -- EFFORT_$r= $E 2>/dev/null || miss+=(EFFORT_$r=); done
+  [[ -z $miss ]] && pass "C3 Copilot team.env has every EFFORT_<ROLE> present and empty" || fail "C3 Copilot team.env has every EFFORT_<ROLE> present and empty" "missing or non-empty: ${miss[*]}; lines: $(grep '^EFFORT_' $E 2>/dev/null | head -3 | tr '\n' ' ')"
+  miss=()
+  for kv in MODEL=claude-sonnet-5.5 REQUIRE_ROLE=1 VIEWER=none; do grep -qx -- $kv $E 2>/dev/null || miss+=($kv); done
+  [[ -z $miss ]] && pass "C3 Copilot team.env pins MODEL=claude-sonnet-5.5, REQUIRE_ROLE=1 and VIEWER=none" || fail "C3 Copilot team.env pins MODEL=claude-sonnet-5.5, REQUIRE_ROLE=1 and VIEWER=none" "missing lines: ${miss[*]}; MODEL/REQUIRE_ROLE/VIEWER lines: $(grep -E '^(MODEL|REQUIRE_ROLE|VIEWER)=' $E 2>/dev/null | tr '\n' ' ')"
+  bad=$(grep -nE '^(ADVISOR|PERMISSION_MODE|CLAUDE_CONFIG_DIR|CMUX|CMUX_WORKSPACE|CMUX_SURFACE)=' $E 2>/dev/null)
+  [[ -f $E && -z $bad ]] && pass "C3 Copilot team.env has no ADVISOR, PERMISSION_MODE, CLAUDE_CONFIG_DIR or CMUX line" || fail "C3 Copilot team.env has no ADVISOR, PERMISSION_MODE, CLAUDE_CONFIG_DIR or CMUX line" "${bad:-no team.env written (exit $RC)}"
+  [[ -f $E ]] && ! grep -qiE 'Claude Code|cmux' $E && pass "C3 Copilot team.env doesn't mention Claude Code or cmux" || fail "C3 Copilot team.env doesn't mention Claude Code or cmux" "${$(grep -niE 'Claude Code|cmux' $E 2>/dev/null | head -3):-no team.env written (exit $RC)}"
+
+  sc c3-copilot-preflight; xrun COPILOT_CLI=1 $CM/team-init.sh run1 $SC/repo
+  D=$SC/teams/run1
+  xrun COPILOT_CLI=1 $CM/team-preflight.sh $D
+  if grep -q '^OK    ADVISOR n/a (copilot)' $SC/out && [[ -f $D/team.env ]] && ! grep -q '^ADVISOR=' $D/team.env; then pass "C3 team-preflight on a Copilot team.env prints OK ADVISOR n/a (copilot), no ADVISOR= line"
+  else fail "C3 team-preflight on a Copilot team.env prints OK ADVISOR n/a (copilot), no ADVISOR= line" "team-init exit before: see team.env at $D; ADVISOR lines in output: $(grep ADVISOR $SC/out | head -3 | tr '\n' '|'); ADVISOR= lines in team.env: $(grep -c '^ADVISOR=' $D/team.env 2>/dev/null)"; fi
 
   sc c3-cmux-codex; xrun CMUX_CODEX_HOOK=1 CMUX_CODEX_SESSION=x $CM/team-init.sh run1 $SC/repo
   if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"no supported harness detected"* ]]; then pass "C3 only CMUX_CODEX_* set detects nothing"

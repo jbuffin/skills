@@ -12,7 +12,8 @@ done
 ID=$(cp_uuid)
 [[ -z $ID ]] && { echo "couldn't generate a session id (uuidgen failed)"; exit 1; }
 F=$(cp_state $D $ID)
-printf '%s\n' "name=$NAME" "workdir=${W:A}" "model=$CHOSEN" "ro=$RO" > $F
+# TEAMMATE_EFFORT is the role's EFFORT_<ROLE> (empty: pass none); recorded so `send` reuses it on every resume.
+printf '%s\n' "name=$NAME" "workdir=${W:A}" "model=$CHOSEN" "effort=$TEAMMATE_EFFORT" "ro=$RO" > $F
 # A read-only teammate can't write files; the driver writes its report from its final message.
 MSG=
 [[ $RO == 1 ]] && MSG=" Your final message is your report: write no files; the driver saves it."
