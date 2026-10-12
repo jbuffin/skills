@@ -19,7 +19,7 @@ unset HARNESS
 DRIVER=${0:A:h}/drivers/$HARNESS
 : ${CMUX:=${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}}
 REG=$D/teammates.tsv     # name id tasked-epoch|closed viewer-ref|- workdir
-mkdir -p $D/reports; touch $REG
+mkdir -p $D/reports; [[ -e $REG ]] || touch $REG 2>/dev/null   # quiet in a writer's sandbox, which can't write here
 # Run a driver operation: drv <op> <args>. The driver is chosen by HARNESS in team.env.
 # A missing operation returns 9 (no operation can use it as its own exit code) with a message on stderr; the caller decides what to do.
 drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $HARNESS has no $op operation ($DRIVER)" >&2; return 9; }; $DRIVER/$op "$@"; }

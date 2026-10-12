@@ -1,0 +1,42 @@
+#!/bin/zsh
+# usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see driver.env)
+[[ $# -eq 6 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
+DRVDIR=${0:A:h}
+source ${DRVDIR:h:h}/team-env.zsh
+source $DRVDIR/lib.zsh
+WORKDIR=$W; MODEL=$CHOSEN   # team-env.zsh sets MODEL to the run's default
+live_named $NAME && { echo "a live Codex session is already named $NAME; close it first or pick another name"; exit 5; }
+
+# TEAMMATE_EFFORT is the role's EFFORT_<ROLE> (empty: pass none). PERMISSION_MODE is recorded for `send`, never mapped.
+EFFORT=$TEAMMATE_EFFORT; PERM=$PERMISSION_MODE; CXHOME=${CODEX_HOME:-$HOME/.codex}; STOPPED=; THREAD=
+EVENTS=$D/codex-$NAME.$$.events; ERRLOG=$D/codex-$NAME.$$.err
+: > $EVENTS; : > $ERRLOG
+sandbox_args launch
+ARGS=(exec --json --skip-git-repo-check -C $W $SANDBOX -m $MODEL)
+[[ -n $EFFORT ]] && ARGS+=(-c "model_reasoning_effort=$(toml_str $EFFORT)")
+PROMPT="You are teammate $NAME. Read $P and do exactly what it says."
+# A read-only role can't write its report: the driver saves its final message as the report (-o).
+[[ -n $RO ]] && PROMPT+=" Your sandbox is read-only: you can't write files, so don't try to write a report or marker; your final message is your report."
+ARGS+=("$PROMPT")
+turn_cmd $ARGS
+bg_start $W /dev/null $EVENTS $ERRLOG $TURN
+PID=$BGPID; PGID=$BGPID
+# Wait for thread.started, never for the turn.
+read_thread() { THREAD=$(jq -R -r 'fromjson? | select(.type == "thread.started") | .thread_id' $EVENTS 2>/dev/null | head -1); [[ $THREAD =~ '^[0-9a-f-]{36}$' ]] || THREAD=; }
+i=0
+while (( i++ < 100 )); do
+  read_thread
+  [[ -n $THREAD ]] && break
+  kill -0 $PID 2>/dev/null || { read_thread; break; }
+  /bin/sleep 0.2
+done
+if [[ -z $THREAD ]]; then
+  [[ $(ps -o pgid= -p $PID 2>/dev/null | tr -d ' ') == $PID ]] && kill -KILL -- -$PID 2>/dev/null
+  echo "codex printed no thread.started for $NAME; it was stopped. Its stderr is kept in $ERRLOG:"
+  grep -v 'ERROR rmcp' $ERRLOG 2>/dev/null | head -5
+  [[ -s $EVENTS ]] || rm -f $EVENTS
+  exit 1
+fi
+state_save
+echo "$THREAD -"

@@ -1,9 +1,9 @@
 #!/bin/zsh
 # usage: tests/run.sh [--record] [name-filter]
 # Deterministic checks for the team skills' harness seam (agent-teammates + commodore). Exits 0 only when every check
-# passes. No network, no real `claude`: tests/bin holds fakes (claude, date, sleep, tmux, cmux, and a stat shim on
-# Linux) that go first on PATH, and every script under test runs under `env -i` with an explicit environment inside a
-# scratch directory.
+# passes. No network, no real `claude` or `codex`: tests/bin holds fakes (claude, codex, date, sleep, tmux, cmux, and a
+# stat shim on Linux) that go first on PATH, and every script under test runs under `env -i` with an explicit
+# environment inside a scratch directory.
 #
 #   D4  The scripts' behaviour matches goldens in tests/golden, recorded from the reference commit (dfb39c8) with
 #       `tests/run.sh --record`. A golden holds the fake claude's argv log (with cwd), stdout, exit code, and the
@@ -14,6 +14,8 @@
 #   C1  No shared script calls `claude` or reads Claude transcript paths.
 #   C3  team-init detects the harness. C4  team-preflight checks HARNESS against the environment.
 #   D1  The advisor operation and the `ADVISOR n/a (<harness>)` path. D2  The Claude driver's shape.
+#   CODEX  The Codex driver (turn-based): launch, send/retask, status, tail, stop, preflight, the read-only marker, effort
+#       plumbing and the driver's shape. Assertion style (no goldens); `tests/run.sh codex` runs just these.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -154,6 +156,8 @@ sc sanity
 if [[ -z $RECORD ]]; then
   got=$(env -i PATH=$SANDBOX_PATH /bin/sh -c 'command -v claude')
   [[ $got == $SB/bin/claude ]] && pass "SANDBOX claude resolves to the fake" || fail "SANDBOX claude resolves to the fake" "got '$got'"
+  got=$(env -i PATH=$SANDBOX_PATH /bin/sh -c 'command -v codex')
+  [[ $got == $SB/bin/codex ]] && pass "SANDBOX codex resolves to the fake" || fail "SANDBOX codex resolves to the fake" "got '$got'"
 fi
 
 # ======================================================================================================================
@@ -830,6 +834,638 @@ want c6 && {
   done
   d=$(sed -n 's/^description: //p' $ATD/SKILL.md | head -1)
   [[ $d == *unattended* ]] && pass "C6 agent-teammates description keeps its unattended trigger" || fail "C6 agent-teammates description keeps its unattended trigger" "no 'unattended' in the description"
+}
+
+# ======================================================================================================================
+# CODEX: the Codex driver (issue #39, ADR 0003). Turn-based: `launch` and `send` start `codex exec` / `codex exec resume`
+# in the background and return; the fake codex in tests/bin stays running (mode hold) or finishes its turn at once.
+# Black-box: every scenario goes through the shared scripts, never through the driver's own state files, and waits for
+# "the process has exited" by polling the driver's `status` until it reports done. A run that has no Codex driver yet
+# stops at the failed launch, so the red output names what is missing. Run just these with `tests/run.sh codex`.
+# ======================================================================================================================
+THR=019e1111-2222-7333-8444-555566667777      # the fake codex's default thread id
+THR2=019e2222-3333-7444-8555-666677778888
+CXD=$AT/drivers/codex
+cx_sc() {  # cx_sc <scenario> [team.env line...]: a Codex run with the reviewer and implementer defaults team-init writes
+  HL=HARNESS=codex; mk $1 MODEL=gpt-6.1-sol MODEL_REVIEWER=gpt-6-astra EFFORT_REVIEWER=high MODEL_IMPLEMENTER=gpt-6.1-sol EFFORT_IMPLEMENTER=medium "${@[2,-1]}"; HL=
+  mkdir -p $SC/codex-home
+  BASE+=( CODEX_HOME=$SC/codex-home )
+}
+# xrunb <seconds> [VAR=val ...] cmd args...: xrun, but a command that hasn't returned after <seconds> is killed (HUNG=1, RC=124).
+xrunb() {
+  local lim=$1 i=0 pid; shift
+  ( cd $SC/cwd && exec env -i $BASE "$@" ) < /dev/null > $SC/out 2> $SC/err &
+  pid=$!
+  while kill -0 $pid 2>/dev/null && (( i++ < lim * 10 )); do /bin/sleep 0.1; done
+  HUNG=
+  if kill -0 $pid 2>/dev/null; then HUNG=1; kill $pid 2>/dev/null; RC=124; else wait $pid; RC=$?; fi
+  wait $pid 2>/dev/null
+  return 0
+}
+cx_wait() {  # cx_wait <seconds> <expression>: poll until the expression is true; 1 when it never is
+  local i=0
+  while ! eval "$2"; do (( i++ >= $1 * 10 )) && return 1; /bin/sleep 0.1; done
+  return 0
+}
+cx_state() { env -i $BASE $CXD/status $D 2>/dev/null | awk -v t=$1 '$1==t {print $3}'; }
+cx_over() { [[ $(cx_state $1) == (done|blocked) ]]; }       # the turn's process has exited
+cx_reap() { : > $SC/fake/codex.release; }
+cx_ok() {  # cx_ok <what>: the command xrunb ran returned 0 in time; else add why (with its output) to P and return 1
+  if [[ -n $HUNG ]]; then P+="$1 didn't return while the turn was running (killed after the limit); out: $(head -c 200 $SC/out | tr '\n' '|') err: $(head -c 300 $SC/err | tr '\n' '|')"; return 1; fi
+  [[ $RC == 0 ]] || { P+="$1: exit $RC (want 0); out: $(head -c 300 $SC/out | tr '\n' '|') err: $(head -c 300 $SC/err | tr '\n' '|')"; return 1; }
+  return 0
+}
+# Assertions on one logged codex call, in $L: tokens are matched whole ("[x]" in the log).
+A_has()  { [[ $L == *" [$1]"* ]] || P+="argv lacks [$1]"; }
+A_no()   { [[ $L != *" [$1]"* ]] || P+="argv has [$1]"; }
+A_pair() { [[ $L == *" [$1] [$2]"* ]] || P+="argv lacks [$1] [$2]"; }
+A_cfg()  { local v; for v in "$@"; do [[ $L == *" [-c] [$v]"* ]] && return 0; done; P+="argv lacks -c ${(j: or :)@}"; }
+A_safe() { [[ $L != *dangerously-bypass* && $L != *danger-full-access* ]] || P+="argv has --dangerously-bypass-approvals-and-sandbox or danger-full-access"; }
+cx_first() { L=$(grep -a '^codex cwd=.*\[exec\]' $SC/claude.log | grep -av '\[resume\]' | head -1); [[ -n $L ]] || { P+="no 'codex exec' call was logged"; return 1; }; }
+cx_resumed() { cx_wait 10 'grep -aq "^codex cwd=.*\[resume\]" $SC/claude.log'; }   # send returns once the turn has started, not once codex has run
+cx_resume() { cx_resumed; L=$(grep -a '^codex cwd=.*\[resume\]' $SC/claude.log | tail -1); [[ -n $L ]] || { P+="no 'codex exec resume' call was logged"; return 1; }; }
+A_ro() {  # A_ro launch|resume: the read-only flags
+  if [[ $1 == launch ]]; then A_pair -s read-only; else A_cfg 'sandbox_mode=read-only' 'sandbox_mode="read-only"'; A_no -s; A_no -C; fi
+  [[ $L == *" [--ignore-rules]"* ]] || P+="argv lacks --ignore-rules"
+  [[ $L == *" [-o] [$D/codex-"*".out]"* ]] || P+="argv lacks -o <team>/codex-<name>.<n>.out (a path no sandbox can write)"; A_no $D/reports/t1.md; A_no --add-dir; [[ $L != *network_access* ]] || P+="argv has network_access"; A_safe
+}
+A_rw() {  # A_rw launch|resume: the writer flags
+  if [[ $1 == launch ]]; then A_pair -s workspace-write; A_pair --add-dir $D/reports
+  else A_cfg 'sandbox_mode=workspace-write' 'sandbox_mode="workspace-write"'; A_cfg "sandbox_workspace_write.writable_roots=[\"$D/reports\"]" "sandbox_workspace_write.writable_roots=['$D/reports']"; A_no -s; A_no -C; A_no --add-dir; fi
+  A_cfg sandbox_workspace_write.network_access=true; A_no -o; A_no --ignore-rules; A_safe
+}
+cx_streams() {  # the background codex never holds the caller's stdout or stderr: its events and its stderr went to files under the team dir
+  local f ev errs
+  ev=(${(f)"$(grep -rla thread.started $D 2>/dev/null)"}); errs=(${(f)"$(grep -rla 'ERROR rmcp' $D 2>/dev/null)"})
+  (( $#ev )) || P+="no file under $D holds the --json event log (thread.started)"
+  (( $#errs )) || P+="codex's stderr isn't kept anywhere under $D"
+  for f in $ev; do grep -qa 'ERROR rmcp' $f && P+="stderr lines leaked into the event log ${f#$D/}"; done
+  grep -qaE 'thread.started|ERROR rmcp' $SC/out $SC/err 2>/dev/null && P+="codex's output reached the caller's stdout or stderr: $(head -c 200 $SC/out $SC/err | tr '\n' '|')"
+  return 0
+}
+cx_row() { [[ $(tail -1 $D/teammates.tsv 2>/dev/null) == "t1 ${2:-$THR} $1 - $SC/wt" ]] || P+="registry's last row: '$(tail -1 $D/teammates.tsv 2>/dev/null)' (want t1 ${2:-$THR} $1 - $SC/wt)"; }
+cx_launch() {  # cx_launch <mode> <launch-teammate args...>: run it with a bounded wait under the fake's <mode>
+  local m=$1; shift
+  xrunb 20 FAKE_CODEX_MODE=$m $AT/launch-teammate.sh "$@"
+}
+rollout() { print -r -- "$(<$SC/fake/codex.rollout)"; }
+
+# ---- AC3: launch --------------------------------------------------------------------------------------------------
+want codex-launch && {
+  cx_sc codex-launch-reviewer
+  cx_launch hold --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch-teammate.sh --read-only --role reviewer" && {
+    [[ $(<$SC/out) == "launched t1 as background session $THR in $SC/wt (read-only)" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+    cx_row $NOW
+    cx_first && {
+      A_has exec; A_has --json; A_has --skip-git-repo-check; A_pair -C $SC/wt; A_pair -m gpt-6-astra
+      A_cfg model_reasoning_effort=high 'model_reasoning_effort="high"'; A_ro launch
+      [[ $L == *"t1"* && $L == *"$D/prompts/t1.md"* ]] || P+="the prompt names neither t1 nor $D/prompts/t1.md"
+      [[ $L == *"[You are teammate t1. Read $D/prompts/t1.md and do exactly what it says. "*"can't write files"*"your final message is your report."* ]] || P+="the read-only prompt doesn't say the sandbox is read-only and the final message is the report"
+      (( $#P )) && P+="argv: ${L#codex }"
+    }
+    [[ $(cx_state $THR) == working ]] || P+="status says '$(cx_state $THR)' while the turn runs (want working)"
+    cx_streams
+  }
+  cx_reap
+  verdict "CODEX AC3 --read-only --role reviewer: codex exec -s read-only, gpt-6-astra, high effort, -o <team>/reports/t1.md, returns while the turn runs"
+
+  cx_sc codex-launch-implementer
+  cx_launch hold --role implementer $D t1 $SC/wt
+  cx_ok "launch-teammate.sh --role implementer" && {
+    [[ $(<$SC/out) == "launched t1 as background session $THR in $SC/wt" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+    cx_row $NOW
+    cx_first && {
+      [[ $L == *"[You are teammate t1. Read $D/prompts/t1.md and do exactly what it says.]"* ]] || P+="the writer's prompt isn't the plain one"
+      A_has exec; A_has --json; A_pair -C $SC/wt; A_pair -m gpt-6.1-sol; A_cfg model_reasoning_effort=medium 'model_reasoning_effort="medium"'; A_rw launch
+      (( $#P )) && P+="argv: ${L#codex }"
+    }
+    [[ $(cx_state $THR) == working ]] || P+="status says '$(cx_state $THR)' while the turn runs (want working)"
+    pg=$(<$SC/fake/codex.pgid); pid=$(<$SC/fake/codex.pid); me=$(ps -o pgid= -p $$ | tr -d ' ')
+    [[ $pg == $pid ]] || P+="the writer's codex (pid $pid) isn't its own process-group leader (pgid $pg)"
+    [[ $pg != $me ]] || P+="codex runs in the caller's process group"
+    cx_streams
+  }
+  cx_reap
+  verdict "CODEX AC3 --role implementer: workspace-write, network access, --add-dir <team>/reports, no -o, own process group, returns while the turn runs"
+
+  cx_sc codex-launch-noeffort EFFORT_REVIEWER=
+  cx_launch ok --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch with an empty EFFORT_REVIEWER" && { cx_first && { A_pair -m gpt-6-astra; [[ $L != *model_reasoning_effort* ]] || P+="an empty effort was passed: ${L#codex }"; }; }
+  verdict "CODEX effort: an empty EFFORT_<ROLE> passes no model_reasoning_effort"
+  cx_sc codex-launch-leak
+  xrunb 20 FAKE_CODEX_MODE=ok TEAMMATE_EFFORT=xhigh $AT/launch-teammate.sh --model gpt-9 $D t1 $SC/wt
+  cx_ok "launch --model with TEAMMATE_EFFORT=xhigh in the caller's environment" && { cx_first && { A_pair -m gpt-9; [[ $L != *model_reasoning_effort* && $L != *xhigh* ]] || P+="the caller's effort leaked into argv: ${L#codex }"; }; }
+  verdict "CODEX effort: a launch without --role passes no effort, whatever the caller's environment holds"
+
+  Q=$SB/w/codex-launch-quoting
+  cx_sc codex-launch-quoting "PERMISSION_MODE=bypassPermissions" "MODEL_REVIEWER='a b;c \$(touch $Q/pwned) \"q\"'" "EFFORT_REVIEWER='very high'"
+  cx_launch ok --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch with quoted MODEL_REVIEWER and EFFORT_REVIEWER" && { cx_first && {
+    A_pair -m "a b;c \$(touch $Q/pwned) \"q\""; A_cfg 'model_reasoning_effort=very high' 'model_reasoning_effort="very high"'
+    [[ $L != *bypass* && $L != *approval* && $L != *PERMISSION* ]] || P+="PERMISSION_MODE reached codex: ${L#codex }"; A_safe
+    (( $#P )) && P+="argv: ${L#codex }"
+  }; }
+  cx_wait 3 '[[ -e $Q/pwned ]]' && P+="a MODEL_ value was executed (the file $Q/pwned exists)"
+  verdict "CODEX quoting: MODEL_/EFFORT_ values reach codex as single arguments, are never executed, and PERMISSION_MODE maps to nothing"
+
+  cx_sc codex-launch-live
+  cx_launch hold --role implementer $D t1 $SC/wt
+  cx_ok "first launch" && {
+    xrunb 20 FAKE_CODEX_MODE=hold FAKE_CODEX_THREAD=$THR2 $AT/launch-teammate.sh --role implementer $D t1 $SC/wt
+    [[ $RC == 5 ]] || P+="second launch of a live name: exit $RC (want 5); out: $(head -c 200 $SC/out | tr '\n' '|')"
+    n=$(grep -ac '^codex cwd=' $SC/claude.log); (( n == 1 )) || P+="$n codex calls (want 1: the refused launch starts nothing)"
+    [[ $(wc -l < $D/teammates.tsv | tr -d ' ') == 1 ]] || P+="registry rows: $(wc -l < $D/teammates.tsv | tr -d ' ') (want 1)"
+  }
+  cx_reap
+  verdict "CODEX launch of a name that is already live: exit 5, nothing started, no new row"
+
+  cx_sc codex-launch-nothread
+  xrunb 90 FAKE_CODEX_MODE=silent $AT/launch-teammate.sh --role implementer $D t1 $SC/wt
+  [[ -z $HUNG ]] || P+="launch never gave up on a codex that prints no thread.started"
+  [[ $RC == 1 ]] || P+="exit $RC (want 1); out: $(head -c 200 $SC/out | tr '\n' '|')"
+  [[ ! -s $D/teammates.tsv ]] || P+="a row was registered: $(<$D/teammates.tsv)"
+  [[ -f $SC/fake/codex.pid ]] && { cx_wait 10 '! kill -0 $(<$SC/fake/codex.pid) 2>/dev/null' || P+="the codex it started (pid $(<$SC/fake/codex.pid)) is still running"; }
+  cx_reap
+  verdict "CODEX launch with no thread.started: kills what it started, exit 1, no row"
+  errf=$(print -r -- $D/codex-t1.*.err(N))
+  [[ -n $errf && -f $errf && $(<$SC/out) == *"$errf"* ]] || P+="the failed launch kept no stderr file, or didn't print its path: '$errf'; out: $(head -c 300 $SC/out | tr '\n' '|')"
+  verdict "CODEX launch with no thread.started: keeps codex's stderr file and prints its path"
+}
+
+# ---- AC4: retask -> send -----------------------------------------------------------------------------------------
+want codex-retask && {
+  cx_sc codex-retask-reviewer
+  cx_launch ok --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the launch turn's process never reported done (status: '$(cx_state $THR)')"
+    cx_wait 10 '[[ -e $D/reports/t1.done ]]'; rm -f $D/reports/t1.done
+    print -r -- "next job" > $SC/msg.md
+    xrunb 20 FAKE_NOW=$((NOW + 500)) $AT/retask.sh $D t1 $SC/msg.md
+    cx_ok "retask.sh" && {
+      [[ $(<$SC/out) == "t1 re-tasked (session $THR)" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+      cx_resume && {
+        [[ $L == "codex cwd=$SC/wt "* ]] || P+="resume ran in '${${L#codex cwd=}%% *}' (want the workdir $SC/wt)"
+        A_pair exec resume; A_has $THR; A_pair -m gpt-6-astra; A_cfg model_reasoning_effort=high 'model_reasoning_effort="high"'; A_ro resume; A_has --json
+        (( $#P )) && P+="argv: ${L#codex }"
+      }
+      cx_wait 5 'grep -aqx "codex stdin: next job" $SC/claude.log'
+      grep -aqx 'codex stdin: next job' $SC/claude.log || P+="the message wasn't passed on stdin (no 'codex stdin: next job' in the log)"
+      [[ $(wc -l < $D/teammates.tsv | tr -d ' ') == 2 ]] || P+="registry rows: $(wc -l < $D/teammates.tsv | tr -d ' ') (want 2)"
+      cx_row $((NOW + 500))
+      grep -qaE 'thread.started|ERROR rmcp' $SC/out $SC/err && P+="the resumed codex's output reached the caller: $(head -c 200 $SC/out $SC/err | tr '\n' '|')"
+      cx_wait 10 '[[ -e $D/reports/t1.done ]]' || P+="the resumed turn completed but the driver wrote no reports/t1.done"
+    }
+  }
+  verdict "CODEX AC4 retask.sh on a read-only teammate: codex exec resume <thread> in its workdir, same flags as -c config, message on stdin, watchdog row, marker after the turn"
+
+  cx_sc codex-retask-implementer
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the launch turn's process never reported done (status: '$(cx_state $THR)')"
+    print -r -- "next job" > $SC/msg.md
+    xrunb 20 FAKE_NOW=$((NOW + 500)) $AT/retask.sh $D t1 $SC/msg.md
+    cx_ok "retask.sh" && {
+      cx_resume && {
+        [[ $L == "codex cwd=$SC/wt "* ]] || P+="resume ran in '${${L#codex cwd=}%% *}' (want the workdir $SC/wt)"
+        A_pair exec resume; A_has $THR; A_pair -m gpt-6.1-sol; A_cfg model_reasoning_effort=medium 'model_reasoning_effort="medium"'; A_rw resume
+        (( $#P )) && P+="argv: ${L#codex }"
+      }
+      cx_row $((NOW + 500))
+    }
+  }
+  verdict "CODEX AC4 retask.sh on a writer: resume repeats workspace-write, network access and the reports/ writable root as -c config; no -o"
+
+  cx_sc codex-retask-running
+  cx_launch hold --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    print -r -- "next job" > $SC/msg.md; cp $D/teammates.tsv $SC/tsv.before
+    xrunb 20 FAKE_NOW=$((NOW + 500)) $AT/retask.sh $D t1 $SC/msg.md
+    [[ -z $HUNG && $RC != 0 ]] || P+="retask.sh on a teammate whose turn is still running: exit $RC${HUNG:+ (hung)} (want non-zero)"
+    cx_wait 2 'grep -aq "^codex cwd=.*\[resume\]" $SC/claude.log' && P+="a second codex was started while the first still runs"
+    cmp -s $D/teammates.tsv $SC/tsv.before || P+="the registry changed: $(tr '\n' '|' < $D/teammates.tsv)"
+  }
+  cx_reap
+  verdict "CODEX AC4 retask.sh while the previous turn still runs: non-zero, no second process, registry untouched"
+}
+
+# ---- AC5: the watchdog -----------------------------------------------------------------------------------------------
+want codex-watch && {
+  cx_sc codex-watch-done
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the turn's process never reported done (status: '$(cx_state $THR)')"
+    : > $D/reports/t1.done; settime $NOW $D/reports/t1.done
+    xrun_watch 1 $AT/watch-teammates.sh $D
+    [[ -n $REACHED ]] || P+="the watcher never reached its poll limit"
+    grep -qx 'DONE t1' $SC/out || P+="no 'DONE t1'; stdout: $(tr '\n' '|' < $SC/out)"
+    grep -q '^GONE' $SC/out && P+="GONE after DONE: $(tr '\n' '|' < $SC/out)"
+  }
+  verdict "CODEX AC5 a writer that wrote its marker and exited: DONE, no GONE"
+
+  cx_sc codex-watch-exited
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the turn's process never reported done (status: '$(cx_state $THR)')"
+    xrun_watch 3 $AT/watch-teammates.sh $D
+    [[ -n $REACHED ]] || P+="the watcher never reached its poll limit"
+    grep -q '^GONE' $SC/out && P+="GONE for a teammate whose process exited after its turn: $(tr '\n' '|' < $SC/out)"
+    grep -qx "BLOCKED t1 $THR" $SC/out || P+="no 'BLOCKED t1 $THR' after two polls of an exited teammate without a marker; stdout: $(tr '\n' '|' < $SC/out)"
+  }
+  verdict "CODEX AC5 an exited teammate without a fresh marker: BLOCKED after two polls, never GONE"
+
+  cx_sc codex-watch-readonly
+  cx_launch ok --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 '[[ -e $D/reports/t1.done ]]' || P+="the read-only teammate's marker never appeared"
+    xrun_watch 1 $AT/watch-teammates.sh $D
+    grep -qx 'DONE t1' $SC/out || P+="no 'DONE t1'; stdout: $(tr '\n' '|' < $SC/out)"
+    grep -q '^GONE' $SC/out && P+="GONE after DONE: $(tr '\n' '|' < $SC/out)"
+  }
+  verdict "CODEX AC5 a read-only teammate whose driver wrote the marker: DONE, no GONE"
+
+  cx_sc codex-watch-stall
+  cx_launch hold --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 5 '[[ -e $SC/fake/codex.ready ]]' || P+="the fake codex never became ready"
+    settime $((NOW - 60)) $(rollout)
+    xrun_watch 1 $AT/watch-teammates.sh $D
+    grep -q '^STALL' $SC/out && P+="STALL with a rollout written 1 min ago: $(tr '\n' '|' < $SC/out)"
+    rm -f $SC/fake/sleep.reached $SC/fake/sleep.release $SC/fake/sleep.count
+    settime $((NOW - 900)) $(rollout)
+    xrun_watch 1 $AT/watch-teammates.sh $D
+    grep -qx "STALL t1 $THR 15" $SC/out || P+="no 'STALL t1 $THR 15' for a rollout untouched for 15 min; stdout: $(tr '\n' '|' < $SC/out)"
+  }
+  cx_reap
+  verdict "CODEX AC5 a running teammate whose rollout is 15 min old: STALL t1 <id> 15 (and none when it is fresh)"
+}
+
+# ---- watch-teammates.sh --until-event: one bounded call, for a coordinator with no Monitor tool ---------------------------------
+want codex-watch-bounded && {
+  polls() { grep -ac '\[agents\]' $SC/claude.log; }
+  mk watch-bound-event; mkdir -p $D/reports; reg t1 d0e1f2a3 $((NOW - 600)) - $SC/wt
+  : > $D/reports/t1.done; settime $((NOW - 100)) $D/reports/t1.done
+  agents_all 1 d0e1f2a3 t1 idle done
+  xrun $AT/watch-teammates.sh --until-event 5 $D
+  [[ $RC == 0 && $(<$SC/out) == "DONE t1" ]] || P+="first run: exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want exit 0, 'DONE t1')"
+  (( $(polls) == 1 )) || P+="the run polled $(polls) times (want 1: it ends right after the poll that printed an event)"
+  xrun $AT/watch-teammates.sh --until-event 2 $D
+  [[ $RC == 0 && $(<$SC/out) == "WATCH timeout 2" ]] || P+="rerun: exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want only 'WATCH timeout 2': DONE isn't repeated)"
+  verdict "CODEX watch --until-event: an event ends the run after its poll; a rerun doesn't repeat DONE; the timeout prints WATCH timeout"
+
+  mk watch-bound-timeout; reg t1 d0e1f2a3 $((NOW - 60)) - $SC/wt
+  agents_all 1 d0e1f2a3 t1 working working
+  xrun $AT/watch-teammates.sh --until-event 3 $D
+  [[ $RC == 0 && $(<$SC/out) == "WATCH timeout 3" ]] || P+="exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want exit 0, 'WATCH timeout 3')"
+  (( $(polls) == 3 )) || P+="polled $(polls) times (want 3)"
+  verdict "CODEX watch --until-event: with no event it ends after <max-min> polls"
+
+  mk watch-bound-blocked; reg t1 d0e1f2a3 $((NOW - 600)) - $SC/wt
+  agents_all 1 d0e1f2a3 t1 idle blocked
+  xrun $AT/watch-teammates.sh --until-event 1 $D
+  [[ $(<$SC/out) == "WATCH timeout 1" ]] || P+="run 1: '$(tr '\n' '|' < $SC/out)' (want only the timeout: one blocked poll isn't BLOCKED)"
+  xrun $AT/watch-teammates.sh --until-event 1 $D
+  [[ $(<$SC/out) == "BLOCKED t1 d0e1f2a3" ]] || P+="run 2: '$(tr '\n' '|' < $SC/out)' (want 'BLOCKED t1 d0e1f2a3': the blocked count persists)"
+  xrun $AT/watch-teammates.sh --until-event 1 $D
+  [[ $(<$SC/out) == "WATCH timeout 1" ]] || P+="run 3: '$(tr '\n' '|' < $SC/out)' (want no second BLOCKED within 10 minutes)"
+  verdict "CODEX watch --until-event: BLOCKED fires across two bounded runs and doesn't repeat within 10 minutes"
+
+  mk watch-bound-failed; mkdir -p $D/reports; reg t1 d0e1f2a3 $((NOW - 600)) - $SC/wt
+  : > $D/reports/t1.done; settime $((NOW - 100)) $D/reports/t1.done
+  xrun FAKE_AGENTS_FAIL=1 $AT/watch-teammates.sh --until-event 5 $D
+  [[ $RC == 0 && $(<$SC/out) == "DONE t1" ]] || P+="exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want exit 0, 'DONE t1' right after the poll whose status failed)"
+  (( $(polls) == 1 )) || P+="polled $(polls) times (want 1)"
+  verdict "CODEX watch --until-event: an event printed in a poll whose status failed ends the run"
+
+  mk watch-bound-usage
+  xrun $AT/watch-teammates.sh --until-event $D
+  [[ $RC == 5 ]] || P+="--until-event without a number: exit $RC (want 5)"
+  verdict "CODEX watch --until-event: a missing or non-numeric bound is a usage error"
+}
+
+# ---- status, tail ----------------------------------------------------------------------------------------------------
+want codex-status && {
+  cx_sc codex-status
+  cx_launch hold --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    settime $((NOW - 123)) $(rollout)
+    xrun $CXD/status $D
+    [[ $RC == 0 ]] || P+="status exit $RC (want 0); err: $(head -c 200 $SC/err)"
+    [[ $(<$SC/out) == "$THR - working $((NOW - 123))" ]] || P+="status: '$(<$SC/out)' (want '$THR - working $((NOW - 123))')"
+    cx_reap
+    cx_wait 10 'cx_over $THR' || P+="after its turn the process never reported done or blocked (status: '$(cx_state $THR)')"
+    xrun $CXD/status $D
+    [[ $(<$SC/out) == "$THR - "(done|blocked)" "* ]] || P+="after the turn: '$(<$SC/out)' (want '$THR - done <epoch|->')"
+  }
+  verdict "CODEX status: working with the rollout's mtime, then done once the turn's process has exited"
+}
+want codex-tail && {
+  cx_sc codex-tail
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the turn's process never reported done (status: '$(cx_state $THR)')"
+    settime $((NOW - 420)) $(rollout)
+    xrun $AT/teammate-tail.sh $D t1
+    [[ $RC == 0 ]] || P+="tail exit $RC (want 0); out: $(head -c 200 $SC/out | tr '\n' '|') err: $(head -c 200 $SC/err | tr '\n' '|')"
+    [[ $(head -1 $SC/out) == "transcript: "?*"  (last write 7 min ago)" ]] || P+="first line: '$(head -1 $SC/out)' (want 'transcript: <path>  (last write 7 min ago)')"
+    [[ $(grep -c '^TOOL  .*ls -la' $SC/out) == 1 && $(grep -c '^TOOL  .*git status' $SC/out) == 1 ]] || P+="want one TOOL line each for 'ls -la' and 'git status' (a tool call is logged as started and completed): $(tr '\n' '|' < $SC/out | head -c 400)"
+    grep -q '^SAID  All done here' $SC/out || P+="no 'SAID  All done here' line: $(tr '\n' '|' < $SC/out | head -c 300)"
+    xrun $AT/teammate-tail.sh $D t1 1
+    grep -q '^TOOL  .*git status' $SC/out && ! grep -q 'ls -la' $SC/out && grep -q '^SAID  All done here' $SC/out || P+="tail n=1 should show the last tool call and the latest message: $(tr '\n' '|' < $SC/out | head -c 300)"
+    print -r -- "second job" > $SC/msg.md
+    xrunb 20 FAKE_CODEX_REPLY="Second turn here" FAKE_CODEX_TOOLS=0 $AT/retask.sh $D t1 $SC/msg.md
+    cx_ok "retask.sh" && {
+      cx_wait 10 'grep -rqa "Second turn here" $D'; cx_wait 10 'cx_over $THR'
+      xrun $AT/teammate-tail.sh $D t1
+      grep -q '^SAID  Second turn here' $SC/out || P+="after the second turn no 'SAID  Second turn here': $(tr '\n' '|' < $SC/out | head -c 300)"
+      grep -q '^TOOL  .*ls -la' $SC/out || P+="the first turn's tool calls are gone after the second turn: $(tr '\n' '|' < $SC/out | head -c 300)"
+    }
+  }
+  verdict "CODEX tail: transcript line, TOOL and SAID lines, -n, and every turn (not just the latest)"
+
+  cx_sc codex-tail-missing; reg t1 019eaaaa-0000-7000-8000-000000000000 1789999000 - $SC/wt
+  xrun $AT/teammate-tail.sh $D t1
+  [[ $RC == 3 && -n $(cat $SC/out $SC/err) ]] || P+="exit $RC (want 3 with a message); out: $(head -c 200 $SC/out | tr '\n' '|')"
+  verdict "CODEX tail of an unknown session: exit 3 with a message"
+}
+
+# ---- AC6: close ------------------------------------------------------------------------------------------------------
+want codex-close && {
+  cx_sc codex-close
+  cx_launch hold --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch" && {
+    pid=$(<$SC/fake/codex.pid); pg=$(<$SC/fake/codex.pgid); ro=$(rollout)
+    [[ $pg != $(ps -o pgid= -p $$ | tr -d ' ') ]] || P+="codex runs in the caller's process group"
+    xrunb 20 $AT/close-teammate.sh $D t1
+    cx_ok "close-teammate.sh" && {
+      [[ $(<$SC/out) == "stopped t1 ($THR)" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+      cx_wait 10 '! kill -0 $pid 2>/dev/null' || P+="codex (pid $pid) is still running after close-teammate.sh"
+      cx_wait 10 '! kill -0 -- -$pg 2>/dev/null' || P+="process group $pg still has members after close-teammate.sh"
+      [[ -f $ro ]] || P+="the rollout $ro was removed"
+      [[ $(cx_state $THR) == stopped ]] || P+="status says '$(cx_state $THR)' after the stop (want stopped)"
+      [[ $(tail -1 $D/teammates.tsv | awk '{print $3}') == closed ]] || P+="registry's last row isn't closed: $(tail -1 $D/teammates.tsv)"
+      grep -a '^codex cwd=' $SC/claude.log | grep -qav '\[exec\]' && P+="a codex call other than exec: $(grep -a '^codex cwd=' $SC/claude.log | grep -av '\[exec\]' | head -2 | tr '\n' '|')"
+    }
+  }
+  cx_reap
+  verdict "CODEX AC6 close-teammate.sh: kills the whole process group, keeps the rollout, status stopped, no codex delete"
+
+  cx_sc codex-close-child
+  xrunb 20 FAKE_CODEX_MODE=hold FAKE_CODEX_CHILD=1 $AT/launch-teammate.sh --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 5 '[[ -s $SC/fake/codex.child ]]' || P+="the fake never started its tool command"
+    kid=$(<$SC/fake/codex.child)
+    cx_wait 5 '[[ $(ps -o pgid= -p $kid | tr -d " ") == $kid ]]' || P+="the tool command isn't in a group of its own"
+    pg=$(<$SC/fake/codex.pgid)
+    [[ $(ps -o pgid= -p $kid | tr -d " ") != $pg ]] || P+="the tool command shares codex's group, so the test can't tell"
+    xrunb 20 $AT/close-teammate.sh $D t1
+    cx_wait 10 '! kill -0 $kid 2>/dev/null' || P+="the tool command (pid $kid, own process group) survived close-teammate.sh"
+  }
+  kill $(<$SC/fake/codex.child) 2>/dev/null
+  cx_reap
+  verdict "CODEX AC6 close-teammate.sh also ends a tool command that runs in a process group of its own"
+
+  # The one white-box check: stop signals a recorded process group only after `ps -o args=` shows it is this session's
+  # codex. The state is pointed at a decoy group (a sleep in its own session) as if the pid had been reused.
+  cx_sc codex-close-decoy
+  cx_launch hold --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    ( cd $SC/cwd && exec env -i $BASE python3 -c 'import os; os.setsid(); os.execvp("/bin/sleep", ["/bin/sleep", "60"])' ) < /dev/null > /dev/null 2>&1 &
+    decoy=$!
+    cx_wait 5 '[[ $(ps -o pgid= -p $decoy | tr -d " ") == $decoy ]]' || P+="the decoy never became a group leader"
+    print -r -- "PID=$decoy" >> $D/codex-$THR.state; print -r -- "PGID=$decoy" >> $D/codex-$THR.state
+    xrunb 20 $AT/close-teammate.sh $D t1
+    [[ $(<$SC/out) == "t1 ($THR) was not running" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+    kill -0 $decoy 2>/dev/null || P+="close-teammate.sh signalled a process group that isn't the session's codex"
+    kill $decoy 2>/dev/null
+  }
+  cx_reap
+  verdict "CODEX AC6 stop checks that the recorded process group still is this session's codex before it signals"
+
+  cx_sc codex-close-exited
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the turn's process never reported done (status: '$(cx_state $THR)')"
+    xrunb 20 $AT/close-teammate.sh $D t1
+    cx_ok "close-teammate.sh" && { [[ $(<$SC/out) == "t1 ($THR) was not running" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"; }
+  }
+  verdict "CODEX AC6 closing a teammate whose process already exited: 'was not running'"
+}
+
+# ---- D7: where teammates write; the driver's marker for read-only roles ---------------------------------------------------
+want codex-marker && {
+  cx_sc codex-marker-ok
+  cx_launch hold --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch" && {
+    [[ ! -e $D/reports/t1.done ]] || P+="the marker exists while the turn is still running"
+    cx_reap
+    cx_wait 10 '[[ -e $D/reports/t1.done ]]' || P+="no reports/t1.done after the turn completed with a report"
+    [[ -s $D/reports/t1.md ]] || P+="reports/t1.md is missing or empty after the turn"
+  }
+  verdict "CODEX D7 read-only: the driver touches the marker after a completed turn with a report, not before"
+
+  cx_sc codex-marker-symlink
+  : > $SC/victim-md; : > $SC/victim-done; print -r -- keep > $SC/victim-md; print -r -- keep > $SC/victim-done
+  cx_launch hold --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch" && {
+    ln -s $SC/victim-md $D/reports/t1.md; ln -s $SC/victim-done $D/reports/t1.done
+    cx_reap
+    cx_wait 10 '[[ -f $D/reports/t1.done && ! -L $D/reports/t1.done ]]' || P+="reports/t1.done didn't become a regular file"
+    [[ -f $D/reports/t1.md && ! -L $D/reports/t1.md && -s $D/reports/t1.md ]] || P+="reports/t1.md isn't a non-empty regular file"
+    [[ $(<$SC/victim-md) == keep && $(<$SC/victim-done) == keep ]] || P+="a planted symlink was followed: md='$(<$SC/victim-md)' done='$(<$SC/victim-done)'"
+  }
+  verdict "CODEX D7 read-only: symlinks planted at reports/<name>.md and .done are replaced, never followed"
+
+  marker_none() {  # marker_none <check name> <FAKE_CODEX_* assignment...>: a read-only turn that must not get a marker
+    local nm=$1; shift
+    cx_sc codex-marker-${nm// /-}
+    xrunb 20 FAKE_CODEX_MODE=ok "$@" $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt
+    cx_ok "launch" && {
+      cx_wait 10 'cx_over $THR' || P+="the turn's process never reported done (status: '$(cx_state $THR)')"
+      /bin/sleep 1
+      [[ ! -e $D/reports/t1.done ]] || P+="reports/t1.done exists after $nm"
+    }
+    verdict "CODEX D7 read-only: no marker after $nm"
+  }
+  marker_none "a failed turn" FAKE_CODEX_MODE=fail
+  marker_none "an empty report" FAKE_CODEX_REPORT=empty
+  marker_none "a turn that wrote no report" FAKE_CODEX_REPORT=none
+
+  cx_sc codex-marker-writer
+  cx_launch ok --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 10 'cx_over $THR' || P+="the turn's process never reported done (status: '$(cx_state $THR)')"
+    /bin/sleep 1
+    [[ ! -e $D/reports/t1.done ]] || P+="the driver wrote reports/t1.done for a writer (the teammate writes its own)"
+    [[ ! -e $D/reports/t1.md ]] || P+="the driver wrote reports/t1.md for a writer"
+  }
+  verdict "CODEX D7 writer: the driver writes neither marker nor report"
+}
+
+# ---- AC2: team-preflight on a Codex run ---------------------------------------------------------------------------------
+RULES_ALL=( 'prefix_rule(pattern=["git", "add"], decision="allow")' 'prefix_rule(pattern=["git", "commit"], decision="allow")' )
+cxp() {  # cxp <scenario> [VAR=val ...]: team-preflight on a Codex run (no ADVISOR_PROBE); rules come from $SC/codex-home/rules
+  cx_sc $1; mk_repo; mkdir -p $SC/codex-home/rules; shift
+}
+cxp_run() { xrun CODEX_THREAD_ID=019e-test "$@" $CM/team-preflight.sh $D; }
+cxp_bad() { grep -E '^(FAIL|WARN)' $SC/out | grep -E 'prefix_rule|codex'; }   # the codex lines that aren't OK
+want codex-preflight && {
+  cxp codex-pf-ok; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; cxp_run
+  grep -qx 'OK    ADVISOR n/a (codex)' $SC/out || P+="no 'OK    ADVISOR n/a (codex)': $(grep ADVISOR $SC/out | head -2 | tr '\n' '|')"
+  [[ -z $(cxp_bad) ]] || P+="codex FAIL/WARN lines with every rule present: $(cxp_bad | tr '\n' '|')"
+  grep -qE '^OK +codex' $SC/out || P+="no OK line about codex besides the advisor one (one starting 'OK    codex', e.g. 'OK    codex found'): $(grep '^OK' $SC/out | head -4 | tr '\n' '|')"
+  grep -q Traceback $SC/out $SC/err && P+="a traceback: $(grep -h -A3 Traceback $SC/out $SC/err | head -4 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight with every rule present: ADVISOR n/a (codex), an OK line for codex, nothing to FAIL or WARN"
+
+  cxp codex-pf-missing; print -rl -- ${RULES_ALL:#*commit*} > $SC/codex-home/rules/default.rules; cxp_run
+  want_line='prefix_rule(pattern=["git", "commit"], decision="allow")'
+  [[ $RC == 1 ]] || P+="exit $RC (want 1)"
+  [[ -n $(grep '^FAIL' $SC/out | grep -F -- $want_line) ]] || P+="no FAIL line with $want_line; FAIL lines: $(grep '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  [[ $(cxp_bad | grep -c prefix_rule) == 1 ]] || P+="want exactly one rule line named; got: $(cxp_bad | tr '\n' '|')"
+  verdict "CODEX AC2 preflight with git commit missing: FAIL naming that exact prefix_rule line, exit 1"
+
+  cxp codex-pf-norules; cxp_run
+  for r in $RULES_ALL; do [[ -n $(grep '^FAIL' $SC/out | grep -F -- $r) ]] || P+="no FAIL naming $r"; done
+  grep -qi 'push' $SC/out && P+="the output mentions push: $(grep -i push $SC/out | head -2 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight without a rules file: a FAIL for each of the two writer rules, never suggests git push"
+
+  cxp codex-pf-broad; print -rl -- 'prefix_rule(pattern=["git"], decision="allow")' > $SC/codex-home/rules/default.rules; cxp_run
+  grep '^WARN' $SC/out | grep -qi 'broader' || P+="no WARN saying the git rule is broader than needed: $(cxp_bad | tr '\n' '|')"
+  [[ -z $(grep '^FAIL' $SC/out | grep -E 'prefix_rule|codex') ]] || P+="FAIL lines although a broad git rule covers them: $(grep '^FAIL' $SC/out | grep -E 'prefix_rule|codex' | tr '\n' '|')"
+  verdict "CODEX AC2 preflight with a blanket git rule: counts as present, WARN that it's broader than needed"
+
+  cxp codex-pf-longer; print -rl -- 'prefix_rule(pattern=["git", "add", "-A"], decision="allow")' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ -n $(grep '^FAIL' $SC/out | grep -F -- 'prefix_rule(pattern=["git", "add"], decision="allow")') ]] || P+="a longer git add -A rule was taken to cover git add; FAIL lines: $(grep '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a longer rule (git add -A) doesn't cover git add"
+
+  cxp codex-pf-alternatives; print -rl -- 'prefix_rule(pattern=["git", ["add", "commit"]], decision="allow")' > $SC/codex-home/rules/default.rules; cxp_run
+  [[ -z $(cxp_bad) ]] || P+="FAIL/WARN with alternatives covering add and commit: $(cxp_bad | tr '\n' '|')"
+  grep -q Traceback $SC/out $SC/err && P+="a traceback on an alternatives list"
+  grep -qE '^OK +codex' $SC/out || P+="no OK line about codex besides the advisor one"
+  verdict "CODEX AC2 preflight: a pattern element that lists alternatives covers each one, no crash"
+
+  cxp codex-pf-two-files; print -rl -- $RULES_ALL[1] > $SC/codex-home/rules/default.rules; print -rl -- $RULES_ALL[2] > $SC/codex-home/rules/team.rules; cxp_run
+  [[ -z $(cxp_bad) ]] || P+="FAIL/WARN although the rules are split over two files: $(cxp_bad | tr '\n' '|')"
+  grep -qE '^OK +codex' $SC/out || P+="no OK line about codex besides the advisor one"
+  verdict "CODEX AC2 preflight reads every *.rules file in the rules directory"
+
+  cxp codex-pf-home; mkdir -p $SC/home/.codex/rules; print -rl -- $RULES_ALL > $SC/home/.codex/rules/default.rules
+  BASE=( ${BASE:#CODEX_HOME=*} ); cxp_run
+  [[ -z $(cxp_bad) ]] || P+="FAIL/WARN with the rules in \$HOME/.codex and no CODEX_HOME: $(cxp_bad | tr '\n' '|')"
+  grep -qE '^OK +codex' $SC/out || P+="no OK line about codex besides the advisor one"
+  verdict "CODEX AC2 preflight uses ~/.codex/rules when CODEX_HOME is unset"
+
+  cxp codex-pf-comments; print -rl -- ${RULES_ALL/#/# } > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 ]] || P+="exit $RC (want 1)"
+  for r in $RULES_ALL; do [[ -n $(grep '^FAIL' $SC/out | grep -F -- $r) ]] || P+="a commented-out rule counted: no FAIL naming $r"; done
+  verdict "CODEX AC2 preflight: commented-out rules don't count"
+
+  cxp codex-pf-decision-first; print -rl -- 'prefix_rule(decision="forbidden", pattern=["git", "add"])' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git add') ]] || P+="a forbidden rule written decision-first counted as allow: exit $RC; $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a forbidden rule with decision= before pattern= is a FAIL"
+
+  cxp codex-pf-forbid-broad; print -rl -- $RULES_ALL 'prefix_rule(pattern=["git"], decision="forbidden")' > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git add') && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git commit') ]] || P+="a broader forbidden rule didn't beat the exact allow rules: exit $RC; $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a broader forbidden rule wins over an exact allow rule"
+
+  cxp codex-pf-prompt; print -rl -- 'prefix_rule(pattern=["git", "add"], decision="prompt")' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'git add') ]] || P+="a prompt rule counted as present: exit $RC"
+  verdict "CODEX AC2 preflight: a rule that prompts isn't an allow"
+
+  cxp codex-pf-justification; print -rl -- 'prefix_rule(pattern=["git", "add"], decision="allow", justification="never prompt, a # here is no comment")' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ -z $(cxp_bad) && $RC == 0 ]] || P+="an allow rule whose justification says 'prompt' was dropped: exit $RC; $(cxp_bad | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: an allow rule with 'prompt' in its justification still counts"
+
+  hk_repo() { git -C $SC/repo config core.hooksPath $1; }
+  cxp codex-pf-hooks-rel; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo .githooks; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'relative' | grep 'unset' | grep '#66') ]] || P+="a relative core.hooksPath wasn't a FAIL naming the problem, the fix and #66: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a relative core.hooksPath in the run's repo is a FAIL"
+
+  cxp codex-pf-hooks-abs; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo /opt/hooks; cxp_run
+  [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="an absolute core.hooksPath was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: an absolute core.hooksPath outside the worktrees is fine"
+
+  cxp codex-pf-hooks-tilde; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo '~/hooks'; cxp_run
+  [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="~/hooks (absolute once git expands it) was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a ~/ core.hooksPath is absolute and passes"
+
+  cxp codex-pf-hooks-inside; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/worktrees/u1/.githooks; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'inside') ]] || P+="an absolute core.hooksPath inside the worktrees dir wasn't a FAIL: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  cxp codex-pf-hooks-main; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/repo/.githooks; cxp_run
+  [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="an absolute core.hooksPath in the main checkout (REPO) was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  cxp codex-pf-hooks-wtsv; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo $SC/elsewhere/u1/hooks; print -r -- "u1 - $SC/elsewhere/u1" > $D/worktrees.tsv; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'inside') ]] || P+="a hooksPath inside a worktree in worktrees.tsv wasn't a FAIL: exit $RC"
+  verdict "CODEX AC2 preflight: an absolute core.hooksPath inside a worktree is a FAIL; one in the main checkout passes"
+
+  cxp codex-pf-hooks-global; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; print -r -- $'[core]\n\thooksPath = rel-hooks' > $SC/gitconfig
+  BASE=( ${BASE:#GIT_CONFIG_GLOBAL=*} GIT_CONFIG_GLOBAL=$SC/gitconfig ); cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep "$SC/gitconfig") && -z $(grep '^FAIL' $SC/out | grep -- '--unset') ]] || P+="a global relative hooksPath: want a FAIL naming the origin and no --unset: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a global core.hooksPath gets its origin in the fix, not --unset"
+
+  cxp codex-pf-hooks-norepo; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; sed -i.bak -e '/^REPO=/d' -e '/^WORKTREE=/d' $D/team.env; cxp_run
+  grep '^WARN' $SC/out | grep -q 'neither REPO nor WORKTREE' || P+="no WARN when team.env sets neither REPO nor WORKTREE: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: no REPO or WORKTREE gives a WARN, not a silent pass"
+
+  cxp codex-pf-hooks-giterr; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; print -r -- $'[core' > $SC/repo/.git/config; cxp_run
+  grep '^WARN' $SC/out | grep -q 'core.hooksPath wasn.t checked' || P+="no WARN when git config fails: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a git config error gives a WARN, not a silent pass"
+
+  cxp codex-pf-nocodex; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; cxp_run PATH=/usr/bin:/bin:/usr/sbin:/sbin
+  [[ $RC == 1 ]] || P+="exit $RC (want 1)"
+  grep '^FAIL' $SC/out | grep -qi codex || P+="no FAIL line naming codex: $(grep '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight with codex not on PATH: FAIL"
+}
+
+# ---- effort plumbing in the shared launch-teammate.sh ---------------------------------------------------------------------
+# A scratch driver `other` logs what launch is called with. The variable's name, TEAMMATE_EFFORT, is pinned here.
+want codex-effort && {
+  cp -R $SKILLS $SB/src-effort; mkdir -p $SB/src-effort/agent-teammates/scripts/drivers/other
+  : > $SB/src-effort/agent-teammates/scripts/drivers/other/driver.env
+  printf '#!/bin/sh\nprintf "argc=%%s effort=[%%s]\\n" "$#" "${TEAMMATE_EFFORT-UNSET}" >> "$EFFORT_LOG"\necho "id9 -"\n' > $SB/src-effort/agent-teammates/scripts/drivers/other/launch
+  chmod +x $SB/src-effort/agent-teammates/scripts/drivers/other/launch
+  EFFN=0
+  eff() {  # eff <check name> <want effort> <xrun env...> -- <team.env line...> -- <launch-teammate args...>
+    local nm=$1 want=$2; shift 2
+    local ev=() tl=() la=()
+    while [[ $1 != -- ]]; do ev+=$1; shift; done; shift
+    while [[ $1 != -- ]]; do tl+=$1; shift; done; shift
+    la=("$@")
+    TREE=$SB/src-effort; mk codex-effort-$((++EFFN)) HARNESS=other MODEL_REVIEWER=m1 MODEL_TEST_WRITER=m2 "${tl[@]}"; TREE=$SKILLS
+    la=( ${la//@D@/$D} ); la=( ${la//@WT@/$SC/wt} )
+    : > $SC/effort.log
+    xrun EFFORT_LOG=$SC/effort.log "${ev[@]}" $SB/src-effort/agent-teammates/scripts/launch-teammate.sh "${la[@]}"
+    [[ $RC == 0 ]] || P+="launch-teammate.sh exit $RC: $(head -c 200 $SC/out | tr '\n' '|')"
+    [[ $(<$SC/effort.log) == "argc=6 effort=[$want]" ]] || P+="the driver's launch got '$(<$SC/effort.log)' (want 'argc=6 effort=[$want]')"
+    verdict "CODEX effort: $nm"
+  }
+  eff "--role reviewer with EFFORT_REVIEWER=high hands TEAMMATE_EFFORT=high to launch" high -- EFFORT_REVIEWER=high -- --role reviewer @D@ t1 @WT@
+  eff "the role name maps like MODEL_<ROLE> (test-writer -> EFFORT_TEST_WRITER)" medium -- EFFORT_TEST_WRITER=medium -- --role test-writer @D@ t1 @WT@
+  eff "a role with no EFFORT_<ROLE> sets TEAMMATE_EFFORT empty, not unset" '' -- -- --role reviewer @D@ t1 @WT@
+  eff "a launch without --role sets it empty whatever the caller's environment holds" '' TEAMMATE_EFFORT=leak -- -- @D@ t1 @WT@
+  eff "a role with no EFFORT_<ROLE> doesn't pick up the caller's value" '' TEAMMATE_EFFORT=leak -- -- --role reviewer @D@ t1 @WT@
+  eff "a value with a space reaches launch intact" 'very high' -- "EFFORT_REVIEWER='very high'" -- --role reviewer @D@ t1 @WT@
+}
+
+# ---- the shape of the Codex driver ------------------------------------------------------------------------------------------
+CDRV=$ROOT/skills/engineering/agent-teammates/scripts/drivers/codex
+want codex-shape && {
+  missing=(); for op in launch send status tail stop preflight; do [[ -x $CDRV/$op ]] || missing+=$op; done
+  (( $#missing )) && fail "CODEX D2 driver executables" "missing or not executable in ${CDRV#$ROOT/}: ${missing[*]}" || pass "CODEX D2 driver executables"
+  [[ ! -e $CDRV/advisor-probe ]] && pass "CODEX D2 no advisor-probe" || fail "CODEX D2 no advisor-probe" "${CDRV#$ROOT/}/advisor-probe exists; Codex has no advisor"
+  if [[ -f $CDRV/driver.env ]] && grep -q '^LIVE_MESSAGING=0$' $CDRV/driver.env && grep -q '^SEND=script$' $CDRV/driver.env; then pass "CODEX D2 driver.env declares LIVE_MESSAGING=0 and SEND=script"
+  else fail "CODEX D2 driver.env declares LIVE_MESSAGING=0 and SEND=script" "${CDRV#$ROOT/}/driver.env: $([[ -f $CDRV/driver.env ]] && echo "lacks LIVE_MESSAGING=0 or SEND=script" || echo missing)"; fi
+  bad=(); for op in launch send status tail stop preflight; do [[ -f $CDRV/$op ]] && [[ $(sed -n 2p $CDRV/$op) == "# usage: $op "* ]] || bad+=$op; done
+  (( $#bad )) && fail "CODEX D2 operations have a 'usage:' line 2" "line 2 isn't '# usage: <op> ...' in: ${bad[*]}" || pass "CODEX D2 operations have a 'usage:' line 2"
+  bad=()
+  sc codex-shape-arity
+  for op in launch send status tail stop preflight; do
+    [[ -x $CDRV/$op ]] || { bad+="$op (missing)"; continue; }
+    xrun $CDRV/$op; [[ $RC == 5 && $(cat $SC/out $SC/err) == *usage:* ]] || bad+="$op with no arguments: exit $RC"
+    xrun $CDRV/$op a b c d e f g; [[ $RC == 5 ]] || bad+="$op with seven arguments: exit $RC"
+  done
+  (( $#bad )) && fail "CODEX D2 wrong arity exits 5 with the usage line" "${(j:; :)bad}" || pass "CODEX D2 wrong arity exits 5 with the usage line"
+  grep -rEn 'dangerously-bypass|danger-full-access' $CDRV >/dev/null 2>&1 && fail "CODEX D2 the driver never names a bypass or danger-full-access" "$(grep -rEn 'dangerously-bypass|danger-full-access' $CDRV | head -3)" || pass "CODEX D2 the driver never names a bypass or danger-full-access"
+  grep -qE '^#.*TEAMMATE_EFFORT' $DRV/driver.env && pass "CODEX D2 the Claude driver.env documents TEAMMATE_EFFORT as an optional input" || fail "CODEX D2 the Claude driver.env documents TEAMMATE_EFFORT as an optional input" "no comment line in ${DRV#$ROOT/}/driver.env mentions TEAMMATE_EFFORT"
 }
 
 # ======================================================================================================================

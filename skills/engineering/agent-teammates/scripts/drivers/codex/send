@@ -1,0 +1,20 @@
+#!/bin/zsh
+# usage: send <team-dir> <session-id> <message-file>   (see driver.env)
+[[ $# -eq 3 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}; MSG=${3:A}
+DRVDIR=${0:A:h}
+source ${DRVDIR:h:h}/team-env.zsh
+source $DRVDIR/lib.zsh
+state_load $2 || { echo "no Codex session $2 under $D"; exit 1; }
+[[ -s $MSG ]] || { echo "message file $MSG is missing or empty"; exit 1; }
+turn_alive && { echo "session $2 ($NAME) is still running its turn; send again when it has finished"; exit 1; }
+# Copy the message first: the caller may delete its file as soon as this returns.
+cp $MSG $D/codex-$THREAD.msg || exit 1
+sandbox_args resume
+ARGS=(exec resume --json --skip-git-repo-check $SANDBOX -m $MODEL)
+[[ -n $EFFORT ]] && ARGS+=(-c "model_reasoning_effort=$(toml_str $EFFORT)")
+ARGS+=($THREAD -)
+turn_cmd $ARGS
+bg_start $WORKDIR $D/codex-$THREAD.msg $EVENTS $ERRLOG $TURN
+PID=$BGPID; PGID=$BGPID; STOPPED=
+state_save

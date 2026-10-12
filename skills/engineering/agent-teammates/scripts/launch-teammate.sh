@@ -1,15 +1,15 @@
 #!/bin/zsh
 # usage: launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]
-# Starts a teammate as a Claude Code background session (`claude --bg`) named <name>, in <workdir>, told to read
-# [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
+# Starts a teammate as a background session of the run's harness (drivers/<HARNESS>) named <name>, in <workdir>, told to
+# read [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
 # in <team-dir>/teammates.tsv. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
-# directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it (closing the pane never stops it).
+# directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it where the harness has one.
 # Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' and
 # '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
-# --read-only denies the file-editing tools inside <workdir> (a reviewer, a brief checker); it can still write its
-# report in <team-dir>. Bash isn't covered, so it's a guard against slips, not a sandbox.
-# Every launch passes --advisor $ADVISOR (default opus) unless team.env sets ADVISOR=none.
-# Exit 2 when a background session can't be started: run the teammate as an in-process subagent instead.
+# --read-only keeps the teammate from editing files in <workdir> (a reviewer, a brief checker); how strictly, how it
+# gets its report out, the advisor and what exit 2 (no background session) means depend on the harness: see
+# references/harness-<harness>.md.
+# With --role, EFFORT_<ROLE> from team.env goes to the driver's launch as TEAMMATE_EFFORT (empty otherwise).
 SELF=${0:A}
 usage() { sed -n 2,12p $SELF; exit 5; }
 RO=; MODEL_OPT=; ROLE=
@@ -29,6 +29,7 @@ valid_name $NAME
 if [[ -n $ROLE ]]; then
   valid_name $ROLE
   ROLE_VAR=MODEL_${${(U)ROLE}//[-.]/_}
+  EFFORT_VAR=EFFORT_${${(U)ROLE}//[-.]/_}
 fi
 if [[ -n $MODEL_OPT ]]; then
   CHOSEN=$MODEL_OPT
@@ -39,6 +40,7 @@ else
   [[ $REQUIRE_ROLE == 1 ]] && { echo "REQUIRE_ROLE=1 in $D/team.env: launch $NAME with --role <role> or --model <model>"; exit 5; }
   CHOSEN=$MODEL
 fi
+EFFORT=; [[ -n $ROLE ]] && EFFORT=${(P)EFFORT_VAR}
 if [[ ! -d $W ]]; then
   W=$(awk -v u=$W '$1==u {print $3}' $D/worktrees.tsv 2>/dev/null | tail -1)
   [[ -z $W ]] && { echo "no directory or registered worktree for '$3'"; exit 5; }
@@ -49,7 +51,7 @@ TOP=$(git -C $W rev-parse --show-toplevel 2>/dev/null)
 [[ -n $REPO && ${${TOP:-$W}:A} == ${REPO:A} ]] && { echo "refusing to start $NAME in the repository's own checkout ($REPO); give it a worktree"; exit 5; }
 [[ -f $P ]] || { echo "missing prompt file $P"; exit 5; }
 # The driver starts the session (and any viewer pane). Success prints "<id> <viewer|->", then the lines to show after "launched".
-OUT=$(drv launch $D $NAME $W $CHOSEN $P ${RO:-0})
+OUT=$(export TEAMMATE_EFFORT=$EFFORT; drv launch $D $NAME $W $CHOSEN $P ${RO:-0})
 RC=$?
 (( RC == 9 )) && exit 5   # the driver has no launch operation; drv already said so on stderr
 (( RC != 0 )) && { print -r -- "$OUT"; exit $RC; }

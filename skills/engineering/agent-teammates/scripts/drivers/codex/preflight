@@ -1,0 +1,126 @@
+#!/bin/zsh
+# usage: preflight <run-dir>   (see driver.env)
+[[ $# -eq 1 && -f $1/team.env ]] || { sed -n 2p $0; exit 5; }
+fail=0
+command -v codex >/dev/null && echo "OK    codex found" || { echo "FAIL  codex not on PATH"; fail=1; }
+# codex loads every *.rules file under its rules directory; there's no command to ask it, so the rules are read as text.
+python3 - "${CODEX_HOME:-$HOME/.codex}/rules" <<'PY' || fail=1
+import ast, glob, itertools, os, re, sys
+
+d = sys.argv[1]
+# the command prefixes writers need, as prefix_rule patterns; rules are user-level (~/.codex/rules). An allow rule runs its
+# command outside the sandbox, so read-only roles run with --ignore-rules and need none.
+NEEDED = [("writers", ["git", "add"]), ("writers", ["git", "commit"])]
+STRICT = {"allow": 0, "prompt": 1, "forbidden": 2}
+
+def strip_comments(text):
+    """The text without # comments (a # inside a string stays)."""
+    out, q, i = [], None, 0
+    while i < len(text):
+        c = text[i]
+        if q:
+            out.append(c)
+            if c == "\\" and i + 1 < len(text): out.append(text[i + 1]); i += 1
+            elif c == q: q = None
+        elif c in "\"'": q = c; out.append(c)
+        elif c == "#":
+            while i < len(text) and text[i] != "\n": i += 1
+            continue
+        else: out.append(c)
+        i += 1
+    return "".join(out)
+
+def close_paren(text, i):
+    """Index of the ')' that closes the '(' before i, or -1."""
+    depth, q = 1, None
+    while i < len(text):
+        c = text[i]
+        if q:
+            if c == "\\": i += 1
+            elif c == q: q = None
+        elif c in "\"'": q = c
+        elif c == "(": depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0: return i
+        i += 1
+    return -1
+
+def rules_in(text):
+    """(pattern, decision) for every prefix_rule(...) call; a pattern element that lists alternatives is expanded."""
+    text, found, i = strip_comments(text), [], 0
+    for m in re.finditer(r"\bprefix_rule\s*\(", text):
+        e = close_paren(text, m.end())
+        if e < 0: continue
+        try:
+            call = ast.parse("f(" + text[m.end():e] + ")", mode="eval").body
+            kw = {k.arg: k.value for k in call.keywords}
+            pat = ast.literal_eval(kw["pattern"])
+            dec = ast.literal_eval(kw["decision"]) if "decision" in kw else "allow"
+        except Exception: continue
+        if dec not in STRICT or not isinstance(pat, (list, tuple)): continue
+        opts = [[x] if isinstance(x, str) else list(x) for x in pat if isinstance(x, (str, list, tuple))]
+        found += [(list(c), dec) for c in itertools.product(*opts)]
+    return found
+
+rules = []
+for f in sorted(glob.glob(os.path.join(d, "*.rules"))):
+    try: rules += rules_in(open(f).read())
+    except Exception: pass
+fail = 0
+broad = {}
+def q(words): return ", ".join('"%s"' % w for w in words)
+for who, need in NEEDED:
+    covering = [(r, dec) for r, dec in rules if len(r) <= len(need) and need[:len(r)] == r]
+    worst = max((STRICT[dec] for r, dec in covering), default=-1)
+    line = 'prefix_rule(pattern=[%s], decision="allow")' % q(need)
+    if worst == 2:
+        r = [r for r, dec in covering if dec == "forbidden"][0]
+        print('FAIL  codex: %s need `%s`, but prefix_rule(pattern=[%s], decision="forbidden") forbids it; remove or narrow that rule (rules are user-level)' % (who, " ".join(need), q(r)))
+        fail = 1
+    elif worst == 1:
+        r = [r for r, dec in covering if dec == "prompt"][0]
+        print('FAIL  codex: %s need `%s`, but prefix_rule(pattern=[%s], decision="prompt") asks first, which stops an unattended run; make it: %s' % (who, " ".join(need), q(r), line))
+        fail = 1
+    elif worst == -1:
+        print("FAIL  codex: %s need `%s`; add this line to a *.rules file in ~/.codex/rules, or $CODEX_HOME/rules (rules are user-level): %s" % (who, " ".join(need), line))
+        fail = 1
+    elif need not in [r for r, dec in covering]:
+        broad.setdefault(tuple(covering[0][0]), []).append(" ".join(need))
+for r, needs in broad.items():
+    print('WARN  codex: prefix_rule(pattern=[%s], decision="allow") is broader than needed; it covers %s' % (q(r), ", ".join(needs)))
+if not fail and not broad: print("OK    codex rules cover what writers need (read-only roles run without rules)")
+sys.exit(fail)
+PY
+# The git add and git commit rules run those commands outside the sandbox, so a writer can run code of its own through them
+# (a nested repo's hooks or core.fsmonitor, a rewritten .git file, a hooks directory it can write; see #66). Codex writers
+# therefore run with the engineer's permissions. This check closes only the route through core.hooksPath, as defence in depth:
+# git runs the hooks that setting names, and a path the writer can write is code it can run.
+read -r repo wtdir < <(unset REPO WORKTREE WORKTREES_DIR; source $1/team.env; print -r -- "${REPO:-${WORKTREE:--}} ${WORKTREES_DIR:--}")
+if [[ $repo == - ]]; then
+  echo "WARN  codex: team.env sets neither REPO nor WORKTREE, so core.hooksPath wasn't checked"
+else
+  cfg=$(git -C $repo config --type=path --show-origin core.hooksPath 2>&1); rc=$?
+  if (( rc == 1 )) && [[ -z $cfg ]]; then :   # unset
+  elif (( rc != 0 )); then
+    echo "WARN  codex: core.hooksPath wasn't checked; git -C $repo config failed: ${cfg%%$'\n'*}"
+  else
+    origin=${cfg%%$'\t'*}; hp=${cfg#*$'\t'}
+    if git -C $repo config --local core.hooksPath >/dev/null 2>&1; then fix="unset it (git -C $repo config --unset core.hooksPath)"
+    else fix="it is set in $origin; change it there"; fi
+    why=
+    if [[ $hp != /* ]]; then why="is the relative path '$hp', so each worktree has its own tracked hooks"
+    else
+      # the roots a writer can write; the run's own checkout (REPO) isn't one, since writers never work there
+      hp=${hp:A}; roots=($1/reports)
+      [[ $wtdir != - ]] && roots+=($wtdir)
+      [[ -f $1/worktrees.tsv ]] && roots+=(${(f)"$(awk 'NF>=3 {print $3}' $1/worktrees.tsv)"})
+      for w in $roots; do [[ -n $w && ( $hp == ${w:A} || $hp == ${w:A}/* ) ]] && { why="is $hp, inside $w, which a writer can write"; break; }; done
+    fi
+    if [[ -n $why ]]; then
+      echo "FAIL  codex: core.hooksPath in $repo $why, so a writer can edit a hook and run it outside the sandbox through the git commit rule. Fix: $fix, or point it at an absolute path outside the repo and every worktree. This narrows the tracked-hooks route only; it doesn't cover every writable root (/tmp and \$TMPDIR aren't checked), and the git add and git commit rules still give a writer unsandboxed code execution (see #66)"
+      fail=1
+    fi
+  fi
+fi
+exit $fail
