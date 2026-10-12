@@ -724,7 +724,7 @@ cpwant cp-argv && {
   cpverdict "CP AC4 a resume runs in the teammate's workdir with the launch's tool flags and model, and the message as its prompt"
 
   P=()
-  (( $#RUNS >= 4 )) || P+="want 4 teammate calls, got $#RUNS"
+  (( $#l1 == 2 && $#l2 == 2 )) || P+="want a launch and a resume for each of t1 and w1 (matched by the registered session id), got $#l1 and $#l2"
   for c in ${=by[$id1]} ${=by[$id2]}; do cparse $c
     hasv --add-dir $D || P+="${c:t}: no --add-dir $D (add-dir: '${F[--add-dir]}')"
     { hasf -s || hasf --silent; } || P+="${c:t}: no -s"
@@ -757,8 +757,8 @@ cpwant cp-status && {
   cpmk cp-status
   txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_TS=$((NOW - 300)) $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stay)"
   P=()
-  (( CPSTOP )) || cp_alive || P+="launch-teammate.sh returned but no copilot is running"
   await 10 cp_lock w1
+  (( CPSTOP )) || cp_alive || P+="launch-teammate.sh returned but no copilot is running"
   xrun $AT/drivers/copilot/status $D; cpnote "status while running"
   [[ $(cpstate w1) == working ]] || P+="alive copilot with its lock: status reports '$(cpstate w1)', want working"
   [[ $(cpact w1) == $((NOW - 300)) ]] || P+="last activity is '$(cpact w1)', want $((NOW - 300)) (events.jsonl's mtime and last event)"
