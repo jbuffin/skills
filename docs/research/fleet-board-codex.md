@@ -55,7 +55,7 @@ sub-agents also appear in `thread_spawn_edges(parent_thread_id, child_thread_id,
 `CODEX_HOME` and reads the stored threads. The probe client sent `initialize` → `initialized` → `thread/list` → `thread/loaded/list` →
 `thread/read {includeTurns:true}`, and then exited. Results while the exec turn was **still running**:
 
-```
+```text
 list: {"id": "01a12dfc-…", "status": {"type": "notLoaded"}, "source": "exec", "cwd": "…/probe-dir", "name": null, "preview": "Run the shell command…", "updatedAt": 1791772917, …}
 default list count: 0
 loaded: {"data": [], "nextCursor": null}
@@ -91,7 +91,7 @@ exec threads as `notLoaded`, because it runs the same server code as the stdio p
 `thread_items(thread_id, turn_id, item_id, item_type, item_json, created_at_ms, started_at_ms, completed_at_ms, …)`.
 
 | Moment | `thread_turns` row | `thread_items` |
-|---|---|---|
+| --- | --- | --- |
 | 17 s into a running `sleep 45` | `…\|inProgress\|1791772913\|` | `userMessage` only |
 | after normal exit | `…\|completed\|1791772913\|1791772963` | + `commandExecution` (917→962), `agentMessage` |
 | `exec` killed with SIGTERM mid-command | stays **`inProgress`**, no `completed_at` | `userMessage` only |
@@ -132,7 +132,7 @@ it only if the driver saves it to a file in the run dir. That would be new outpu
 `notify = ["<program>"]` in `config.toml` runs the program with one JSON argument on `agent-turn-complete` (the only event, per
 [config-advanced](https://learn.chatgpt.com/docs/config-file/config-advanced)). It fired for `codex exec`:
 
-```
+```json
 {"type":"agent-turn-complete","thread-id":"01a12dfc-…","turn-id":"01a12dfc-ef3e-…","cwd":"…/probe-dir","client":"codex_exec",
  "input-messages":["Run the shell command 'sleep 45; echo slept' once, then reply with exactly DONE."],"last-assistant-message":"DONE"}
 ```
@@ -184,7 +184,7 @@ A Codex teammate is a thread id plus a `codex exec` process. With the thread id 
 `CODEX_HOME`, the board can read most of a teammate line from Codex's own stores, read-only:
 
 | Board field | Codex native source | Verdict |
-|---|---|---|
+| --- | --- | --- |
 | Run: repo | `threads.cwd`, `git_origin_url`, `git_branch` | **Yes**, per thread (the run dir is still the better source) |
 | Run: mission, mode, current unit | none | **No**, Codex has no concept. Comes from the run's own files (`state.md`, `team.env`) |
 | Run: needs-input | none for exec threads (`approval "never"`) | **No** natively. Only daemon/interactive threads have `waitingOnApproval`/`waitingOnUserInput` |
