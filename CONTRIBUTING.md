@@ -10,7 +10,7 @@ Use the [Skill problem](https://github.com/jbuffin/skills/issues/new?template=sk
 form when a skill did the wrong thing, stopped partway, or wouldn't install or load. The most useful
 reports include:
 
-- the skill version (from `/plugin`, or the commit you installed from) and `claude --version`
+- the skill version (from `/plugin`, or the commit you installed from) and the harness with its version (`claude --version`, `codex --version` or `copilot --version`)
 - the command or prompt that started it
 - the step where it went wrong, with the excerpt of the transcript, report or error that shows it
 - the line in the `SKILL.md` that says it should have gone otherwise, if there is one

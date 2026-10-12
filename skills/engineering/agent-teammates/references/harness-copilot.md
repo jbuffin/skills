@@ -104,9 +104,7 @@ To give a teammate its next job:
 
 `retask.sh` resumes the session with the same `--session-id` and the flags its state file records, and resets the watchdog clock. Don't run `retasked.sh` after it. `send` waits up to `COPILOT_SEND_WAIT` seconds (default 60) for the previous turn to exit, then refuses with exit 1 and records nothing. Wait and run it again.
 
-A teammate that is stuck mid-turn can't be nudged. Close it with `close-teammate.sh` and relaunch it fresh with the stuck step spelled out.
-
-When you paste the teammate contract into a brief, keep the `LIVE_MESSAGING=0` lines, drop the advisor line and the "with an advisor" variant of the unresolved-problem line, and keep the read-only exception for a read-only role.
+A teammate that is stuck mid-turn can't be nudged; see the `STALL` row in [`SKILL.md`](../SKILL.md). When you paste the teammate contract into a brief, follow [the contract's note](../SKILL.md#the-teammate-contract) for `LIVE_MESSAGING=0`.
 
 ## Run the watchdog
 

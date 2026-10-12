@@ -92,7 +92,7 @@ MODEL=claude-sonnet-5.5
 # Fill from the profile:
 # MODEL is the fallback for a teammate launched without --role. REQUIRE_ROLE=1 makes every launch pass --role or --model.
 # MODEL_<ROLE> is the model for --role <role>; an empty one refuses that launch.
-# EFFORT_<ROLE> is the reasoning effort for --role <role>; empty passes no --reasoning-effort, which some models reject.
+# EFFORT_<ROLE> is the reasoning effort for --role <role>; empty passes no --reasoning-effort (some models reject the flag); set it only for models that take it.
 REQUIRE_ROLE=1
 MODEL_BRIEF_CHECKER=claude-opus-5.5
 EFFORT_BRIEF_CHECKER=
