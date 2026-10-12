@@ -1,0 +1,75 @@
+#!/bin/zsh
+# usage: preflight <run-dir>   (see driver.env)
+[[ $# -eq 1 && -f $1/team.env ]] || { sed -n 2p $0; exit 5; }
+fail=0
+command -v codex >/dev/null && echo "OK    codex found" || { echo "FAIL  codex not on PATH"; fail=1; }
+# codex loads every *.rules file under its rules directory; there's no command to ask it, so the rules are read as text.
+python3 - "${CODEX_HOME:-$HOME/.codex}/rules" <<'PY' || fail=1
+import ast, glob, itertools, os, sys
+
+d = sys.argv[1]
+# role -> the command prefixes its work needs, as prefix_rule patterns; rules are user-level (~/.codex/rules)
+NEEDED = [("read-only roles", ["gh", "pr", "view"]), ("read-only roles", ["gh", "pr", "diff"]), ("read-only roles", ["gh", "issue", "view"]),
+          ("writers", ["git", "add"]), ("writers", ["git", "commit"])]
+
+def span(text, i):
+    """The bracketed list starting at text[i] == '[', respecting strings; returns its end index or -1."""
+    depth, q = 0, None
+    while i < len(text):
+        c = text[i]
+        if q:
+            if c == "\\": i += 1
+            elif c == q: q = None
+        elif c in "\"'": q = c
+        elif c == "[": depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0: return i
+        i += 1
+    return -1
+
+def patterns(text):
+    """Every allowed pattern in the file, a pattern element that lists alternatives expanded into each one."""
+    found = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"): continue
+    i = 0
+    while True:
+        i = text.find("prefix_rule(", i)
+        if i < 0: return found
+        j = i + len("prefix_rule(")
+        i = j
+        k = text.find("pattern", j)
+        if k < 0: continue
+        k = text.find("[", k)
+        if k < 0: continue
+        e = span(text, k)
+        if e < 0: continue
+        rest = text[e + 1:e + 400].split(")", 1)[0]
+        if "forbidden" in rest or "prompt" in rest: continue
+        try: pat = ast.literal_eval(text[k:e + 1])
+        except Exception: continue
+        opts = [[x] if isinstance(x, str) else list(x) for x in pat if isinstance(x, (str, list, tuple))]
+        found += [list(c) for c in itertools.product(*opts)]
+
+rules = []
+for f in sorted(glob.glob(os.path.join(d, "*.rules"))):
+    try: rules += patterns(open(f).read())
+    except Exception: pass
+fail = 0
+broad = {}
+for who, need in NEEDED:
+    exact = need in rules
+    cover = [r for r in rules if r != need and len(r) < len(need) and need[:len(r)] == r]
+    line = 'prefix_rule(pattern=[%s], decision="allow")' % ", ".join('"%s"' % w for w in need)
+    if exact: continue
+    if cover:
+        broad.setdefault(tuple(cover[0]), []).append(" ".join(need)); continue
+    print("FAIL  codex: %s need `%s`; add this line to a *.rules file in ~/.codex/rules, or $CODEX_HOME/rules (rules are user-level): %s" % (who, " ".join(need), line))
+    fail = 1
+for r, needs in broad.items():
+    print('WARN  codex: prefix_rule(pattern=[%s], decision="allow") is broader than needed; it covers %s' % (", ".join('"%s"' % w for w in r), ", ".join(needs)))
+if not fail and not broad: print("OK    codex rules cover what read-only roles and writers need")
+sys.exit(fail)
+PY
+exit $fail

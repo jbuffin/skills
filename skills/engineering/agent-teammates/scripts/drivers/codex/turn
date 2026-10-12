@@ -1,0 +1,12 @@
+#!/bin/zsh
+# usage: turn <events> <marker> <report> codex <codex args...>
+# Runs one read-only turn: codex as a child, with this wrapper as the process-group leader. When the turn completed
+# (turn.completed in the events this turn added, codex exit 0) and codex wrote a non-empty report, touches the marker.
+[[ $# -ge 5 ]] || { sed -n 2p $0; exit 5; }
+EV=$1; MARKER=$2; REPORT=$3; shift 3
+SIZE=$(wc -c < $EV)
+rm -f $MARKER $REPORT
+"$@"
+RC=$?
+(( RC == 0 )) && tail -c +$((SIZE + 1)) $EV | grep -q '"type":"turn.completed"' && [[ -s $REPORT ]] && touch $MARKER
+exit $RC

@@ -1,0 +1,11 @@
+#!/bin/zsh
+# usage: stop <team-dir> <session-id>   (see driver.env)
+[[ $# -eq 2 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+DRVDIR=${0:A:h}
+source ${DRVDIR:h:h}/team-env.zsh
+source $DRVDIR/lib.zsh
+state_load $2 || exit 1
+# Only the recorded process group, and only while its leader still is this session's codex; the rollout stays on disk.
+kill_group || exit 1
+STOPPED=1; state_save

@@ -1,0 +1,16 @@
+#!/bin/zsh
+# usage: status <team-dir>   (see driver.env)
+[[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+DRVDIR=${0:A:h}
+source ${DRVDIR:h:h}/team-env.zsh
+source $DRVDIR/lib.zsh
+for f in $D/codex-*.state(N); do
+  id=${${f:t}#codex-}; id=${id%.state}
+  ( state_load $id || exit 0
+    # A turn that has exited is `done`, however it ended: codex exits when its turn does. Only `stop` makes `stopped`.
+    if [[ -n $STOPPED ]]; then st=stopped; elif turn_alive; then st=working; else st=done; fi
+    r=$(rollout_of); [[ -f $r ]] || r=$EVENTS
+    echo "$id - $st ${${r:+$(stat -f %m $r 2>/dev/null)}:--}" )
+done
+exit 0

@@ -1161,6 +1161,23 @@ want codex-close && {
   cx_reap
   verdict "CODEX AC6 close-teammate.sh: kills the whole process group, keeps the rollout, status stopped, no codex delete"
 
+  # The one white-box check: stop signals a recorded process group only after `ps -o args=` shows it is this session's
+  # codex. The state is pointed at a decoy group (a sleep in its own session) as if the pid had been reused.
+  cx_sc codex-close-decoy
+  cx_launch hold --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    ( cd $SC/cwd && exec env -i $BASE python3 -c 'import os; os.setsid(); os.execvp("/bin/sleep", ["/bin/sleep", "60"])' ) < /dev/null > /dev/null 2>&1 &
+    decoy=$!
+    cx_wait 5 '[[ $(ps -o pgid= -p $decoy | tr -d " ") == $decoy ]]' || P+="the decoy never became a group leader"
+    print -r -- "PID=$decoy" >> $D/codex-$THR.state; print -r -- "PGID=$decoy" >> $D/codex-$THR.state
+    xrunb 20 $AT/close-teammate.sh $D t1
+    [[ $(<$SC/out) == "t1 ($THR) was not running" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
+    kill -0 $decoy 2>/dev/null || P+="close-teammate.sh signalled a process group that isn't the session's codex"
+    kill $decoy 2>/dev/null
+  }
+  cx_reap
+  verdict "CODEX AC6 stop checks that the recorded process group still is this session's codex before it signals"
+
   cx_sc codex-close-exited
   cx_launch ok --role implementer $D t1 $SC/wt
   cx_ok "launch" && {
