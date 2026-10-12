@@ -470,6 +470,83 @@ want d2 && {
 }
 
 # ======================================================================================================================
+# u2: guidance and release. Text checks on the two skills' Markdown. They pin patterns that survive rewording; whether
+# any instruction was lost is the reviewer's check against dfb39c8, not a test's.
+# ======================================================================================================================
+ATD=$ROOT/skills/engineering/agent-teammates
+CMD=$ROOT/skills/engineering/commodore
+ATH=$ATD/references/harness-claude.md
+CMH=$CMD/references/harness-claude.md
+skill_md=( $ATD/SKILL.md $ATD/references/*.md(N) $CMD/SKILL.md $CMD/references/*.md(N) )
+shared_md=( ${skill_md:#$ATH} ); shared_md=( ${shared_md:#$CMH} )
+git -C $ROOT cat-file -e ${REF}^{commit} 2>/dev/null; HAVE_REF=$?
+NOREF="reference commit $REF not in this clone (shallow checkout?)"
+
+# C2: Claude-only words appear only in the two harness-claude.md files.
+want c2 && {
+  hits=$(grep -nE 'SendMessage|\bMonitor\b|notify_when_idle|claude (agents|attach|logs|--bg|stop|rm)\b' $shared_md /dev/null | sed "s#$ROOT/##")
+  [[ -z $hits ]] && pass "C2 no Claude-only terms outside harness-claude.md" || fail "C2 no Claude-only terms outside harness-claude.md" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
+$(print -r -- $hits | head -6)"
+  for f in $ATH $CMH; do
+    [[ -s $f ]] && pass "C2 ${f#$ROOT/} exists" || fail "C2 ${f#$ROOT/} exists" "missing or empty"
+  done
+  for s in $ATD $CMD; do
+    f=$s/SKILL.md
+    grep -qE '\]\(references/harness-claude\.md\)' $f && pass "C2 ${s:t}/SKILL.md links references/harness-claude.md" || fail "C2 ${s:t}/SKILL.md links references/harness-claude.md" "no Markdown link to (references/harness-claude.md)"
+    grep -qF 'references/harness-<HARNESS>.md' $f && grep -q 'team\.env' $f && pass "C2 ${s:t}/SKILL.md states the harness-<HARNESS>.md rule" || fail "C2 ${s:t}/SKILL.md states the harness-<HARNESS>.md rule" "no 'references/harness-<HARNESS>.md' text next to a team.env mention"
+  done
+}
+
+# D2 wording: both LIVE_MESSAGING variants for the marker line and the new-instructions line.
+want d2w && {
+  sec=$(awk '/^## /{p=($0=="## The teammate contract")} p' $ATD/SKILL.md)
+  n1=$(print -r -- $sec | grep -c 'LIVE_MESSAGING=1'); n0=$(print -r -- $sec | grep -c 'LIVE_MESSAGING=0')
+  (( n1 >= 2 && n0 >= 2 )) && pass "D2 contract carries LIVE_MESSAGING=1 and =0 for the marker and new-instructions lines" || fail "D2 contract carries LIVE_MESSAGING=1 and =0 for the marker and new-instructions lines" "teammate-contract section has $n1 lines with LIVE_MESSAGING=1 and $n0 with LIVE_MESSAGING=0 (want at least 2 each)"
+  print -r -- $sec | grep 'LIVE_MESSAGING=0' | grep -qi 'exit' && pass "D2 contract's =0 marker line says exit" || fail "D2 contract's =0 marker line says exit" "no LIVE_MESSAGING=0 line in the contract mentions exiting"
+  print -r -- $sec | grep 'LIVE_MESSAGING=0' | grep -qiE 'resum' && pass "D2 contract's =0 new-instructions line says the job arrives by resuming" || fail "D2 contract's =0 new-instructions line says the job arrives by resuming" "no LIVE_MESSAGING=0 line in the contract mentions resuming the session"
+  grep -q 'LIVE_MESSAGING' $CMD/references/brief-common.md && pass "D2 brief-common template tells the coordinator which LIVE_MESSAGING variant to paste" || fail "D2 brief-common template tells the coordinator which LIVE_MESSAGING variant to paste" "commodore/references/brief-common.md never mentions LIVE_MESSAGING"
+  awk '/^## /{p=($0 ~ /dvisor/)} p' $CMD/references/brief-common.md | grep -qiE 'harness' && pass "D2 brief-common 'Asking the advisor' says to drop it where there's no advisor" || fail "D2 brief-common 'Asking the advisor' says to drop it where there's no advisor" "no harness-conditional wording in the Asking the advisor section of commodore/references/brief-common.md"
+  grep -qF 'always keep the `## Advisor consults` line' $CMD/references/brief-common.md && pass "D2 brief-common placeholder keeps ## Advisor consults" || fail "D2 brief-common placeholder keeps ## Advisor consults" "the contract placeholder in commodore/references/brief-common.md doesn't say to always keep the ## Advisor consults line"
+}
+
+# D3: the Claude default table from roles.md at dfb39c8 lives in commodore's harness-claude.md.
+want d3 && if (( HAVE_REF )); then fail "D3 harness-claude.md holds every role's default model" "$NOREF"; else
+  rows=(); while IFS= read -r row; do rows+=$row; done < <(git -C $ROOT show ${REF}:skills/engineering/commodore/references/roles.md | grep -E '^[|] .(implementer|reviewer|scribe)')
+  miss=()
+  for row in $rows; do
+    model=$(print -r -- $row | awk -F'|' '{split($3, a, " "); print a[1]}')
+    for role in $(print -r -- $row | awk -F'|' '{print $2}' | tr -d '` ' | tr ',' ' '); do
+      grep -F -- "\`$role\`" $CMH 2>/dev/null | grep -qF -- $model || miss+="$role=$model"
+    done
+  done
+  (( $#rows == 3 )) || miss+="(parsed ${#rows} rows from $REF roles.md, want 3)"
+  grep -qi haiku $CMH 2>/dev/null || miss+="scribe=haiku allowed"
+  (( $#miss )) && fail "D3 harness-claude.md holds every role's default model" "missing from ${CMH#$ROOT/}: ${miss[*]}" || pass "D3 harness-claude.md holds every role's default model"
+fi
+
+# C6: the changeset, the Markdown lint, and the descriptions.
+want c6 && {
+  cs=(); for f in $ROOT/.changeset/*.md(N); do [[ ${f:t} == README.md ]] && continue; git -C $ROOT cat-file -e ${REF}:.changeset/${f:t} 2>/dev/null || cs+=$f; done
+  if (( HAVE_REF )); then fail "C6 a new changeset bumps jasonbuffin-skills minor" "$NOREF"
+  elif (( $#cs )) && grep -qE '^"jasonbuffin-skills": minor$' $cs; then pass "C6 a new changeset bumps jasonbuffin-skills minor"
+  else fail "C6 a new changeset bumps jasonbuffin-skills minor" "new .changeset/*.md since $REF: ${#cs}; with '\"jasonbuffin-skills\": minor': $(( $#cs ? $(grep -lE '^"jasonbuffin-skills": minor$' $cs | wc -l) : 0 ))"; fi
+
+  if command -v markdownlint-cli2 >/dev/null; then
+    if [[ -s $ATH && -s $CMH ]]; then
+      out=$(cd $ROOT && markdownlint-cli2 ${skill_md#$ROOT/} 2>&1) && pass "C6 markdownlint-cli2 on both skills' Markdown" || fail "C6 markdownlint-cli2 on both skills' Markdown" "$(print -r -- $out | tail -8)"
+    else fail "C6 markdownlint-cli2 on both skills' Markdown" "not linted: the harness-claude.md files don't exist yet"; fi
+  else echo "skip  C6 markdownlint-cli2 (not on PATH; CI's markdown job lints)"; fi
+
+  for s in agent-teammates commodore; do
+    d=$(sed -n 's/^description: //p' $ROOT/skills/engineering/$s/SKILL.md | head -1)
+    (( ${#d} > 0 && ${#d} <= 1024 )) && pass "C6 $s description is 1-1024 characters" || fail "C6 $s description is 1-1024 characters" "${#d} characters"
+    [[ $d == *[Hh]arness* && $d == *"Claude Code"* ]] && pass "C6 $s description says harness-aware, Claude Code supported" || fail "C6 $s description says harness-aware, Claude Code supported" "description lacks 'harness' or 'Claude Code': ${d:0:160}"
+  done
+  d=$(sed -n 's/^description: //p' $ATD/SKILL.md | head -1)
+  [[ $d == *unattended* ]] && pass "C6 agent-teammates description keeps its unattended trigger" || fail "C6 agent-teammates description keeps its unattended trigger" "no 'unattended' in the description"
+}
+
+# ======================================================================================================================
 # LINT: the checks CI runs on shell files, including the files its shebang search misses.
 # ======================================================================================================================
 bad=(); sbad=()

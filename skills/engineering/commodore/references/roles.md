@@ -4,33 +4,9 @@ Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name 
 
 ## Models
 
-Launch every teammate with `--role <role>`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`. A fresh `team.env` from `team-init.sh` holds these defaults, and the profile overrides them:
+Launch every teammate with `--role <role>`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`. A fresh `team.env` from `team-init.sh` holds the harness's defaults, which [`harness-claude.md`](harness-claude.md) lists for Claude Code (read `harness-<HARNESS>.md`, with `HARNESS` from `team.env`); the profile overrides them. The roles are `implementer`, `test-writer`, `target-steward`, `reviewer`, `security-reviewer`, `brief-checker`, `triager` and `scribe`.
 
-| `--role` | Default model |
-| --- | --- |
-| `implementer`, `test-writer`, `target-steward` | sonnet |
-| `reviewer`, `security-reviewer`, `brief-checker`, `triager` | opus |
-| `scribe` | sonnet (haiku allowed) |
-
-The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a model above Opus, the profile sets these four roles to the coordinator's model, and `ADVISOR` has to rank at or above it too (see below).
-
-## The advisor
-
-Every role launches with the advisor: implementers, test writers, the target steward and the scribe, and also reviewers, security reviewers, brief checkers and the triager. The launcher passes `--advisor $ADVISOR` (default opus) on every launch, read-only ones included, and `brief-common.md` tells each teammate when to consult it. A teammate's advisor sees only that teammate's own transcript. It never sees the work a reviewer judges, so reviewers stay independent of the implementer.
-
-The advisor must rank at or above the teammate's model, and a pairing that doesn't hold starts without it and no error. `MODEL_REVIEWER=opus` with `ADVISOR=sonnet` leaves the reviewer without an advisor. A Fable teammate needs `ADVISOR=fable`, since a Fable main model accepts only a Fable advisor. The preflight probes every distinct model and reports `ADVISOR OFF` for each one that fails.
-
-### When the advisor is off
-
-A `WARN  ADVISOR OFF: <model> (<roles>): <reason>` line from `team-preflight.sh` means those roles would start without the advisor, and nothing else would tell you.
-
-1. Before you launch any teammate, tell the engineer which roles are affected and why. If they've already left, put it in your next update and carry on.
-2. Record it in `state.md` under Decisions and assumptions, and on the unit summary's `Advisor:` line.
-3. Fix the cause only when it's cheap, then rerun the preflight:
-   - `ADVISOR` ranks below the model: set `ADVISOR=fable` for a Fable teammate, otherwise `ADVISOR=opus`.
-   - The probe's hint names a variable such as `DISABLE_TELEMETRY`: unset it for the run.
-
-Otherwise those roles still launch as background sessions, without the advisor. An in-process subagent wouldn't bring it back.
+The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a more capable model than a role's default, the profile sets these four roles to the coordinator's model. Advisor pairing, where the harness has an advisor, is in the harness reference.
 
 ## Lifetimes
 
