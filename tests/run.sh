@@ -23,7 +23,8 @@
 #   CODEX  The Codex driver (turn-based): launch, send/retask, status, tail, stop, preflight, the read-only marker, effort
 #       plumbing and the driver's shape. Assertion style (no goldens); `tests/run.sh codex` runs just these.
 #   U4  Tail output per the driver contract, codex without its CLI, codex .state without PERM, copilot effort validation,
-#       REPO over WORKTREE. The RESEND and D2 checks read drivers/CONTRACT.md. The tail-* and init-* goldens were edited by hand to match; `--record` would revert them.
+#       REPO over WORKTREE. The RESEND and D2 checks read drivers/CONTRACT.md. The tail-* and init-* goldens were
+#       edited by hand to match; `--record` would revert them.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
