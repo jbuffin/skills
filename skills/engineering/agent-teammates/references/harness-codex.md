@@ -12,6 +12,19 @@ Everything else follows from that:
 - A turn takes no input mid-turn.
 - The coordinator is the only thing that wakes a finished teammate, with `retask.sh`.
 
+## Known limits
+
+Tell the engineer these before a Codex run, and record their answer in the run's state. Each is explained in the section it links to.
+
+- **Writers run with the engineer's permissions.** The two `git` rules writers need run outside the sandbox, and a writer can use them to run any command ([The `~/.codex/rules` lines](#the-codexrules-lines); follow-up [#66](https://github.com/jbuffin/skills/issues/66)).
+- **Read-only doesn't cover MCP servers.** A read-only teammate's files and shell are sandboxed, but the MCP servers in the engineer's Codex config still start, and their tools are offered to it ([Sandbox per role](#sandbox-per-role)).
+- **A writer can replace a read-only teammate's report.** Check every read-only report against its events log before you act on it ([How a read-only teammate reports](#how-a-read-only-teammate-reports)).
+- **The sandbox follows `--read-only`, not `--role`.** A reviewer launched without the flag gets a writer's sandbox, network and the `git` rules.
+- **A slow start fails the launch.** The launch waits 20 seconds for `thread.started`. An MCP server that is slow to start can push past that, and the launch exits 1.
+- **A re-task isn't confirmed.** `retask.sh` reports success once the resumed turn is started in the background. A resume that dies at once shows up later as `BLOCKED`; read its `.err` file.
+- **The preflight splits paths on whitespace.** A `REPO` or `worktrees.tsv` path with a space in it gets past the `core.hooksPath` check (it prints a `WARN`). Keep those paths free of spaces.
+- **Sessions stay on disk.** Closing never deletes a rollout under `~/.codex/sessions`.
+
 ## Settings in `team.env`
 
 `team-init.sh` writes a Codex `team.env` with these lines.
@@ -28,16 +41,18 @@ Everything else follows from that:
 
 ## Sandbox per role
 
-The sandbox is chosen from `--read-only`, not from `--role`. Commodore always passes both for a read-only role.
+The sandbox is chosen from `--read-only`, not from `--role`. Commodore always passes both for a read-only role. Nothing checks that pairing: a reviewer, security reviewer, brief checker or triager launched without `--read-only` runs as a writer, with network and the `git` rules.
 
 | Teammate | How it runs | What it can do |
 | --- | --- | --- |
-| launched with `--read-only` (reviewer, security reviewer, brief checker, triager) | `-s read-only` and `--ignore-rules`, on launch and on every resume | reads files. It writes no file and has no network, so no `gh`. Only `--ignore-rules` makes that true: without it, a user-level `allow` rule would run a matching command outside the sandbox |
+| launched with `--read-only` (reviewer, security reviewer, brief checker, triager) | read-only sandbox and `--ignore-rules`: `-s read-only` on launch, `-c sandbox_mode="read-only"` on every resume | reads files. Its shell writes no file and has no network, so no `gh`. Only `--ignore-rules` makes that true: without it, a user-level `allow` rule would run a matching command outside the sandbox. MCP servers aren't covered (below) |
 | any other (implementer, test writer, target steward, scribe) | `workspace-write`, network on | writes its working directory and `<team-dir>/reports`, and reaches the network |
 
-Because a read-only teammate has no network, put any GitHub data it needs (a PR diff, issue text, comments) in files under the run directory before you launch it, and name those files in its brief. Never expect it to run `gh`.
+Because a read-only teammate's shell has no network, put any GitHub data it needs (a PR diff, issue text, comments) in files under the run directory before you launch it, and name those files in its brief. Never expect it to run `gh`.
 
-`codex exec resume` takes no `-s` and no `-C`. On launch the driver passes `-s`. On every resume it passes the same choice as `-c sandbox_mode=…`, plus `-c sandbox_workspace_write.writable_roots=[<team-dir>/reports]` for a writer, and sets the working directory itself. So a re-tasked teammate keeps the sandbox of its launch.
+The sandbox doesn't cover MCP servers. On codex-cli 0.162.0 the servers in `~/.codex/config.toml` (`[mcp_servers.*]`) start for every teammate, read-only ones included, and their tools are offered to it, along with a web tool (`web__run`). An MCP server runs outside the sandbox, so a tool call could reach whatever that server can: post to Slack, write to GitHub, send mail. Whether such a call goes through from a read-only turn hasn't been tested. Before a run that feeds a read-only teammate untrusted text (someone else's PR in the review mission), list the engineer's MCP servers by name and have them disable, for the run, any that can write or post, or accept the risk.
+
+`codex exec resume` takes no `-s` and no `-C`. On launch the driver passes `-s`. On every resume it passes the same choice as `-c sandbox_mode=…`, plus `-c sandbox_workspace_write.writable_roots=[<team-dir>/reports]` for a writer, and sets the working directory itself. A re-tasked read-only teammate keeps the read-only sandbox (checked on codex-cli 0.162.0: a write in a resumed turn was refused). A re-tasked writer's `writable_roots` replaces any `writable_roots` in `config.toml`, where the launch's `--add-dir` adds to them. So a writer that needed an extra root from the config on its first turn may lose it on a re-task. That's read from codex's `-c` override rules, not tested.
 
 `--read-only` also matters for how a teammate reports (next section), so launch every read-only role with it.
 
@@ -53,7 +68,7 @@ A read-only teammate can't write files, so the contract's "write the report, the
 
 Never write a `.proof` for a read-only Codex role. It can't run `evidence.sh`, so it could never verify. Still run `verify-report.sh` on its `DONE`: with no proof it checks that the report and marker are from this tasking.
 
-Writers write their own report, marker and evidence under `<team-dir>/reports`. That directory is writable for them, so a writer can overwrite a read-only teammate's report and marker. When a read-only teammate's report is surprising, cross-check it against that teammate's own events log before you act on it: `<team-dir>/codex-<name>.<n>.events` holds every turn's `--json` events, in a place no writer's sandbox covers.
+Writers write their own report, marker and evidence under `<team-dir>/reports`. That directory is writable for them, so a writer, or code a writer runs, can overwrite a read-only teammate's report and marker, and the watchdog then reports `DONE` again. A forged report reads as clean, not as surprising. So whenever a writer is live or has run since the read-only turn, check every read-only report against that teammate's own events log before you act on it: the report must match the `text` of the last `item.completed` event whose `item.type` is `agent_message` in `<team-dir>/codex-<name>.<n>.events`. That log holds every turn's `--json` events, in a place no writer's sandbox covers. In the review mission this matters most: the target steward is a writer and runs the PR's own code.
 
 ## The team directory must be private
 
@@ -63,7 +78,7 @@ Choose a team directory outside every path a writer can write: not `/tmp`, not `
 
 Launch and close as in `SKILL.md`. On success a launch prints `launched <name> as background session <thread-id> in <workdir>`, with `(read-only)` after it for a read-only role. It exits:
 
-- `1` when codex printed no `thread.started`. The driver stopped the process and printed the start of codex's stderr.
+- `1` when codex printed no `thread.started` within 20 seconds. The driver stopped the process and printed the start of codex's stderr. An MCP server that is slow to start can cause this.
 - `5` when the launch was refused. The message says why. Only when it reads "a live Codex session is already named …" do you close that session or pick another name. For anything else (a missing prompt file, an empty `MODEL_<ROLE>`, an invalid name), fix what the message names and launch again.
 
 `status` and the watchdog name sessions by thread id. To find a teammate's thread id, read column 2 of its row in `<team-dir>/teammates.tsv` (the last row for that name).
@@ -74,7 +89,7 @@ To give a teammate its next job:
 2. Run `<teammates>/drivers/codex/status <team-dir>` and check that the teammate's session reads `done`. A writer touches its marker before codex exits, so `DONE` can arrive while `status` still says `working`. `send` refuses a running turn, and `retask.sh` then fails with "send to … failed with exit 1; nothing recorded". When you see that, wait and run it again.
 3. Run `<teammates>/retask.sh <team-dir> <name> <message-file>`.
 
-`retask.sh` resumes the session with the file as its prompt, in the same sandbox, and resets the watchdog clock. Don't run `retasked.sh` after it. It refuses a closed teammate. A read-only teammate re-tasked this way gets a fresh report and marker from its new turn.
+`retask.sh` resumes the session with the file as its prompt, in the same sandbox, and resets the watchdog clock. It returns once the resumed turn is started in the background, without checking that the turn got going. A resume that dies at once (a removed worktree, a flag a newer codex rejects) shows up as `BLOCKED` a couple of polls later; read the teammate's `.err` file then. Don't run `retasked.sh` after it. It refuses a closed teammate. A read-only teammate re-tasked this way gets a fresh report and marker from its new turn.
 
 A teammate that is stuck mid-turn can't be nudged. Close it with `close-teammate.sh` and relaunch it fresh with the stuck step spelled out.
 
@@ -135,7 +150,7 @@ A teammate closed after its turn ended still reads `done`: there was nothing to 
 
 The mtime is the session's rollout file (or the events log before the rollout exists). `STALL` fires when a `working` session's mtime is `STALL_MIN` minutes old. A `done` turn with no new marker twice in a row is `BLOCKED`. With no marker the usual cause is a turn that failed or ended without a report.
 
-For `BLOCKED`, read the raw log only after `teammate-tail.sh`: `<team-dir>/codex-<name>.<n>.events` (the `--json` event log of every turn) and `<team-dir>/codex-<name>.<n>.err` (codex's stderr). Lines `ERROR rmcp` in stderr are about unauthenticated MCP servers and are harmless.
+For `BLOCKED`, read the raw log only after `teammate-tail.sh`: `<team-dir>/codex-<name>.<n>.events` (the `--json` event log of every turn) and `<team-dir>/codex-<name>.<n>.err` (codex's stderr). Lines `ERROR rmcp` in stderr are about unauthenticated MCP servers. They don't affect the turn, but they show that the engineer's MCP servers start for every teammate (see "Sandbox per role").
 
 ## What the engineer sees
 

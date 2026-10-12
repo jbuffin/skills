@@ -58,6 +58,20 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 
 ## Read-only roles have no network
 
-Read-only Codex roles (reviewer, security reviewer, brief checker, triager) launch with their sandbox read-only and the user's rules ignored, so they write nothing and can't run `gh`. Fetch any GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments) yourself before the launch, save it to files in the run directory, and name the files in the brief. Before you launch or re-task a read-only role, record its worktree's `git -C <worktree> rev-parse HEAD` and `git -C <worktree> status --short`, and run it only while no writer in that worktree is `working`. After the turn, both must match. A change means the isolation failed: stop and ask the engineer.
+Read-only Codex roles (reviewer, security reviewer, brief checker, triager) launch with their sandbox read-only and the user's rules ignored, so their shell writes nothing and can't run `gh`. Always pass `--read-only` with these roles: on Codex the sandbox follows the flag, not the role. Fetch any GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments) yourself before the launch, save it to files in the run directory, and name the files in the brief. Before you launch or re-task a read-only role, record its worktree's `git -C <worktree> rev-parse HEAD` and `git -C <worktree> status --short`, and run it only while no writer in that worktree is `working`. After the turn, both must match. A change means the isolation failed: stop and ask the engineer.
 
 A read-only role's teammate contract differs too: see "The teammate contract" in agent-teammates' `SKILL.md`. Its report is its final message, so give it no `.proof`.
+
+## Caveats to settle before a Codex run
+
+agent-teammates' reference lists the known limits of Codex teammates. Put these to the engineer in the decision batch, and record each answer in `state.md`:
+
+- **Writers run with the engineer's permissions**, through the two `git` rules (follow-up [#66](https://github.com/jbuffin/skills/issues/66)). Only start a Codex run whose writers you'd trust with the engineer's own shell.
+- **MCP servers aren't sandboxed.** The servers in `~/.codex/config.toml` start for every teammate, read-only ones included, and their tools are offered to it. List them by name, and have the engineer disable for the run any that can write or post, or accept the risk.
+- **A writer can replace a read-only report.** Before you act on any read-only report while a writer is live or has run since, check it against the teammate's events log, as agent-teammates' reference describes.
+
+The review mission adds to all three, because the PR is someone else's and its text and code are untrusted:
+
+- The reviewers read text an attacker wrote, with MCP tools in reach. Settle the MCP question before launching them.
+- The target steward is a writer that runs the PR's code, with network, the `git` rules and write access to `<run>/reports`. On Codex, launch it only when the engineer trusts the PR's author. Otherwise skip it and list the light check as not done.
+- Check both reviewers' reports against their events logs before you merge the findings, whether or not the steward ran.
