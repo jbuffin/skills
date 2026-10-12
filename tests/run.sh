@@ -511,6 +511,62 @@ want commodore-retask && {
   verdict "COMMODORE-RETASK roles.md holds under both LIVE_MESSAGING variants"
 }
 
+# The watchdog nudges and two commodore lines hold under both LIVE_MESSAGING variants (#61). Text checks: they pin the
+# questions the text must settle, not exact sentences.
+want watchdog-retask && {
+  ATS=$ROOT/skills/engineering/agent-teammates/SKILL.md
+  CMD=$ROOT/skills/engineering/commodore
+  row() { grep -F -- "| \`$1 " $ATS | head -1; }
+  # AC1: the DONE and BLOCKED rows defer to the re-tasking paragraph.
+  for r in DONE BLOCKED; do
+    line=$(row $r)
+    [[ -n $line ]] || P+="no $r row in the Watch table"
+    print -r -- $line | grep -qiE 're-tasking paragraph|Launch, re-task, close' || P+="the $r row doesn't point at the re-tasking paragraph or 'Launch, re-task, close'"
+    print -r -- $line | grep -qiE 're-?task' || P+="the $r row doesn't say re-task"
+    print -r -- $line | grep -qE 'send it the FAIL lines as its next instruction|message it one concrete next instruction' && P+="the $r row still gives only the send/message instruction"
+    verdict "WATCHDOG-RETASK Watch table $r row defers to the re-tasking paragraph"
+  done
+  # AC2: STALL covers LIVE_MESSAGING=0 and keeps the LIVE_MESSAGING=1 advice.
+  st=$(row STALL)
+  [[ -n $st ]] || P+="no STALL row in the Watch table"
+  print -r -- $st | grep -qE 'LIVE_MESSAGING=0|no live messaging' || P+="the STALL row never names LIVE_MESSAGING=0 or 'no live messaging'"
+  print -r -- $st | grep -q 'close-teammate\.sh' || P+="the STALL row never mentions close-teammate.sh"
+  print -r -- $st | grep -qi 'relaunch' || P+="the STALL row never says relaunch"
+  verdict "WATCHDOG-RETASK STALL row closes and relaunches when the harness has no live messaging"
+  print -r -- $st | grep -qE 'LIVE_MESSAGING=1' || P+="the STALL row doesn't name LIVE_MESSAGING=1 for the nudge advice"
+  print -r -- $st | grep -qi 'message it one concrete next command' || P+="the STALL row lost 'message it one concrete next command'"
+  print -r -- $st | grep -qi 'stalls again' && print -r -- $st | grep -qi 'close it and relaunch\|close and relaunch' || P+="the STALL row lost close and relaunch on a repeat stall"
+  verdict "WATCHDOG-RETASK STALL row keeps the LIVE_MESSAGING=1 advice, scoped to LIVE_MESSAGING=1"
+  # AC3: the implementer section.
+  imp=$(awk '/^## /{p=($0 ~ /^## Implementer/); next} p' $CMD/references/roles.md)
+  [[ -n $imp ]] || P+="no '## Implementer' section found in roles.md"
+  print -r -- $imp | grep -qiE 'wait for|stay alive' && P+="the implementer section still says 'wait for' or 'stay alive'"
+  verdict "WATCHDOG-RETASK roles.md implementer section has neither 'wait for' nor 'stay alive'"
+  # AC4: one statement of the job-file rule; the verify-FAIL line and Phase 2 reach it.
+  n=0
+  for f in $CMD/SKILL.md $CMD/references/*.md(N); do
+    c=$(awk -v RS= '/prompts\/<name>\.job-<n>\.md/ && /file-writing tool/ && /coordinator/ && /reports\// {n++} END{print n+0}' $f 2>/dev/null)
+    (( n += c ))
+  done
+  (( n == 1 )) || P+="found $n paragraphs stating the job-file rule (prompts/<name>.job-<n>.md with file-writing tool, coordinator and reports/) under commodore/, want 1"
+  verdict "WATCHDOG-RETASK commodore states the job-file rule exactly once"
+  reach() { print -r -- $1 | grep -qE 'prompts/<name>\.job-<n>\.md|job file|\]\([^)]*#[^)]*job' ; }
+  vl=$(grep 'verdict: unverified' $CMD/SKILL.md)
+  reach $vl || P+="SKILL.md's verify-FAIL line neither names the job file (prompts/<name>.job-<n>.md or 'job file') nor links the section stating the rule"
+  mb=$CMD/references/mission-build.md
+  rule=$(awk '/^## Phase 2/{p=1; next} p && /^## /{p=0} p' $mb | awk '/^1\. /{exit} {print}')
+  reach $rule || P+="the Phase 2 rule neither names the job file nor links the section stating the rule"
+  (( n == 1 )) || P+="reach means nothing without exactly one statement (found $n)"
+  verdict "WATCHDOG-RETASK verify-FAIL line and Phase 2 rule reach the one job-file rule"
+  # AC5 guard (green today): the Claude reference is byte-identical to 13ea390's.
+  if git -C $ROOT cat-file -e 13ea390^{commit} 2>/dev/null; then
+    want_blob=$(git -C $ROOT rev-parse 13ea390:skills/engineering/agent-teammates/references/harness-claude.md)
+    have_blob=$(git -C $ROOT hash-object $ROOT/skills/engineering/agent-teammates/references/harness-claude.md)
+    [[ $want_blob == $have_blob ]] || P+="agent-teammates references/harness-claude.md differs from 13ea390 (blob $have_blob, want $want_blob)"
+    verdict "WATCHDOG-RETASK guard: agent-teammates references/harness-claude.md is unchanged from 13ea390"
+  else echo "skip  WATCHDOG-RETASK guard (reference commit 13ea390 not in this clone)"; fi
+}
+
 # ======================================================================================================================
 # C1: nothing outside drivers/claude calls claude or reads its transcripts.
 # ======================================================================================================================
