@@ -12,6 +12,7 @@
 #   FAKE_CODEX_REPORT   what -o gets: text (default, the final message), empty (an empty file) or none (no file)
 #   FAKE_CODEX_REPLY    the final agent message (default "All done here")
 #   FAKE_CODEX_TOOLS    0: no tool items in the turn (default: two command_execution items)
+#   FAKE_CODEX_CHILD    1: once ready, start a `/bin/sleep 60` in a process group of its own, like a tool command (pid in codex.child)
 # Every call writes $FAKE_DIR/codex.pid and codex.pgid (the last call wins), and codex.ready once its first events are
 # out. A process that stays waits with /bin/sleep (tests/bin/sleep returns at once), for at most 60 s, and also ends when
 # $FAKE_DIR is gone. It never closes its stdout or stderr and never starts a session of its own, like the real one.
@@ -99,6 +100,10 @@ if [ "$mode" = silent ]; then
 fi
 printf '{"type":"thread.started","thread_id":"%s"}\n' "$thread"
 echo '{"type":"turn.started"}'
+if [ "$(fval "$FAKE_CODEX_CHILD" codex-child 0)" = 1 ]; then
+  python3 -c 'import os; os.setsid(); os.execvp("/bin/sleep", ["/bin/sleep", "60"])' < /dev/null > /dev/null 2>&1 &
+  echo $! > "$FAKE_DIR/codex.child"
+fi
 : > "$FAKE_DIR/codex.ready"
 if [ "$mode" = hold ]; then wait_release; fi
 

@@ -1,12 +1,18 @@
 #!/bin/zsh
-# usage: turn <events> <marker> <report> codex <codex args...>
-# Runs one read-only turn: codex as a child, with this wrapper as the process-group leader. When the turn completed
-# (turn.completed in the events this turn added, codex exit 0) and codex wrote a non-empty report, touches the marker.
-[[ $# -ge 5 ]] || { sed -n 2p $0; exit 5; }
-EV=$1; MARKER=$2; REPORT=$3; shift 3
+# usage: turn <events> <out> <marker> <report> codex <codex args...>
+# Runs one read-only turn: codex as a child, with this wrapper as the process-group leader. codex writes its last message
+# to <out>, a path in the team directory no sandbox can write. When the turn completed (turn.completed in the events this
+# turn added, codex exit 0) and <out> is a non-empty regular file, <out> is renamed onto <report> and a fresh file onto
+# <marker>. rename(2) replaces a symlink a writer planted there instead of following it; nothing here writes through one.
+[[ $# -ge 6 ]] || { sed -n 2p $0; exit 5; }
+EV=$1; OUT=$2; MARKER=$3; REPORT=$4; shift 4
+place() { python3 -c 'import os,sys; os.replace(sys.argv[1], sys.argv[2])' "$1" "$2"; }
 SIZE=$(wc -c < $EV)
-rm -f $MARKER $REPORT
+rm -f $MARKER $OUT
 "$@"
 RC=$?
-(( RC == 0 )) && tail -c +$((SIZE + 1)) $EV | grep -q '"type":"turn.completed"' && [[ -s $REPORT ]] && touch $MARKER
+if (( RC == 0 )) && tail -c +$((SIZE + 1)) $EV | grep -q '"type":"turn.completed"' && [[ -s $OUT && ! -L $OUT && -f $OUT ]]; then
+  place $OUT $REPORT && : > $OUT.marker && place $OUT.marker $MARKER
+fi
+rm -f $OUT $OUT.marker
 exit $RC

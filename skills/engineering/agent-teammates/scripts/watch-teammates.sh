@@ -14,11 +14,11 @@
 # two-polls-in-a-row and 10-minute rules. Without the flag nothing changes and no state file is written.
 BOUND=
 if [[ $1 == --until-event ]]; then
-  [[ $2 == <1-> ]] || { sed -n 2,13p $0; exit 5; }
+  [[ $2 == <1-> ]] || { sed -n 2,14p $0; exit 5; }
   BOUND=$2; shift 2
 fi
 D=${1:A}
-[[ -z $1 ]] && { sed -n 2,13p $0; exit 5; }
+[[ -z $1 ]] && { sed -n 2,14p $0; exit 5; }
 source ${0:A:h}/team-env.zsh
 R=$D/reports
 typeset -A seen blocked lastalert
@@ -32,6 +32,7 @@ for f in ${(k)seen}; do print -r -- "$f ${seen[$f]}"; done > $SEEN
 STATE=$D/.watch-state
 if [[ -n $BOUND && -f $STATE ]]; then
   while read -r kind k v; do
+    [[ $k =~ '^[A-Za-z0-9._:-]+$' && $v == <-> ]] || continue
     case $kind in blocked) blocked[$k]=$v ;; alert) lastalert[$k]=$v ;; esac
   done < $STATE
 fi
@@ -51,7 +52,10 @@ while true; do
   # the driver can't report status at all: say so and stop, rather than skip every poll silently
   (( rc == 9 )) && { echo "WATCH the $HARNESS driver has no status operation; the watchdog can't run"; exit 5; }
   # a failed or unreadable listing says nothing about the teammates; skip the session checks this poll
-  (( rc == 0 )) || { sleep 60; continue; }
+  if (( rc != 0 )); then
+    [[ -n $BOUND ]] && { save_state; (( ++POLLS >= BOUND )) && { echo "WATCH timeout $BOUND"; exit 0; }; }
+    sleep 60; continue
+  fi
   # latest registry row per teammate; a "closed" row ends the watch for that name
   awk '{last[$1]=$0} END {for (n in last) print last[n]}' $REG | while read -r name id started viewer workdir; do
     [[ -z $name || $started == closed ]] && continue

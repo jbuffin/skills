@@ -23,18 +23,19 @@ turn_cmd $ARGS
 bg_start $W /dev/null $EVENTS $ERRLOG $TURN
 PID=$BGPID; PGID=$BGPID
 # Wait for thread.started, never for the turn.
+read_thread() { THREAD=$(jq -R -r 'fromjson? | select(.type == "thread.started") | .thread_id' $EVENTS 2>/dev/null | head -1); [[ $THREAD =~ '^[0-9a-f-]{36}$' ]] || THREAD=; }
 i=0
 while (( i++ < 100 )); do
-  THREAD=$(jq -R -r 'fromjson? | select(.type == "thread.started") | .thread_id' $EVENTS 2>/dev/null | head -1)
+  read_thread
   [[ -n $THREAD ]] && break
-  kill -0 $PID 2>/dev/null || break
+  kill -0 $PID 2>/dev/null || { read_thread; break; }
   /bin/sleep 0.2
 done
 if [[ -z $THREAD ]]; then
   [[ $(ps -o pgid= -p $PID 2>/dev/null | tr -d ' ') == $PID ]] && kill -KILL -- -$PID 2>/dev/null
-  echo "codex printed no thread.started for $NAME; it was stopped"
-  head -c 400 $ERRLOG
-  rm -f $EVENTS $ERRLOG
+  echo "codex printed no thread.started for $NAME; it was stopped. Its stderr is kept in $ERRLOG:"
+  grep -v 'ERROR rmcp' $ERRLOG 2>/dev/null | head -5
+  [[ -s $EVENTS ]] || rm -f $EVENTS
   exit 1
 fi
 state_save

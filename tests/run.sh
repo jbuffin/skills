@@ -886,7 +886,7 @@ cx_resumed() { cx_wait 10 'grep -aq "^codex cwd=.*\[resume\]" $SC/claude.log'; }
 cx_resume() { cx_resumed; L=$(grep -a '^codex cwd=.*\[resume\]' $SC/claude.log | tail -1); [[ -n $L ]] || { P+="no 'codex exec resume' call was logged"; return 1; }; }
 A_ro() {  # A_ro launch|resume: the read-only flags
   if [[ $1 == launch ]]; then A_pair -s read-only; else A_cfg 'sandbox_mode=read-only' 'sandbox_mode="read-only"'; A_no -s; A_no -C; fi
-  A_pair -o $D/reports/t1.md; A_no --add-dir; [[ $L != *network_access* ]] || P+="argv has network_access"; A_safe
+  [[ $L == *" [-o] [$D/codex-"*".out]"* ]] || P+="argv lacks -o <team>/codex-<name>.<n>.out (a path no sandbox can write)"; A_no $D/reports/t1.md; A_no --add-dir; [[ $L != *network_access* ]] || P+="argv has network_access"; A_safe
 }
 A_rw() {  # A_rw launch|resume: the writer flags
   if [[ $1 == launch ]]; then A_pair -s workspace-write; A_pair --add-dir $D/reports
@@ -987,6 +987,9 @@ want codex-launch && {
   [[ -f $SC/fake/codex.pid ]] && { cx_wait 10 '! kill -0 $(<$SC/fake/codex.pid) 2>/dev/null' || P+="the codex it started (pid $(<$SC/fake/codex.pid)) is still running"; }
   cx_reap
   verdict "CODEX launch with no thread.started: kills what it started, exit 1, no row"
+  errf=$(print -r -- $D/codex-t1.*.err(N))
+  [[ -n $errf && -f $errf && $(<$SC/out) == *"$errf"* ]] || P+="the failed launch kept no stderr file, or didn't print its path: '$errf'; out: $(head -c 300 $SC/out | tr '\n' '|')"
+  verdict "CODEX launch with no thread.started: keeps codex's stderr file and prints its path"
 }
 
 # ---- AC4: retask -> send -----------------------------------------------------------------------------------------
@@ -1199,6 +1202,21 @@ want codex-close && {
   cx_reap
   verdict "CODEX AC6 close-teammate.sh: kills the whole process group, keeps the rollout, status stopped, no codex delete"
 
+  cx_sc codex-close-child
+  xrunb 20 FAKE_CODEX_MODE=hold FAKE_CODEX_CHILD=1 $AT/launch-teammate.sh --role implementer $D t1 $SC/wt
+  cx_ok "launch" && {
+    cx_wait 5 '[[ -s $SC/fake/codex.child ]]' || P+="the fake never started its tool command"
+    kid=$(<$SC/fake/codex.child)
+    cx_wait 5 '[[ $(ps -o pgid= -p $kid | tr -d " ") == $kid ]]' || P+="the tool command isn't in a group of its own"
+    pg=$(<$SC/fake/codex.pgid)
+    [[ $(ps -o pgid= -p $kid | tr -d " ") != $pg ]] || P+="the tool command shares codex's group, so the test can't tell"
+    xrunb 20 $AT/close-teammate.sh $D t1
+    cx_wait 10 '! kill -0 $kid 2>/dev/null' || P+="the tool command (pid $kid, own process group) survived close-teammate.sh"
+  }
+  kill $(<$SC/fake/codex.child) 2>/dev/null
+  cx_reap
+  verdict "CODEX AC6 close-teammate.sh also ends a tool command that runs in a process group of its own"
+
   # The one white-box check: stop signals a recorded process group only after `ps -o args=` shows it is this session's
   # codex. The state is pointed at a decoy group (a sleep in its own session) as if the pid had been reused.
   cx_sc codex-close-decoy
@@ -1237,6 +1255,18 @@ want codex-marker && {
     [[ -s $D/reports/t1.md ]] || P+="reports/t1.md is missing or empty after the turn"
   }
   verdict "CODEX D7 read-only: the driver touches the marker after a completed turn with a report, not before"
+
+  cx_sc codex-marker-symlink
+  : > $SC/victim-md; : > $SC/victim-done; print -r -- keep > $SC/victim-md; print -r -- keep > $SC/victim-done
+  cx_launch hold --read-only --role reviewer $D t1 $SC/wt
+  cx_ok "launch" && {
+    ln -s $SC/victim-md $D/reports/t1.md; ln -s $SC/victim-done $D/reports/t1.done
+    cx_reap
+    cx_wait 10 '[[ -f $D/reports/t1.done && ! -L $D/reports/t1.done ]]' || P+="reports/t1.done didn't become a regular file"
+    [[ -f $D/reports/t1.md && ! -L $D/reports/t1.md && -s $D/reports/t1.md ]] || P+="reports/t1.md isn't a non-empty regular file"
+    [[ $(<$SC/victim-md) == keep && $(<$SC/victim-done) == keep ]] || P+="a planted symlink was followed: md='$(<$SC/victim-md)' done='$(<$SC/victim-done)'"
+  }
+  verdict "CODEX D7 read-only: symlinks planted at reports/<name>.md and .done are replaced, never followed"
 
   marker_none() {  # marker_none <check name> <FAKE_CODEX_* assignment...>: a read-only turn that must not get a marker
     local nm=$1; shift
@@ -1318,6 +1348,27 @@ want codex-preflight && {
   [[ -z $(cxp_bad) ]] || P+="FAIL/WARN with the rules in \$HOME/.codex and no CODEX_HOME: $(cxp_bad | tr '\n' '|')"
   grep -qE '^OK +codex' $SC/out || P+="no OK line about codex besides the advisor one"
   verdict "CODEX AC2 preflight uses ~/.codex/rules when CODEX_HOME is unset"
+
+  cxp codex-pf-comments; print -rl -- ${RULES_ALL/#/# } > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 ]] || P+="exit $RC (want 1)"
+  for r in $RULES_ALL; do [[ -n $(grep '^FAIL' $SC/out | grep -F -- $r) ]] || P+="a commented-out rule counted: no FAIL naming $r"; done
+  verdict "CODEX AC2 preflight: commented-out rules don't count"
+
+  cxp codex-pf-decision-first; print -rl -- 'prefix_rule(decision="forbidden", pattern=["gh", "pr", "view"])' $RULES_ALL[2,5] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'view') ]] || P+="a forbidden rule written decision-first counted as allow: exit $RC; $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a forbidden rule with decision= before pattern= is a FAIL"
+
+  cxp codex-pf-forbid-broad; print -rl -- $RULES_ALL 'prefix_rule(pattern=["git"], decision="forbidden")' > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git add') && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git commit') ]] || P+="a broader forbidden rule didn't beat the exact allow rules: exit $RC; $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a broader forbidden rule wins over an exact allow rule"
+
+  cxp codex-pf-prompt; print -rl -- 'prefix_rule(pattern=["gh", "pr", "view"], decision="prompt")' $RULES_ALL[2,5] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'gh pr view') ]] || P+="a prompt rule counted as present: exit $RC"
+  verdict "CODEX AC2 preflight: a rule that prompts isn't an allow"
+
+  cxp codex-pf-justification; print -rl -- 'prefix_rule(pattern=["gh", "pr", "view"], decision="allow", justification="never prompt, a # here is no comment")' $RULES_ALL[2,5] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ -z $(cxp_bad) && $RC == 0 ]] || P+="an allow rule whose justification says 'prompt' was dropped: exit $RC; $(cxp_bad | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: an allow rule with 'prompt' in its justification still counts"
 
   cxp codex-pf-nocodex; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; cxp_run PATH=/usr/bin:/bin:/usr/sbin:/sbin
   [[ $RC == 1 ]] || P+="exit $RC (want 1)"
