@@ -24,7 +24,7 @@ Everything else follows from that:
 | `EFFORT_<ROLE>` | per role | the reasoning effort for `--role <role>`, passed as `-c model_reasoning_effort=<effort>`. Empty passes nothing |
 | `VIEWER` | `none` | Codex teammates have no viewer panes |
 
-`ADVISOR` and `PERMISSION_MODE` aren't in a Codex `team.env`. `team-env.zsh` still defaults `MODEL=sonnet`, `ADVISOR=opus` and `PERMISSION_MODE=auto` on every harness, so they exist in the scripts' environment, but Codex ignores all three. Never write `ADVISOR`, `PERMISSION_MODE`, `CMUX*` or `CLAUDE_CONFIG_DIR` for a Codex run. Write `MODEL` as `gpt-6.1-sol`, because a missing `MODEL` falls back to the Claude name `sonnet`, which codex doesn't accept.
+`ADVISOR` and `PERMISSION_MODE` aren't in a Codex `team.env`. `team-env.zsh` still defaults `MODEL=sonnet`, `ADVISOR=opus` and `PERMISSION_MODE=auto` on every harness, so they exist in the scripts' environment, but Codex ignores all three. Never write `ADVISOR`, `PERMISSION_MODE`, `CMUX*` or `CLAUDE_CONFIG_DIR` for a Codex run. Write `MODEL` as `gpt-6.1-sol`, because a missing `MODEL` falls back to the Claude name `sonnet`, which would then reach codex.
 
 ## Sandbox per role
 
@@ -45,9 +45,9 @@ A read-only teammate can't write files, so the contract's "write the report, the
 
 1. The driver runs the turn under a wrapper and has codex save the final message to a private file in the team directory.
 2. After a completed turn that left a non-empty message, the wrapper renames that file to `<team-dir>/reports/<name>.md` and then creates `<team-dir>/reports/<name>.done`.
-3. A turn that fails, is stopped, or ends with no message leaves no marker, so the watchdog reports it `BLOCKED` rather than `DONE`.
+3. A turn that fails or ends with no message leaves no marker, so the watchdog reports it `BLOCKED` rather than `DONE`.
 
-Never write a `.proof` for a read-only Codex role. It can't run `evidence.sh`, so it could never verify. `verify-report.sh` is for writers.
+Never write a `.proof` for a read-only Codex role. It can't run `evidence.sh`, so it could never verify. Still run `verify-report.sh` on its `DONE`: with no proof it checks that the report and marker are from this tasking.
 
 Writers write their own report, marker and evidence under `<team-dir>/reports`. That directory is writable for them, so a writer can overwrite a read-only teammate's report and marker. When a read-only teammate's report is surprising, cross-check it against that teammate's own events log before you act on it: `<team-dir>/codex-<name>.<n>.events` holds every turn's `--json` events, in a place no writer's sandbox covers.
 
@@ -84,7 +84,7 @@ prefix_rule(pattern=["git", "add"], decision="allow")
 prefix_rule(pattern=["git", "commit"], decision="allow")
 ```
 
-The first three are for read-only roles, the last two for writers. There's no rule for `git push`: pushes go through `push-branch.sh`, run by the coordinator.
+The first three are for read-only roles, the last two for writers. There's no rule for `git push`: pushes go through `push-branch.sh`.
 
 `<teammates>/drivers/codex/preflight <team-dir>` (run for you by commodore's `team-preflight.sh`) reads the `*.rules` files as text and prints:
 
@@ -130,7 +130,7 @@ Each session's rollout is `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<timestamp>-<
 
 Close teammates with `close-teammate.sh`. It stops the turn's process group and every process below it. Two limits:
 
-- A tool process that was re-parented to pid 1 after codex exited isn't found. After closing, check for strays that run in the teammate's working directory: `ps -A -o pid=,ppid=,command=` and look for processes with parent `1` whose command names that directory. Stop only the ones you recognise as that teammate's.
+- A tool process that was re-parented to pid 1 after codex exited isn't found. After closing, look for strays: run `ps -A -o pid=,ppid=,lstart=,command=` and pick processes with parent `1` that started during the teammate's turns, then run `lsof -a -p <pid> -d cwd` on each to see whether its working directory is the teammate's. Stop only the ones that are.
 - Never run these in place of `close-teammate.sh`:
   - `codex delete`, or anything else that removes a session or its rollout;
   - killing the codex process or its group by hand, which leaves the registry and the state file saying it's live;

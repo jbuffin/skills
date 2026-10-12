@@ -26,7 +26,7 @@ There is no advisor on Codex. The preflight prints `ADVISOR n/a (codex)`, and Co
 
 - Drop "Asking the advisor" from `<run>/brief-common.md`, and drop the contract's "If your harness gives you an advisor…" line.
 - Teammates write `none` under `## Advisor consults`. Don't expect consults, and don't read their absence as a brief problem.
-- Skip the advisor sorting in "Bubbling questions up": every question that isn't answered by the profile, the source or a ground rule reaches you. Take the technical ones as the cheap-to-reverse defaults the section describes.
+- The advisor bullet in "Bubbling questions up" doesn't apply. Sort technical questions with the rest.
 - Skip "When the advisor is off". It never applies.
 
 ## Who is live
@@ -51,7 +51,7 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 | An allow rule is a `Bash(…)` line in settings | An allow rule is a `prefix_rule(pattern=[…], decision="allow")` line in `~/.codex/rules/*.rules`. Commodore needs only the five in agent-teammates' reference |
 | An exact allow rule for each `evidence.sh` proof, or for each `gh api graphql` reply | Write neither. A prefix rule can't be exact, and `evidence.sh … -- <command>` would run anything. Writers run `evidence.sh` inside their sandbox. You post every GitHub reply, review and push yourself |
 | The review mission's PR-controlled-config guard (`CLAUDE.md`, `.claude/`, `.mcp.json`) | Also cover, at least, the project files codex loads: `AGENTS.md` and `AGENTS.override.md` at any depth, and a project `.codex/` directory. Which files codex 0.162.0 loads isn't verified, so treat this list as a minimum |
-| Run in the background or with the maximum Bash timeout | Use the Codex shell's own limit. Anything that can run longer than it (`team-preflight.sh`, `watch-ci.sh`) gets its own bare call and is re-run until it finishes |
+| Run in the background or with the maximum Bash timeout | Use the Codex shell's own limit |
 | `ADVISOR OFF` and `harness-claude.md` | Never reached: the advisor is n/a |
 | "The engineer can attach to a teammate" | They can't. Point them at `teammate-tail.sh` and `status` |
 

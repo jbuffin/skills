@@ -45,7 +45,9 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
   - `LIVE_MESSAGING=0`: exit. The coordinator resumes your session for the next job.
 - Questions go in the report under `## Questions for the engineer`, each with options and a recommendation. Keep going on whatever doesn't depend on the answer.
 - If your harness gives you an advisor, ask it technical questions: how to do something, which approach, why something fails. It's a stronger model paired with your session, and you decide when to call it.
-- Scope, product behaviour, departures from the source of truth and ground-rule questions go under `## Questions for the engineer`, and so does a problem two advisor consults haven't moved forward: stop consulting and ask. With no advisor (Codex), escalate a problem you can't move forward the same way.
+- Scope, product behaviour, departures from the source of truth and ground-rule questions go under `## Questions for the engineer`, and so does a problem you can't move forward:
+  - with an advisor: one that two advisor consults haven't moved forward; stop consulting and ask;
+  - without one (Codex): a problem you can't move forward on your own; stop and ask.
 - Every report has an `## Advisor consults` section with one line per advisor call: the question in brief, the advice in brief, and whether you followed it and why. Write `none` if you made no calls or have no advisor.
 - New instructions:
   - `LIVE_MESSAGING=1`: they arrive as messages from the coordinator. Do them, overwrite the report, and touch the marker again.
