@@ -37,7 +37,7 @@ Run `<teammates>/drivers/copilot/status <run>` when you resume and before any pu
 
 An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round, as on any harness.
 
-Before each read-only re-task, run the three checks in agent-teammates' "Security caveats": the state file, the `team.env` checksum and `git status --porcelain`. If one fails, the run stops and you tell the engineer.
+Run the three checks in agent-teammates' "Security caveats" (the state file, the `team.env` checksum and `git status --porcelain`) before each read-only re-task, and again after each read-only turn before you act on its report. Hold the baselines in your own context, not in the run directory. If one check fails, the run stops and you tell the engineer.
 
 Run the watchdog in its bounded mode, as agent-teammates' "Run the watchdog" says. `DONE` can arrive before `status` reads `done`, so check `status` before you re-task.
 
@@ -57,6 +57,6 @@ The rest of the skill is written for Claude Code. On Copilot, apply these.
 
 ## Read-only roles
 
-Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Copilot the flag set follows `--read-only`, not the role. Their shell may run `gh pr view`, `gh pr diff` and `gh issue view`, plus `git log`, `git show`, `git diff` and `git status`. agent-teammates' "How a read-only teammate reports" covers their report. Give them no `.proof`.
+Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Copilot the flag set follows `--read-only`, not the role. Their shell may run `gh pr view`, `gh pr diff` and `gh issue view`, plus `git log`, `git show`, `git diff` and `git status`, with any arguments, so `--output=<file>` writes a file (see "Security caveats" in agent-teammates' reference). agent-teammates' "How a read-only teammate reports" covers their report. Give them no `.proof`.
 
 The flags are guardrails, not a sandbox, and a writer runs as the engineer. Read agent-teammates' "Security caveats" and put them to the engineer in the decision batch before an unattended run, then record the answer in `state.md`. The review mission raises the stakes, because the PR is someone else's and its text and code are untrusted: the reviewers read hostile text with a shell in reach, and the target steward is a writer that runs the PR's code.

@@ -79,7 +79,9 @@ and approve every reply before you leave, and the fixes and replies land on the 
   in-process subagents. On Codex, they run as background `codex exec` turns, one turn at a time, and need
   prefix rules in `~/.codex/rules` (see `agent-teammates/references/harness-codex.md`). On Copilot CLI, they run as background `copilot -p`
   turns, one turn at a time. Copilot CLI must be on `PATH` and signed in, and its permission flags are
-  guardrails, not a sandbox (see `agent-teammates/references/harness-copilot.md`).
+  guardrails, not a sandbox (see `agent-teammates/references/harness-copilot.md`). A Copilot CLI started from a
+  Claude Code shell inherits `CLAUDECODE=1`, so `team-init.sh` exits 7 with "more than one harness detected":
+  unset it, or start Copilot from a plain shell.
 - **CLI tools on `PATH`:** `git`, `gh` (logged in with `gh auth login`), `python3`, `jq`, `curl`.
 - **`gh-stack` 0.2.0 or later** for stack mode: `gh extension install github/gh-stack`. Also installable
   as a skill (`npx skills add github/gh-stack`), which the stack mode reads if it's there.
