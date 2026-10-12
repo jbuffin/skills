@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: tail <team-dir> <label> <session-id> <n>   (see ../claude/driver.env)
+# usage: tail <team-dir> <label> <session-id> <n>   (see ../CONTRACT.md)
 [[ $# -eq 4 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; W=$2; id=$3; N=$4
 source ${0:A:h:h:h}/team-env.zsh
@@ -7,7 +7,10 @@ source ${0:A:h}/lib.zsh
 ev=$(cp_events $id)
 [[ -f $ev ]] || { echo "no events.jsonl for $W ($id) under $HOME/.copilot/session-state"; exit 3; }
 echo "transcript: $ev  (last write $(( ($(date +%s) - $(stat -f %m $ev)) / 60 )) min ago)"
-jq -r 'if .type == "tool.execution_start" then
+lines=$(jq -R -r 'fromjson? | if .type == "tool.execution_start" then
     "TOOL  \(.data.toolName): \((.data.arguments.description // .data.arguments.command // .data.arguments.path // .data.arguments.pattern // "") | tostring | gsub("\n";" ") | .[0:160])"
   elif .type == "assistant.message" and ((.data.content // "") != "") then "SAID  \(.data.content | gsub("\n";" ") | .[0:240])"
-  else empty end' $ev | tail -$N
+  else empty end' $ev 2>/dev/null)
+print -r -- "$lines" | grep '^TOOL' | tail -$N
+print -r -- "$lines" | grep '^SAID' | tail -1
+exit 0

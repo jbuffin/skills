@@ -1,6 +1,6 @@
 #!/bin/zsh
 # usage: watch-teammates.sh [--until-event <max-min>] <team-dir>
-# Run it under the Monitor tool on Claude (re-arm when it expires), or with --until-event on Codex, which has no Monitor.
+# Run it under the Monitor tool where the harness has one (re-arm when it expires), otherwise with --until-event.
 # Polls every 60 s, from the driver's session status and the team's .done markers. Emits one line per event:
 #   DONE <name>              reports/<name>.done appeared or was touched
 #   BLOCKED <name> <id>      its turn ended (or it's waiting on a prompt) with no new .done; twice running

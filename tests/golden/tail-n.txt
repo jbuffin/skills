@@ -1,6 +1,7 @@
 ## argv
 ## stdout
 transcript: @SB@/w/tail-n/cfg/projects/p1/b7e2a911.jsonl  (last write 7 min ago)
+TOOL  Bash: List files
 TOOL  Bash: git status
 SAID  All done here
 ## exit

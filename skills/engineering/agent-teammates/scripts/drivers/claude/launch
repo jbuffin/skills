@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see driver.env)
+# usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see ../CONTRACT.md)
 [[ $# -eq 6 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
 source ${0:A:h:h:h}/team-env.zsh

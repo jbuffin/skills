@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: preflight <run-dir>   (see ../claude/driver.env)
+# usage: preflight <run-dir>   (see ../CONTRACT.md)
 [[ $# -eq 1 && -f $1/team.env ]] || { sed -n 2p $0; exit 5; }
 source $1/team.env
 source ${0:A:h}/lib.zsh

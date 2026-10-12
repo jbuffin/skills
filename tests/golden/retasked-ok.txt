@@ -1,18 +1,18 @@
 ## argv
 ## stdout
-t1 is closed; launch a new teammate instead
+t1 re-tasked (session c51dbe46)
 ## exit
-5
+0
 ## files
 ./prompts/
 ./prompts/t1.md
   | do the thing
 ./reports/
 ./team.env
-  | RUN=@SB@/w/retask-closed/run
-  | REPO=@SB@/w/retask-closed/repo
-  | WORKTREE=@SB@/w/retask-closed/repo
-  | WORKTREES_DIR=@SB@/w/retask-closed/worktrees
+  | RUN=@SB@/w/retasked-ok/run
+  | REPO=@SB@/w/retasked-ok/repo
+  | WORKTREE=@SB@/w/retasked-ok/repo
+  | WORKTREES_DIR=@SB@/w/retasked-ok/worktrees
   | SKILL=@SB@/src/skills/engineering/commodore
   | SKILLS_DIR=@SB@/src/skills/engineering
   | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
@@ -23,7 +23,8 @@ t1 is closed; launch a new teammate instead
   | MODEL=sonnet
   | ADVISOR=opus
   | PERMISSION_MODE=auto
-  | CLAUDE_CONFIG_DIR=@SB@/w/retask-closed/cfg
+  | CLAUDE_CONFIG_DIR=@SB@/w/retasked-ok/cfg
   | MODE=single
 ./teammates.tsv
-  | t1 c51dbe46 closed - @SB@/w/retask-closed/wt
+  | t1 c51dbe46 1789999000 - @SB@/w/retasked-ok/wt
+  | t1 c51dbe46 1790000000 - @SB@/w/retasked-ok/wt

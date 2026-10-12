@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: advisor-probe <team-dir> <model>   (see driver.env)
+# usage: advisor-probe <team-dir> <model>   (see ../CONTRACT.md)
 # Prints `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>` and exits 0 either way (5 on bad arguments).
 # A refused advisor pairing or a disabled feature flag starts a session without the advisor and prints no error, so
 # this starts a real `claude --bg` session on <model> with --advisor $ADVISOR, asks it to consult the advisor once,
