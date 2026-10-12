@@ -60,6 +60,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 ```bash
 <teammates>/launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]
 <teammates>/retasked.sh        <team-dir> <name>                                              # after sending new work
+<teammates>/retask.sh          <team-dir> <name> <message-file>                               # send new work by the driver's send (SEND=script)
 <teammates>/close-teammate.sh  <team-dir> <name>...
 ```
 
@@ -69,7 +70,7 @@ Give each teammate only what its job needs. Launch a teammate that only reads th
 
 Write a teammate's `prompts/<name>.proof` before launching or re-tasking it, one `<label> <command>` per line. A proof file that changes after the tasking fails verification, so a teammate can't rewrite its own proof. An exact allow rule per proof (`Bash(<teammates>/evidence.sh <team-dir> <name> <label>)`) approves it without approving anything else. A prefix rule on `evidence.sh` would approve any command, because the `--` form runs whatever follows.
 
-To give a live teammate new work (`LIVE_MESSAGING=1`), send it a message the way the harness reference says, addressed by the teammate's name. Then run `retasked.sh` so the watchdog stops counting the old marker. With `LIVE_MESSAGING=0`, resume the teammate's session with the next job instead, then run `retasked.sh`. The reference also covers the permission class a teammate needs so your message isn't held for approval.
+To give a live teammate new work (`LIVE_MESSAGING=1`), send it a message the way the harness reference says, addressed by the teammate's name. Then run `retasked.sh` so the watchdog stops counting the old marker. With `LIVE_MESSAGING=0`, and on any harness whose driver declares `SEND=script`, write the next job to a file and run `retask.sh` instead of resuming the session yourself: it sends the job through the driver and records the re-task, so don't run `retasked.sh` after it. It sends nothing on a `SEND=tool` harness and exits 4; send with the harness's tool, then run `retasked.sh`. The reference also covers the permission class a teammate needs so your message isn't held for approval.
 
 Set the model explicitly. The launcher picks it in this order: `--model <model>`; else, with `--role <role>`, `MODEL_<ROLE>` from `team.env` (the role uppercased, `-` and `.` as `_`, so `brief-checker` reads `MODEL_BRIEF_CHECKER`); else `MODEL`, whose default the harness reference gives. If `MODEL_<ROLE>` is unset or empty, the launch exits 5 and names the variable, and it never falls back to `MODEL`. With `REQUIRE_ROLE=1`, a launch with neither `--role` nor `--model` exits 5, so a forgotten flag fails loudly. Flags go in any order before the positional arguments. The launcher passes the model name through unchecked.
 

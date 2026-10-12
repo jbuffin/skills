@@ -25,3 +25,16 @@ drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $HARNESS has
 reg_field() { awk -v n=$1 -v f=$2 '$1==n {v=$f} END {print v}' $REG; }   # last row for a name wins
 # Names and labels become file names and registry fields: letters, digits, '.', '_' and '-' only.
 valid_name() { [[ $1 =~ '^[A-Za-z0-9._-]+$' && $1 != .* ]] || { echo "invalid name '$1': use letters, digits, '.', '_' and '-', not starting with '.'"; exit 5; }; }
+# The re-task steps shared by retasked.sh and retask.sh.
+# reg_open <name>: refuses (exit 5) an unregistered or closed teammate; sets ID, V (viewer-ref) and W (workdir).
+reg_open() {
+  ID=$(reg_field $1 2); V=$(reg_field $1 4); W=$(reg_field $1 5)
+  [[ -z $ID ]] && { echo "$1 is not registered in $REG"; exit 5; }
+  [[ $(reg_field $1 3) == closed ]] && { echo "$1 is closed; launch a new teammate instead"; exit 5; }
+  return 0
+}
+# reg_retask <name>: appends the re-task row (after reg_open), which resets the watchdog clock for the teammate.
+reg_retask() {
+  printf '%s %s %s %s %s\n' "$1" "$ID" "$(date -u +%s)" "${V:--}" "$W" >> $REG
+  echo "$1 re-tasked (session $ID)"
+}
