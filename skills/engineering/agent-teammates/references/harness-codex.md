@@ -41,7 +41,7 @@ Because a read-only teammate has no network, put any GitHub data it needs (a PR 
 
 `--read-only` also matters for how a teammate reports (next section), so launch every read-only role with it.
 
-After every read-only teammate's turn, check the worktree it ran in: `git -C <worktree> rev-parse HEAD` and `git -C <worktree> status --short` must match what they were before the turn. A change means the isolation failed: stop and ask the engineer.
+Before you launch or re-task a read-only teammate, record the worktree's `git -C <worktree> rev-parse HEAD` and `git -C <worktree> status --short`. Run read-only turns only while no writer in that worktree is `working`. After the turn, both must match what you recorded. A change means the isolation failed: stop and ask the engineer.
 
 ## How a read-only teammate reports
 
@@ -89,20 +89,25 @@ prefix_rule(pattern=["git", "add"], decision="allow")
 prefix_rule(pattern=["git", "commit"], decision="allow")
 ```
 
-Three things follow, and the engineer should know them:
+Say these plainly to the engineer:
 
-- `git add` and `git commit` run outside the sandbox, with the engineer's own permissions, and the rules apply to every Codex session on the machine, not just this run's teammates.
-- `git commit` runs hooks. A hook a writer can edit would then run unsandboxed. The preflight FAILs when `core.hooksPath` is relative (tracked hooks in the worktree) for that reason.
-- If the engineer has broader rules already (for example `["gh"]` or `["git"]`), they cover writers too, and run outside the sandbox. The preflight counts a broader rule as present and prints a WARN.
+- With these two rules, a Codex writer can run arbitrary commands outside the sandbox, so writers effectively run with the engineer's permissions. `git add` and `git commit` run unsandboxed, and git runs the hooks, filters and fsmonitor of whichever repository it finds from the command's working directory. A writer can create such a repository inside its own writable root (a nested repo with its own hooks, or a rewritten gitfile) and commit in it. The preflight's `core.hooksPath` check is defence in depth for tracked hooks only; it doesn't close that route. The follow-up is [#66](https://github.com/jbuffin/skills/issues/66).
+- The rules apply to every Codex session on the machine, not just this run's teammates.
+- Any broader `allow` rule the engineer already has (for example `["gh"]` or `["git"]`) applies to writers too, outside the sandbox. The preflight looks only at rules that cover `git add` and `git commit`, so it stays silent about a `["gh"]` rule. Before an unattended run, list every `allow` rule in `~/.codex/rules/*.rules` (and `$CODEX_HOME/rules`), have the engineer keep or remove each, and remove the `gh` rules an earlier version of this reference asked for.
+- Read-only roles run with `--ignore-rules`, which also drops the engineer's `forbidden` rules for them. That's accepted.
 
-There are no `gh` rules and none for `git push`. Read-only roles run with `--ignore-rules`, so no rule reaches them. Pushes go through `push-branch.sh`.
+There are no `gh` rules and none for `git push`. Pushes go through `push-branch.sh`.
 
-`<teammates>/drivers/codex/preflight <team-dir>` (run for you by commodore's `team-preflight.sh`) reads the `*.rules` files as text and prints:
+**Never turn the coordinator's own calls into user-level rules.** `gh`, `push-branch.sh`, `retask.sh`, `launch-teammate.sh`, `close-teammate.sh` and file writes must not become `prefix_rule` lines: every writer teammate inherits user-level rules, and would run those commands outside its sandbox. The coordinator gets them approved for its own session by the engineer, through Codex's own approval. That's unverified from inside a real Codex session. If a rule is unavoidable, limit it to a command that only reads (`<teammates>/drivers/codex/status`, `watch-teammates.sh --until-event`, `verify-report.sh`), and check that no argument can turn it into a write.
 
-- A `FAIL  codex: …` line that names the command and ends with the exact `prefix_rule(…)` line to add, for a missing rule. Add that line.
-- `FAIL` for a needed command that a `decision="forbidden"` rule covers, or a `decision="prompt"` rule covers (it stops an unattended run). Narrow or remove that rule, then add the line the FAIL names. Don't change a broad `prompt` rule to `allow`: every command it covers would then run outside the sandbox. Change a rule to `allow` only when it's no broader than the needed one.
-- `WARN  codex: prefix_rule(pattern=[…], decision="allow") is broader than needed; it covers …` when a broader rule covers a needed one. The needed rule counts as present. Mention the WARN to the engineer.
-- A `FAIL` for a relative `core.hooksPath`. Set it to an absolute path outside every worktree, or unset it, before launching a writer.
+`<teammates>/drivers/codex/preflight <team-dir>` (run for you by commodore's `team-preflight.sh`) reads the `*.rules` files as text. It checks only the two git rules and `core.hooksPath`, and prints:
+
+- A `FAIL` for a missing rule that names the command and ends with the exact `prefix_rule(…)` line to add. Add that line.
+- A `FAIL` for a `decision="prompt"` rule that covers a needed command (it stops an unattended run): narrow or remove that rule, then add the two lines above. Don't change a broad `prompt` rule to `allow`: every command it covers would then run outside the sandbox. Make a rule `allow` only when it's no broader than the needed one.
+- A `FAIL` for a `decision="forbidden"` rule that covers a needed command: narrow or remove that rule, then add the two lines above.
+- A `WARN` when a broader `allow` rule covers `git add` or `git commit`. The needed rule counts as present. Mention it to the engineer.
+- A `FAIL` when the resolved `core.hooksPath` is relative, or inside the repo, `WORKTREES_DIR` or a registered worktree (`~/…` counts as absolute), and a `WARN` when the preflight can't check. Set it to an absolute path outside every worktree, or unset it, before launching a writer. A path inside any writer's working directory is unsafe too, including one the preflight can't see (a writer in another repo).
+- An `OK` line about writers when all is well.
 
 The preflight reads only keyword-form `prefix_rule(pattern=…, decision=…)` lines. A rule written another way (positional arguments, or built by other code in the file) isn't seen, and the preflight fails the command it covers even though codex would allow it. Write the lines in the form above.
 
@@ -116,7 +121,7 @@ A Codex coordinator can't keep a watcher running in the background. Run the boun
 <teammates>/watch-teammates.sh --until-event <max-min> <team-dir>
 ```
 
-It polls once a minute and exits 0 right after the poll that printed an event, or prints `WATCH timeout <max-min>` after `<max-min>` polls with none. Pass an explicit long timeout on the call itself, and pick `<max-min>` (in minutes) comfortably under it, so the call isn't cut off. The Codex shell's own default limit is short and unverified; the end-to-end run used `<max-min>` 5, and each call returned within a minute or two. Rerun it after each exit. Its counts persist in `<team-dir>/.watch-state`, so a rerun doesn't repeat a `DONE` or reset the two-in-a-row `BLOCKED` rule. The events are the ones in `SKILL.md`.
+It polls once a minute and exits 0 right after the poll that printed an event, or prints `WATCH timeout <max-min>` after `<max-min>` polls with none. Pass an explicit long timeout on the call itself, and pick `<max-min>` (in minutes) comfortably under it, so the call isn't cut off. The Codex shell's own default limit is short and unverified; the end-to-end run used `<max-min>` 5, and each call returned within a minute or two. Rerun it after each exit. Seen markers persist in `<team-dir>/.watch-seen`, so a rerun doesn't repeat a `DONE`, and the `BLOCKED` counts and alert times persist in `<team-dir>/.watch-state`, so a rerun doesn't reset the two-in-a-row rule. The events are the ones in `SKILL.md`.
 
 Each poll reads `<teammates>/drivers/codex/status <team-dir>`, which prints one line per session: `<thread-id> - <state> <mtime>`.
 
