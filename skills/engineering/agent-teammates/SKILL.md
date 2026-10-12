@@ -1,6 +1,6 @@
 ---
 name: agent-teammates
-description: Run teammates as background agent sessions in Claude Code or Codex. Launch, re-task, watch with a watchdog, verify their proof, and close them. Use when work is handed to parallel agent sessions that run unattended, including from an orchestrating skill.
+description: Run teammates as background agent sessions. Launch, re-task, watch with a watchdog, verify their proof, and close them. Use when work is handed to parallel agent sessions that run unattended, including from an orchestrating skill.
 ---
 
 # Agent teammates
@@ -80,7 +80,7 @@ Give each teammate its own working directory, which is usually a git worktree. T
 
 Re-task instead of relaunching when the teammate's context is worth keeping, like an implementer fixing review findings on its own work. Relaunch fresh when independence matters (a reviewer) or the context has gone bad.
 
-Close teammates with `close-teammate.sh`. Close only with `close-teammate.sh`; some harness commands also delete worktrees. The reference lists what never to run in its place. A closed teammate stays closed. `retasked.sh` refuses it, so launch a new one.
+Close teammates only with `close-teammate.sh`; some harness commands also delete worktrees. The reference lists what never to run in its place. A closed teammate stays closed. `retasked.sh` refuses it, so launch a new one.
 
 ## What the engineer sees
 
@@ -98,7 +98,7 @@ Run `<teammates>/watch-teammates.sh [--until-event <max-min>] <team-dir>` (the f
 | --- | --- | --- |
 | `DONE <name>` | the marker appeared or was touched | run `<teammates>/verify-report.sh <team-dir> <name>`, then read the report. `verdict: unverified` means not done: re-task it with the FAIL lines as its next job, the way the re-tasking paragraph under "Launch, re-task, close" says |
 | `BLOCKED <name> <id>` | its turn ended (or it's waiting on a prompt) twice in a row with no new marker | run `teammate-tail.sh`, then read the harness's raw log (see the reference) only if you need to see an open prompt. A permission prompt you can't approve under the run's ground rules, or a question for the engineer, goes up. Pick only options that keep data in and permissions as they are. Otherwise, re-task it with one concrete next instruction as its next job, the way the re-tasking paragraph under "Launch, re-task, close" says |
-| `STALL <name> <id> <min>` | still "working", but its transcript hasn't changed for `<min>` minutes, usually a long deliberation mid-turn | run `teammate-tail.sh`. With `LIVE_MESSAGING=1`, message it one concrete next command (the exact command to run, not "what's your status?"). If it stalls again on the same step, close it and relaunch with that step spelled out. With `LIVE_MESSAGING=0` there's no live messaging and a turn can't take input mid-turn, so don't nudge and don't wait for the turn to end and re-task: close it with `close-teammate.sh` and relaunch it fresh, with the stuck step spelled out in the new prompt |
+| `STALL <name> <id> <min>` | still "working", but its transcript hasn't changed for `<min>` minutes, usually a long deliberation mid-turn | run `teammate-tail.sh`. With `LIVE_MESSAGING=1`, message it one concrete next command (the exact command to run, not "what's your status?"). If it stalls again on the same step, close it and relaunch with that step spelled out. With `LIVE_MESSAGING=0` a turn takes no input, so close it with `close-teammate.sh` and relaunch it fresh, with the stuck step spelled out in the new prompt |
 | `STALE <name> <id> <min>` | 45, 90, … minutes since it was tasked, still working, no marker | run `teammate-tail.sh`. If it's looping or off task, or you've already nudged it twice, close it and relaunch fresh with a sharper prompt |
 | `GONE <name> <id> <state>` | its session stopped, failed or vanished without being closed | check the report and relaunch if needed |
 

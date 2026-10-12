@@ -834,7 +834,7 @@ want c6 && {
   d=$(sed -n 's/^description: //p' $ROOT/skills/engineering/commodore/SKILL.md | head -1)
   [[ $d != *[Hh]arness* && $d == *"Use when"* ]] && pass "C6 commodore description says when to use it and leaves the harness to the body" || fail "C6 commodore description says when to use it and leaves the harness to the body" "${d:0:160}"
   d=$(sed -n 's/^description: //p' $ATD/SKILL.md | head -1)
-  [[ $d == *"Claude Code"* && $d == *Codex* ]] && pass "C6 agent-teammates description names Claude Code and Codex" || fail "C6 agent-teammates description names Claude Code and Codex" "${d:0:160}"
+  [[ $d != *"Claude Code"* && $d != *Codex* && $d != *Copilot* && $d != *[Hh]arness* ]] && pass "C6 agent-teammates description leaves the harness list to the references" || fail "C6 agent-teammates description leaves the harness list to the references" "${d:0:160}"
   [[ $d == *unattended* ]] && pass "C6 agent-teammates description keeps its unattended trigger" || fail "C6 agent-teammates description keeps its unattended trigger" "no 'unattended' in the description"
 }
 
