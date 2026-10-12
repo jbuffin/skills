@@ -1,15 +1,14 @@
 #!/bin/zsh
 # usage: launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]
-# Starts a teammate as a Claude Code background session (`claude --bg`) named <name>, in <workdir>, told to read
-# [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
+# Starts a teammate as a background session of the run's harness (drivers/<HARNESS>) named <name>, in <workdir>, told to
+# read [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
 # in <team-dir>/teammates.tsv. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
-# directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it (closing the pane never stops it).
+# directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it where the harness has one.
 # Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' and
 # '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
-# --read-only denies the file-editing tools inside <workdir> (a reviewer, a brief checker); it can still write its
-# report in <team-dir>. Bash isn't covered, so it's a guard against slips, not a sandbox.
-# Every launch passes --advisor $ADVISOR (default opus) unless team.env sets ADVISOR=none.
-# Exit 2 when a background session can't be started: run the teammate as an in-process subagent instead.
+# --read-only keeps the teammate from editing files in <workdir> (a reviewer, a brief checker); how strictly, how it
+# gets its report out, the advisor and what exit 2 (no background session) means depend on the harness: see
+# references/harness-<harness>.md.
 # With --role, EFFORT_<ROLE> from team.env goes to the driver's launch as TEAMMATE_EFFORT (empty otherwise).
 SELF=${0:A}
 usage() { sed -n 2,12p $SELF; exit 5; }

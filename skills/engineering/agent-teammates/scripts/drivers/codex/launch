@@ -15,7 +15,10 @@ EVENTS=$D/codex-$NAME.$$.events; ERRLOG=$D/codex-$NAME.$$.err
 sandbox_args launch
 ARGS=(exec --json --skip-git-repo-check -C $W $SANDBOX -m $MODEL)
 [[ -n $EFFORT ]] && ARGS+=(-c "model_reasoning_effort=$(toml_str $EFFORT)")
-ARGS+=("You are teammate $NAME. Read $P and do exactly what it says.")
+PROMPT="You are teammate $NAME. Read $P and do exactly what it says."
+# A read-only role can't write its report: the driver saves its final message as the report (-o).
+[[ -n $RO ]] && PROMPT+=" Your sandbox is read-only: you can't write files, so don't try to write a report or marker; your final message is your report."
+ARGS+=("$PROMPT")
 turn_cmd $ARGS
 bg_start $W /dev/null $EVENTS $ERRLOG $TURN
 PID=$BGPID; PGID=$BGPID

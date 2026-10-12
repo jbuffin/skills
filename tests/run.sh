@@ -920,6 +920,7 @@ want codex-launch && {
       A_has exec; A_has --json; A_has --skip-git-repo-check; A_pair -C $SC/wt; A_pair -m gpt-6-astra
       A_cfg model_reasoning_effort=high 'model_reasoning_effort="high"'; A_ro launch
       [[ $L == *"t1"* && $L == *"$D/prompts/t1.md"* ]] || P+="the prompt names neither t1 nor $D/prompts/t1.md"
+      [[ $L == *"[You are teammate t1. Read $D/prompts/t1.md and do exactly what it says. "*"can't write files"*"your final message is your report."* ]] || P+="the read-only prompt doesn't say the sandbox is read-only and the final message is the report"
       (( $#P )) && P+="argv: ${L#codex }"
     }
     [[ $(cx_state $THR) == working ]] || P+="status says '$(cx_state $THR)' while the turn runs (want working)"
@@ -934,6 +935,7 @@ want codex-launch && {
     [[ $(<$SC/out) == "launched t1 as background session $THR in $SC/wt" ]] || P+="stdout: $(head -c 200 $SC/out | tr '\n' '|')"
     cx_row $NOW
     cx_first && {
+      [[ $L == *"[You are teammate t1. Read $D/prompts/t1.md and do exactly what it says.]"* ]] || P+="the writer's prompt isn't the plain one"
       A_has exec; A_has --json; A_pair -C $SC/wt; A_pair -m gpt-6.1-sol; A_cfg model_reasoning_effort=medium 'model_reasoning_effort="medium"'; A_rw launch
       (( $#P )) && P+="argv: ${L#codex }"
     }
@@ -1092,6 +1094,42 @@ want codex-watch && {
   }
   cx_reap
   verdict "CODEX AC5 a running teammate whose rollout is 15 min old: STALL t1 <id> 15 (and none when it is fresh)"
+}
+
+# ---- watch-teammates.sh --until-event: one bounded call, for a coordinator with no Monitor tool ---------------------------------
+want codex-watch-bounded && {
+  polls() { grep -ac '\[agents\]' $SC/claude.log; }
+  mk watch-bound-event; mkdir -p $D/reports; reg t1 d0e1f2a3 $((NOW - 600)) - $SC/wt
+  : > $D/reports/t1.done; settime $((NOW - 100)) $D/reports/t1.done
+  agents_all 1 d0e1f2a3 t1 idle done
+  xrun $AT/watch-teammates.sh --until-event 5 $D
+  [[ $RC == 0 && $(<$SC/out) == "DONE t1" ]] || P+="first run: exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want exit 0, 'DONE t1')"
+  (( $(polls) == 1 )) || P+="the run polled $(polls) times (want 1: it ends right after the poll that printed an event)"
+  xrun $AT/watch-teammates.sh --until-event 2 $D
+  [[ $RC == 0 && $(<$SC/out) == "WATCH timeout 2" ]] || P+="rerun: exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want only 'WATCH timeout 2': DONE isn't repeated)"
+  verdict "CODEX watch --until-event: an event ends the run after its poll; a rerun doesn't repeat DONE; the timeout prints WATCH timeout"
+
+  mk watch-bound-timeout; reg t1 d0e1f2a3 $((NOW - 60)) - $SC/wt
+  agents_all 1 d0e1f2a3 t1 working working
+  xrun $AT/watch-teammates.sh --until-event 3 $D
+  [[ $RC == 0 && $(<$SC/out) == "WATCH timeout 3" ]] || P+="exit $RC, stdout '$(tr '\n' '|' < $SC/out)' (want exit 0, 'WATCH timeout 3')"
+  (( $(polls) == 3 )) || P+="polled $(polls) times (want 3)"
+  verdict "CODEX watch --until-event: with no event it ends after <max-min> polls"
+
+  mk watch-bound-blocked; reg t1 d0e1f2a3 $((NOW - 600)) - $SC/wt
+  agents_all 1 d0e1f2a3 t1 idle blocked
+  xrun $AT/watch-teammates.sh --until-event 1 $D
+  [[ $(<$SC/out) == "WATCH timeout 1" ]] || P+="run 1: '$(tr '\n' '|' < $SC/out)' (want only the timeout: one blocked poll isn't BLOCKED)"
+  xrun $AT/watch-teammates.sh --until-event 1 $D
+  [[ $(<$SC/out) == "BLOCKED t1 d0e1f2a3" ]] || P+="run 2: '$(tr '\n' '|' < $SC/out)' (want 'BLOCKED t1 d0e1f2a3': the blocked count persists)"
+  xrun $AT/watch-teammates.sh --until-event 1 $D
+  [[ $(<$SC/out) == "WATCH timeout 1" ]] || P+="run 3: '$(tr '\n' '|' < $SC/out)' (want no second BLOCKED within 10 minutes)"
+  verdict "CODEX watch --until-event: BLOCKED fires across two bounded runs and doesn't repeat within 10 minutes"
+
+  mk watch-bound-usage
+  xrun $AT/watch-teammates.sh --until-event $D
+  [[ $RC == 5 ]] || P+="--until-event without a number: exit $RC (want 5)"
+  verdict "CODEX watch --until-event: a missing or non-numeric bound is a usage error"
 }
 
 # ---- status, tail ----------------------------------------------------------------------------------------------------
