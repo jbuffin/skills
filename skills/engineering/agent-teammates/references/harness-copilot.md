@@ -30,10 +30,10 @@ A teammate is a background `copilot -p` run in its own process group, with a fix
 | `MODEL` | `claude-sonnet-5.5` | the model for a launch with neither `--model` nor `--role` |
 | `REQUIRE_ROLE` | `1` | every launch passes `--role` or `--model` |
 | `MODEL_<ROLE>` | per role | the model for `--role <role>` (commodore's reference has the table) |
-| `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, passed as `--reasoning-effort <effort>` on launch and resume only when set, because some models reject the flag. `send` reuses the effort recorded at launch, so a later `EFFORT_<ROLE>` edit doesn't affect a session that's already launched |
+| `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, passed as `--reasoning-effort <effort>` on launch and resume only when set, because some models reject the flag. `send` reuses the effort recorded at launch, so a later `EFFORT_<ROLE>` edit doesn't affect a session that's already launched. The value is any value `copilot --help` lists for `--reasoning-effort`. An unknown value reaches copilot, and launch then exits 1 within a second. The driver refuses only a malformed value, with exit 5 |
 | `VIEWER` | `none` | Copilot teammates have no viewer panes |
 
-Never write `ADVISOR`, `PERMISSION_MODE`, `CMUX*` or `CLAUDE_CONFIG_DIR` for a Copilot run. `team-env.zsh` still defaults `MODEL=sonnet` on every harness, so write `MODEL` as `claude-sonnet-5.5`: a missing `MODEL` falls back to the Claude name `sonnet`, which would reach copilot.
+Keep `MODEL` set: without it `team-env.zsh` falls back to the Claude alias `sonnet`, which Copilot rejects.
 
 ## Permissions per role
 
@@ -63,34 +63,11 @@ Give a read-only Copilot role no `.proof` file. It can't run `evidence.sh`, so `
 The Copilot permission flags are guardrails against mistakes, not a sandbox. Copilot's OS sandbox is [#49](https://github.com/jbuffin/skills/issues/49). Say these plainly to the engineer before an unattended run:
 
 - **Writers run as the engineer.** `--allow-all-tools` lets a writer run any command. The five denies stop only those exact command prefixes: other spellings (`git -C . push`, `git -c k=v push`, `env git push`, a script that calls git), `curl` with `gh auth token`, and `gh` commands nobody listed (`gh pr review`, `gh pr comment`, `gh release create`) all get through. Keep any credential a writer must not use out of its environment.
-- **Read-only teammates can write files.** `git log`, `git show` and `git diff` accept `--output=<file>`, and the read-only allowlist allows them with any arguments. On Copilot 1.0.95, a read-only teammate's `git log -1 --output=<team-dir>/x` and `git diff --output=<team-dir>/x` both wrote into the team dir, and `ls` showed it the file names there. `--deny-tool=write` removes only Copilot's own write tool.
-- **Every teammate can write the team directory**, because `--add-dir <team-dir>` covers all of it. That includes:
-  - its own state file, `<team-dir>/copilot-<session-id>`. `send` re-reads `name`, `ro`, `workdir`, `model` and `effort` from it on every re-task, so a forged `ro=0` resumes a read-only teammate with the writer flags, in any directory it names. Its `pid` and `pgid` decide which process group `close-teammate.sh` kills;
-  - `team.env`, which every coordinator script sources, so code written there runs in the coordinator;
-  - other teammates' reports and markers;
-  - `brief-common.md`, `prompts/*` and job files, which writers follow, plus `state.md`, `worktrees.tsv`, `teammates.tsv`, `.watch-seen` and `.watch-state`.
+- **A read-only teammate can write any path.** `git log`, `git show` and `git diff` accept `--output=<file>`, and the read-only allowlist allows them with any arguments. Copilot's path guard doesn't constrain an allowed shell command's arguments, so it can write any path the engineer can write. In effect it can run code as the engineer, for example through `team.env`, `<workdir>/.git/config` (which `verify-report.sh` runs git against) or shell startup files. `--deny-tool=write` removes only Copilot's own write tool. Verified on Copilot CLI 1.0.95 (#78).
+- **Run read-only Copilot teammates only on trusted input**, not on another person's PR or outside issue text, until Copilot's OS sandbox lands (#49). Hostile text in the teammate's context can make it write anywhere.
+- **Every teammate can write the team directory**, a writer through `--add-dir <team-dir>` and a read-only teammate through `--output`. A forged state file (`<team-dir>/copilot-<session-id>`, which `send` re-reads on every re-task) with `ro=0` resumes a read-only teammate with the writer flags, and a forged `pid` or `pgid` redirects `close-teammate.sh`. Code written to `team.env` runs in every coordinator script.
 
-  A writer can do all of this through its shell anyway. The new risk is a read-only teammate doing it after reading hostile content, such as a PR under review.
-
-The writer denies are guardrails, not a boundary, and adding more denies wouldn't make them one.
-
-Run these checks. Launch each read-only teammate in a linked worktree, or another directory whose git dir is outside it (commodore's default worktrees are). In a plain clone, `.git/config` is inside the workdir, so a read-only teammate could plant a `core.fsmonitor` or a filter driver that runs inside your own `git status` and every later git command there.
-
-Hold every baseline in your own context, never in a file under the team directory, which a read-only teammate can write. `teammates.tsv` and `state.md` sit there, so neither can be a baseline. Right after each of your own `launch-teammate.sh` and `retask.sh` calls returns, record:
-
-- `shasum` of the teammate's whole state file (`cp_start` writes `pid`, `pgid` and `started` before the call returns);
-- `shasum <team-dir>/team.env`;
-- `shasum` of the repo's git config and, if present, its `config.worktree`, found by path and not by running git in the workdir.
-
-Before each read-only re-task, before any `close-teammate.sh`, and after each read-only turn before you act on its report, all three must hold:
-
-1. `shasum` of the state file equals the one you recorded. The driver reads the last matching line of each key, so a forged file can carry `ro=1` first and `ro=0` last; `send` interpolates `name`, and `stop` kills `-$pgid`. As a supplementary read, each of `name`, `workdir`, `model`, `effort`, `ro`, `pid` and `pgid` appears exactly once, `ro` is `1`, and `workdir` equals the one you recorded.
-2. `shasum <team-dir>/team.env` equals the one you recorded. This detects tampering only after the fact: the bounded watchdog sources `team.env` on its next poll.
-3. The git config `shasum` equals the one you recorded, and only then `git -C <workdir> status --porcelain` exits 0 and prints nothing. A config mismatch stops the run without running git there, and a non-zero exit fails the check. That a read-only teammate can't write `.git/config` through Copilot's path guard isn't verified, so the config check stands in for it.
-
-The checks hold only while no other read-only teammate is mid-turn: check, then re-task or close, when none is live. A report that's surprising stays unverified until `teammate-tail.sh` shows the turn that produced it. The checks don't cover `brief-common.md`, `prompts/*` or job files: read the brief or job a writer is about to follow if a read-only turn has run since you wrote it.
-
-If any check fails, the run stops: tell the engineer, and don't re-task the teammate.
+A report that's surprising stays unverified until `teammate-tail.sh` shows the turn that produced it.
 
 ## Launch, re-task, close
 
@@ -99,12 +76,11 @@ Launch and close as in `SKILL.md`. `launch` and `send` wait up to 1 s and exit 1
 To give a teammate its next job:
 
 1. Write the job to a file in the team directory, with the file-writing tool.
-2. For a read-only teammate, run the three checks in [Security caveats](#security-caveats). They must all hold before the re-task.
-3. Run `<teammates>/retask.sh <team-dir> <name> <message-file>`.
+2. Run `<teammates>/retask.sh <team-dir> <name> <message-file>`.
 
 `retask.sh` resumes the session with the same `--session-id` and the flags its state file records, and resets the watchdog clock. Don't run `retasked.sh` after it. `send` waits up to `COPILOT_SEND_WAIT` seconds (default 60) for the previous turn to exit, then refuses with exit 1 and records nothing. Wait and run it again.
 
-A teammate that is stuck mid-turn can't be nudged; see the `STALL` row in [`SKILL.md`](../SKILL.md). When you paste the teammate contract into a brief, follow [the contract's note](../SKILL.md#the-teammate-contract) for `LIVE_MESSAGING=0`.
+A teammate that is stuck mid-turn can't be nudged; see the `STALL` row in [`SKILL.md`](../SKILL.md#watch). When you paste the teammate contract into a brief, follow [the contract's note](../SKILL.md#the-teammate-contract) for `LIVE_MESSAGING=0`.
 
 ## Run the watchdog
 

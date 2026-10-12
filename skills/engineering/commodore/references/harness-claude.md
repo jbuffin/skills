@@ -16,7 +16,7 @@ For an in-process subagent after `NO_BG`, use the model the `NO_BG` message name
 
 ## The capability rule on Claude
 
-The rule is in [`roles.md`](roles.md#models). On Claude, a coordinator above Opus sets the four roles to the coordinator's model, and `ADVISOR` has to rank at or above it too (see below).
+The rule is in [`roles.md`](roles.md#models). On Claude, if the coordinator runs above Opus, the profile sets the four roles to the coordinator's model, and `ADVISOR` has to rank at or above it too (see below).
 
 ## The advisor
 

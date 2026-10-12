@@ -91,7 +91,7 @@ To give a teammate its next job:
 
 `retask.sh` resumes the session with the file as its prompt, in the same sandbox, and resets the watchdog clock. It returns once the resumed turn is started in the background, without checking that the turn got going. A resume that dies at once (a removed worktree, a flag a newer codex rejects) shows up as `BLOCKED` a couple of polls later; read the teammate's `.err` file then. Don't run `retasked.sh` after it. It refuses a closed teammate. A read-only teammate re-tasked this way gets a fresh report and marker from its new turn.
 
-A teammate that is stuck mid-turn can't be nudged; see the `STALL` row in [`SKILL.md`](../SKILL.md). When you paste the teammate contract into a brief, follow [the contract's note](../SKILL.md#the-teammate-contract) for `LIVE_MESSAGING=0`.
+A teammate that is stuck mid-turn can't be nudged; see the `STALL` row in [`SKILL.md`](../SKILL.md#watch). When you paste the teammate contract into a brief, follow [the contract's note](../SKILL.md#the-teammate-contract) for `LIVE_MESSAGING=0`.
 
 ## The `~/.codex/rules` lines
 
