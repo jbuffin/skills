@@ -1,0 +1,14 @@
+#!/bin/zsh
+# usage: stop <team-dir> <session-id>   (see ../claude/driver.env)
+[[ $# -eq 2 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+F=$(cp_state $D $2)
+cp_alive $F || exit 1
+pg=$(cp_get $F pgid)
+cp_put $F stopped 1
+kill -TERM -- -$pg 2>/dev/null
+for i in 1 2 3 4 5 6 7 8 9 10; do cp_alive $F || break; /bin/sleep 0.3; done
+cp_alive $F && kill -KILL -- -$pg 2>/dev/null
+exit 0

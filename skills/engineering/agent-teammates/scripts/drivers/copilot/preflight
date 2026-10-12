@@ -1,0 +1,28 @@
+#!/bin/zsh
+# usage: preflight <run-dir>   (see ../claude/driver.env)
+[[ $# -eq 1 && -f $1/team.env ]] || { sed -n 2p $0; exit 5; }
+source $1/team.env
+source ${0:A:h}/lib.zsh
+fail=0
+ok()   { echo "OK    $*"; }
+bad()  { echo "FAIL  $*"; fail=1; }
+
+command -v copilot >/dev/null && ok "copilot found" || { bad "copilot not on PATH"; exit 1; }
+# One cheap headless turn with the trimmed read-only tool set. Too many MCP tool definitions overflow the context
+# and `copilot -p` then exits 0 with no output.
+M=${MODEL_REVIEWER:-${MODEL_IMPLEMENTER:--}}
+cp_flags 1 $M - $(cp_uuid)
+OUT=$(mktemp) || { bad "couldn't create a temp file for the headless turn"; exit 1; }
+trap 'rm -f $OUT' EXIT
+copilot $CP_FLAGS -p "Reply with the single word OK." < /dev/null > $OUT 2>&1 &
+pid=$!
+for i in {1..240}; do kill -0 $pid 2>/dev/null || break; /bin/sleep 0.5; done
+if kill -0 $pid 2>/dev/null; then
+  kill $pid 2>/dev/null
+  bad "copilot headless turn didn't finish within 120 s"
+elif [[ -s $OUT ]]; then
+  ok "copilot headless turn returned output"
+else
+  bad "copilot headless turn printed nothing: the tool definitions probably overflow the context; trim your MCP servers"
+fi
+exit $fail

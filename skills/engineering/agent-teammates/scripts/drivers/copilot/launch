@@ -1,0 +1,21 @@
+#!/bin/zsh
+# usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see ../claude/driver.env)
+[[ $# -eq 6 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=0; [[ $6 == 1 ]] && RO=1
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+command -v copilot >/dev/null || { echo "copilot is not on PATH"; exit 1; }
+for f in $D/copilot-*(N); do
+  [[ ${f:t} == *.* ]] && continue
+  [[ $(cp_get $f name) == $NAME ]] && cp_alive $f && { echo "a copilot session is already running as $NAME (${f:t}); close it first or pick another name"; exit 5; }
+done
+ID=$(cp_uuid)
+[[ -z $ID ]] && { echo "couldn't generate a session id (uuidgen failed)"; exit 1; }
+F=$(cp_state $D $ID)
+printf '%s\n' "name=$NAME" "workdir=${W:A}" "model=$CHOSEN" "ro=$RO" > $F
+# A read-only teammate can't write files; the driver writes its report from its final message.
+MSG=
+[[ $RO == 1 ]] && MSG=" Your final message is your report: write no files; the driver saves it."
+cp_start $D $ID "You are teammate $NAME. Read $P and do exactly what it says.$MSG"
+echo "$ID -"
+echo "  watch: teammate-tail.sh $D $NAME   ·   output: $F.out"
