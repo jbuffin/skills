@@ -1,0 +1,144 @@
+# Teammates on Codex
+
+Read this when the run's `HARNESS` is `codex`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/codex/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session.
+
+## What a teammate is
+
+A teammate is a background `codex exec` turn in its own process group. `launch-teammate.sh` starts the turn and returns once codex has printed `thread.started`, not when the turn ends. When the turn ends, the teammate's process exits and `status` reports it `done`. The session (a Codex thread) stays on disk, and a later `codex exec resume <thread>` continues it with its context.
+
+Everything else follows from that:
+
+- There is no live messaging, and no `codex queue` or app-server. Never use either to reach a teammate.
+- A turn takes no input mid-turn.
+- The coordinator is the only thing that wakes a finished teammate, with `retask.sh`.
+
+## Settings in `team.env`
+
+`team-init.sh` writes a Codex `team.env` with these lines.
+
+| Setting | Value | Meaning |
+| --- | --- | --- |
+| `HARNESS` | `codex` | selects `scripts/drivers/codex` and this reference |
+| `MODEL` | `gpt-6.1-sol` | the model for a launch with neither `--model` nor `--role` |
+| `MODEL_<ROLE>` | per role | the model for `--role <role>` |
+| `EFFORT_<ROLE>` | per role | the reasoning effort for `--role <role>`, passed as `-c model_reasoning_effort=<effort>`. Empty passes nothing |
+| `VIEWER` | `none` | Codex teammates have no viewer panes |
+
+`ADVISOR` and `PERMISSION_MODE` aren't in a Codex `team.env`. `team-env.zsh` still defaults `MODEL=sonnet`, `ADVISOR=opus` and `PERMISSION_MODE=auto` on every harness, so they exist in the scripts' environment, but Codex ignores all three. Never write `ADVISOR`, `PERMISSION_MODE`, `CMUX*` or `CLAUDE_CONFIG_DIR` for a Codex run. Write `MODEL` as `gpt-6.1-sol`, because a missing `MODEL` falls back to the Claude name `sonnet`, which codex doesn't accept.
+
+## Sandbox per role
+
+The sandbox is chosen from `--read-only`, not from `--role`. Commodore always passes both for a read-only role.
+
+| Teammate | Sandbox | What it can do |
+| --- | --- | --- |
+| launched with `--read-only` (reviewer, security reviewer, brief checker, triager) | `read-only` | reads, and runs commands that write nothing. It can write no file |
+| any other (implementer, test writer, target steward, scribe) | `workspace-write`, network on | writes its working directory and `<team-dir>/reports`, and reaches the network |
+
+`codex exec resume` takes no `-s` and no `-C`. On launch the driver passes `-s`. On every resume it passes the same choice as `-c sandbox_mode=…`, plus `-c sandbox_workspace_write.writable_roots=[<team-dir>/reports]` for a writer, and sets the working directory itself. So a re-tasked teammate keeps the sandbox of its launch.
+
+`--read-only` also matters for how a teammate reports (next section), so launch every read-only role with it.
+
+## How a read-only teammate reports
+
+A read-only teammate can't write files, so the contract's "write the report, then the marker" doesn't apply to it. Its launch prompt tells it so. Its final message is its report:
+
+1. The driver runs the turn under a wrapper and has codex save the final message to a private file in the team directory.
+2. After a completed turn that left a non-empty message, the wrapper renames that file to `<team-dir>/reports/<name>.md` and then creates `<team-dir>/reports/<name>.done`.
+3. A turn that fails, is stopped, or ends with no message leaves no marker, so the watchdog reports it `BLOCKED` rather than `DONE`.
+
+Never write a `.proof` for a read-only Codex role. It can't run `evidence.sh`, so it could never verify. `verify-report.sh` is for writers.
+
+Writers write their own report, marker and evidence under `<team-dir>/reports`. That directory is writable for them, so a writer can overwrite a read-only teammate's report and marker. When a read-only teammate's report is surprising, cross-check it against that teammate's own events log before you act on it: `<team-dir>/codex-<name>.<n>.events` holds every turn's `--json` events, in a place no writer's sandbox covers.
+
+## The team directory must be private
+
+Choose a team directory outside every path a writer can write: not `/tmp`, not `$TMPDIR` (`workspace-write` makes both writable by default), and not inside any worktree. Otherwise a writer can tamper with the driver's private files (the session state and the saved final message), and the protection above stops working. Commodore's `team-init.sh` puts the run directory outside the source tree; keep it that way.
+
+## Launch, re-task, close
+
+Launch and close as in `SKILL.md`. A launch prints `<thread-id> -` on success. It exits:
+
+- `1` when codex printed no `thread.started`. The driver stopped the process and printed the start of codex's stderr.
+- `5` when a live session already has that name.
+
+To give a teammate its next job:
+
+1. Write the job to a file, with the file-writing tool.
+2. Wait until the teammate's turn has ended: `status` shows it `done` (the watchdog printed `DONE` or `BLOCKED`). `send` refuses a teammate whose turn is still running.
+3. Run `<teammates>/retask.sh <team-dir> <name> <message-file>`.
+
+`retask.sh` resumes the session with the file as its prompt, in the same sandbox, and resets the watchdog clock. Don't run `retasked.sh` after it. It refuses a closed teammate. A read-only teammate re-tasked this way gets a fresh report and marker from its new turn.
+
+A teammate that is stuck mid-turn can't be nudged. Close it with `close-teammate.sh` and relaunch it fresh with the stuck step spelled out.
+
+## The `~/.codex/rules` lines
+
+Codex asks before it runs a command its rules don't allow, and nobody is there to answer. Put these five lines in a `.rules` file under `~/.codex/rules/` (for example `default.rules`), or under `$CODEX_HOME/rules` when `CODEX_HOME` is set. Rules are user-level; put them there, not in a project.
+
+```text
+prefix_rule(pattern=["gh", "pr", "view"], decision="allow")
+prefix_rule(pattern=["gh", "pr", "diff"], decision="allow")
+prefix_rule(pattern=["gh", "issue", "view"], decision="allow")
+prefix_rule(pattern=["git", "add"], decision="allow")
+prefix_rule(pattern=["git", "commit"], decision="allow")
+```
+
+The first three are for read-only roles, the last two for writers. There's no rule for `git push`: pushes go through `push-branch.sh`, run by the coordinator.
+
+`<teammates>/drivers/codex/preflight <team-dir>` (run for you by commodore's `team-preflight.sh`) reads the `*.rules` files as text and prints:
+
+- A `FAIL  codex: …` line that names the command and ends with the exact `prefix_rule(…)` line to add, for a missing rule. Add that line.
+- `FAIL` for a needed command that a `decision="forbidden"` rule covers, or a `decision="prompt"` rule covers (it stops an unattended run). Remove or narrow the rule, or make it `allow`.
+- `WARN  codex: prefix_rule(pattern=[…], decision="allow") is broader than needed; it covers …` when a broader rule, such as `["gh"]`, covers a needed one. The needed rule counts as present. Mention the WARN to the engineer.
+
+The preflight reads only keyword-form `prefix_rule(pattern=…, decision=…)` lines. A rule written another way (positional arguments, or built by other code in the file) isn't seen, and the preflight fails the command it covers even though codex would allow it. Write the lines in the form above.
+
+Don't write prefix rules for `evidence.sh` or `gh api graphql`. A prefix rule matches every command that starts with it, and `evidence.sh … <label> -- <command>` runs whatever follows. Writers run `evidence.sh` inside their sandbox, and the coordinator does GitHub mutations itself.
+
+## Run the watchdog
+
+A Codex coordinator can't keep a watcher running in the background. Run the bounded mode as one bare call between jobs, and again whenever it returns while anyone is live:
+
+```bash
+<teammates>/watch-teammates.sh --until-event <max-min> <team-dir>
+```
+
+It polls once a minute and exits 0 right after the poll that printed an event, or prints `WATCH timeout <max-min>` after `<max-min>` polls with none. Pick `<max-min>` below the Codex shell's own command time limit, so the call isn't cut off. Rerun it after each exit. Its counts persist in `<team-dir>/.watch-state`, so a rerun doesn't repeat a `DONE` or reset the two-in-a-row `BLOCKED` rule. The events are the ones in `SKILL.md`.
+
+Each poll reads `<teammates>/drivers/codex/status <team-dir>`, which prints one line per session: `<thread-id> - <state> <mtime>`.
+
+| State | Meaning |
+| --- | --- |
+| `working` | its turn is running |
+| `done` | its turn ended, however it ended: codex exits when the turn does |
+| `stopped` | `close-teammate.sh` stopped it |
+
+The mtime is the session's rollout file (or the events log before the rollout exists). `STALL` fires when a `working` session's mtime is `STALL_MIN` minutes old. A `done` turn with no new marker twice in a row is `BLOCKED`. With no marker the usual cause is a turn that failed or ended without a report.
+
+For `BLOCKED`, read the raw log only after `teammate-tail.sh`: `<team-dir>/codex-<name>.<n>.events` (the `--json` event log of every turn) and `<team-dir>/codex-<name>.<n>.err` (codex's stderr). Lines `ERROR rmcp` in stderr are about unauthenticated MCP servers and are harmless.
+
+## What the engineer sees
+
+There's no dashboard and no attaching. To see who is live, run `<teammates>/drivers/codex/status <team-dir>`. To see what a teammate is doing, run `<teammates>/teammate-tail.sh <team-dir> <name> [n]`, which prints its last tool calls and latest message from the events log. The watchdog's events tell the engineer the rest.
+
+## Where sessions live
+
+Each session's rollout is `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<timestamp>-<thread-id>.jsonl`, with `CODEX_HOME` defaulting to `~/.codex`. The driver's own files are in the team directory: `codex-<thread-id>.state` (name, process group, model, effort, working directory), `codex-<name>.<n>.events`, `.err` and, for a read-only role, a private `.out` that the wrapper renames into `reports/`. `close-teammate.sh` stops the turn and keeps all of them, so a closed session's rollout stays readable.
+
+## Closing
+
+Close teammates with `close-teammate.sh`. It stops the turn's process group and every process below it. Two limits:
+
+- A tool process that was re-parented to pid 1 after codex exited isn't found. After closing, check for strays that run in the teammate's working directory: `ps -A -o pid=,ppid=,command=` and look for processes with parent `1` whose command names that directory. Stop only the ones you recognise as that teammate's.
+- Never run these in place of `close-teammate.sh`:
+  - `codex delete`, or anything else that removes a session or its rollout;
+  - killing the codex process or its group by hand, which leaves the registry and the state file saying it's live;
+  - an interactive `codex resume <thread>`: it appends to the thread the driver resumes, and the teammate's next turn would pick up your input.
+
+## Fallback when a launch fails
+
+There is no `NO_BG` on Codex: a launch exits 1 or 5, never 2, so the in-process subagent fallback in `SKILL.md` doesn't apply.
+
+- Exit `5` means the name is live. Close it or pick another name.
+- Exit `1` means codex printed no `thread.started`. Retry the launch once. If it fails again, stop that unit and ask the engineer, attaching `<team-dir>/codex-<name>.<n>.err` (the launch output names it). Don't do the teammate's role yourself: that breaks the independence the roles exist for.
