@@ -30,14 +30,14 @@ A teammate is a background `copilot -p` run in its own process group, with a fix
 | `MODEL` | `claude-sonnet-5.5` | the model for a launch with neither `--model` nor `--role` |
 | `REQUIRE_ROLE` | `1` | every launch passes `--role` or `--model` |
 | `MODEL_<ROLE>` | per role | the model for `--role <role>` (commodore's reference has the table) |
-| `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, passed as `--reasoning-effort <effort>` on launch and resume only when set, because some models reject the flag. `send` reuses the effort recorded at launch |
+| `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, passed as `--reasoning-effort <effort>` on launch and resume only when set, because some models reject the flag. `send` reuses the effort recorded at launch, so a later `EFFORT_<ROLE>` edit doesn't affect a session that's already launched |
 | `VIEWER` | `none` | Copilot teammates have no viewer panes |
 
 Never write `ADVISOR`, `PERMISSION_MODE`, `CMUX*` or `CLAUDE_CONFIG_DIR` for a Copilot run. `team-env.zsh` still defaults `MODEL=sonnet` on every harness, so write `MODEL` as `claude-sonnet-5.5`: a missing `MODEL` falls back to the Claude name `sonnet`, which would reach copilot.
 
 ## Permissions per role
 
-The flag set is chosen from `--read-only`, not from `--role`. Every run, launch and resume alike, gets `--no-ask-user`, `-s`, `--session-id <id>` and `--add-dir <team-dir>`.
+The flag set is chosen from `--read-only`, not from `--role`. Every run, launch and resume alike, gets `--no-ask-user`, `-s`, `--session-id <id>` and `--add-dir <team-dir>`, plus `--model <model>` and `--reasoning-effort <effort>` when set.
 
 | Teammate | Flags | What it can do |
 | --- | --- | --- |
@@ -74,13 +74,21 @@ The Copilot permission flags are guardrails against mistakes, not a sandbox. Cop
 
 The writer denies are guardrails, not a boundary, and adding more denies wouldn't make them one.
 
-Run these checks. At each launch, record in your own context (never in a file under the team directory, which a read-only teammate can write) the teammate's `workdir` and `shasum <team-dir>/team.env`. `teammates.tsv` and `state.md` sit in the team directory, so neither can be a baseline. Before each read-only re-task, and before any `close-teammate.sh`, all three must hold:
+Run these checks. Launch each read-only teammate in a linked worktree, or another directory whose git dir is outside it (commodore's default worktrees are). In a plain clone, `.git/config` is inside the workdir, so a read-only teammate could plant a `core.fsmonitor` or a filter driver that runs inside your own `git status` and every later git command there.
 
-1. The teammate's state file has exactly one `ro=`, `workdir=`, `model=` and `effort=` line each, the `ro=` value is `1`, and `workdir` equals the one you recorded. The driver reads the last matching line, so a forged file can carry `ro=1` first and `ro=0` last. Alternatively, compare `shasum` of the whole state file with one you took after your own last launch or `retask.sh`.
+Hold every baseline in your own context, never in a file under the team directory, which a read-only teammate can write. `teammates.tsv` and `state.md` sit there, so neither can be a baseline. Right after each of your own `launch-teammate.sh` and `retask.sh` calls returns, record:
+
+- `shasum` of the teammate's whole state file (`cp_start` writes `pid`, `pgid` and `started` before the call returns);
+- `shasum <team-dir>/team.env`;
+- `shasum` of the repo's git config and, if present, its `config.worktree`, found by path and not by running git in the workdir.
+
+Before each read-only re-task, before any `close-teammate.sh`, and after each read-only turn before you act on its report, all three must hold:
+
+1. `shasum` of the state file equals the one you recorded. The driver reads the last matching line of each key, so a forged file can carry `ro=1` first and `ro=0` last; `send` interpolates `name`, and `stop` kills `-$pgid`. As a supplementary read, each of `name`, `workdir`, `model`, `effort`, `ro`, `pid` and `pgid` appears exactly once, `ro` is `1`, and `workdir` equals the one you recorded.
 2. `shasum <team-dir>/team.env` equals the one you recorded. This detects tampering only after the fact: the bounded watchdog sources `team.env` on its next poll.
-3. `git -C <workdir> status --porcelain` exits 0 and prints nothing. A non-zero exit fails the check.
+3. The git config `shasum` equals the one you recorded, and only then `git -C <workdir> status --porcelain` exits 0 and prints nothing. A config mismatch stops the run without running git there, and a non-zero exit fails the check. That a read-only teammate can't write `.git/config` through Copilot's path guard isn't verified, so the config check stands in for it.
 
-Run the same three after each read-only turn, before you act on its report. A report that's surprising stays unverified until `teammate-tail.sh` shows the turn that produced it. The checks don't cover `brief-common.md`, `prompts/*` or job files: read the brief or job a writer is about to follow if a read-only turn has run since you wrote it.
+The checks hold only while no other read-only teammate is mid-turn: check, then re-task or close, when none is live. A report that's surprising stays unverified until `teammate-tail.sh` shows the turn that produced it. The checks don't cover `brief-common.md`, `prompts/*` or job files: read the brief or job a writer is about to follow if a read-only turn has run since you wrote it.
 
 If any check fails, the run stops: tell the engineer, and don't re-task the teammate.
 

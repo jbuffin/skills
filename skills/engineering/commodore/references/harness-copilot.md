@@ -37,7 +37,7 @@ Run `<teammates>/drivers/copilot/status <run>` when you resume and before any pu
 
 An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round, as on any harness.
 
-Run the three checks in agent-teammates' "Security caveats" (the state file, the `team.env` checksum and `git status --porcelain`) before each read-only re-task, and again after each read-only turn before you act on its report. Hold the baselines in your own context, not in the run directory. If one check fails, the run stops and you tell the engineer.
+Run the three checks in agent-teammates' "Security caveats" (the state file, the `team.env` checksum and `git status --porcelain`) before each read-only re-task and any `close-teammate.sh`, and again after each read-only turn before you act on its report. The checks are the state-file checksum, the `team.env` checksum and the git config checksum, then `git status --porcelain`. Hold the baselines in your own context, not in the run directory, and launch read-only teammates in a linked worktree (the default). If one check fails, the run stops and you tell the engineer.
 
 Run the watchdog in its bounded mode, as agent-teammates' "Run the watchdog" says. `DONE` can arrive before `status` reads `done`, so check `status` before you re-task.
 
