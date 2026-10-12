@@ -27,20 +27,20 @@ DRIVERS=${SKILL:h}/agent-teammates/scripts/drivers
 SUPPORTED=(); for d in $DRIVERS/*(/N); do [[ -f $d/driver.env ]] && SUPPORTED+=${d:t}; done   # a driver counts only with its driver.env
 if [[ ! -f $RUN/team.env ]]; then
   if [[ -n $HARNESS ]]; then
-    [[ $HARNESS =~ '^[a-z0-9-]+$' && -f $DRIVERS/$HARNESS/driver.env ]] || { echo "$HARNESS: not supported yet (supported: ${(j:, :)SUPPORTED})"; exit 7; }
+    [[ $HARNESS =~ '^[a-z0-9-]+$' && -f $DRIVERS/$HARNESS/driver.env ]] || { print -r -- "$HARNESS: not supported yet (supported: ${(j:, :)SUPPORTED})"; exit 7; }
   else
     detected=(${(f)"$(${SKILL:h}/agent-teammates/scripts/detect-harness.sh)"})
     case $#detected in
       0) echo "no supported harness detected (supported: ${(j:, :)SUPPORTED}). Start the run from one of them, for example Claude Code."; exit 7 ;;
       1) HARNESS=$detected[1]
-         [[ -f $DRIVERS/$HARNESS/driver.env ]] || { echo "$HARNESS: has no driver yet (supported: ${(j:, :)SUPPORTED})"; exit 7; } ;;
+         [[ -f $DRIVERS/$HARNESS/driver.env ]] || { print -r -- "$HARNESS: has no driver yet (supported: ${(j:, :)SUPPORTED})"; exit 7; } ;;
       *) echo "more than one harness detected (${(j:, :)detected}). Start the run from one of them."; exit 7 ;;
     esac
   fi
 elif [[ -n $HARNESS ]]; then
   # The run keeps the harness in its team.env; say so when the caller asked for another.
   kept=$(unset HARNESS; source $RUN/team.env 2>/dev/null; print -r -- ${HARNESS:-claude})
-  [[ $kept == $HARNESS ]] || echo "note: $RUN already exists and keeps HARNESS=$kept from its team.env; ignoring HARNESS=$HARNESS" >&2
+  [[ $kept == $HARNESS ]] || print -r -- "note: $RUN already exists and keeps HARNESS=$kept from its team.env; ignoring HARNESS=$HARNESS" >&2
 fi
 mkdir -p $RUN/prompts $RUN/reports
 

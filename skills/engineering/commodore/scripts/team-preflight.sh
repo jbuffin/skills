@@ -23,7 +23,7 @@ if [[ ! $HARNESS =~ '^[a-z0-9-]+$' ]]; then
 else
   DRIVER=${0:A:h:h:h}/agent-teammates/scripts/drivers/$HARNESS
   detected=(${(f)"$(${0:A:h:h:h}/agent-teammates/scripts/detect-harness.sh)"})
-  if [[ ! -d $DRIVER ]]; then
+  if [[ ! -f $DRIVER/driver.env ]]; then
     bad "HARNESS=$HARNESS in team.env has no driver (looked in $DRIVER)"; harness_ok=
   elif [[ ${detected[(Ie)$HARNESS]} == 0 ]]; then
     bad "HARNESS=$HARNESS in team.env, but this environment is ${detected:-no supported harness}; start the run from $HARNESS, or fix HARNESS in team.env"; harness_ok=

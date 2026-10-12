@@ -195,6 +195,7 @@ want retask-closed && { mk retask-closed; reg t1 c51dbe46 closed - $SC/wt; xrun 
 want retask-unregistered && { mk retask-unregistered; xrun $AT/retasked.sh $D ghost; d4 retask-unregistered; }
 want close-stopped && { mk close-stopped; reg t1 c51dbe46 1789999000 - $SC/wt; xrun $AT/close-teammate.sh $D t1; d4 close-stopped; }
 want close-not-running && { mk close-not-running; reg t1 c51dbe46 1789999000 - $SC/wt; xrun FAKE_STOP_RC=1 $AT/close-teammate.sh $D t1; d4 close-not-running; }
+want close-stop-rc9 && { SCDIR=close-not-running; mk close-stop-rc9; SCDIR=; reg t1 c51dbe46 1789999000 - $SC/wt; xrun FAKE_STOP_RC=9 $AT/close-teammate.sh $D t1; d4 close-stop-rc9 close-not-running; }
 want close-mixed && { mk close-mixed; reg t1 c51dbe46 1789999000 - $SC/wt; xrun $AT/close-teammate.sh $D ghost t1; d4 close-mixed; }
 want close-viewer-tmux && { mk close-viewer-tmux; reg t1 c51dbe46 1789999000 %7 $SC/wt; xrun $AT/close-teammate.sh $D t1; d4 close-viewer-tmux; }
 want close-viewer-cmux && {
@@ -387,6 +388,7 @@ want c4 && {
 # C4 (real mismatch): a test-only driver directory, so the mismatch branch is reached and not only the no-driver one.
 want c4 && {
   cp -R $SKILLS $SB/src-other; mkdir -p $SB/src-other/agent-teammates/scripts/drivers/other
+  : > $SB/src-other/agent-teammates/scripts/drivers/other/driver.env
   TREE=$SB/src-other; HL=HARNESS=other; pf_sc c4-mismatch; HL=; TREE=$SKILLS
   xrun CLAUDECODE=1 $SB/src-other/commodore/scripts/team-preflight.sh $D
   line=$(grep '^FAIL' $SC/out | grep 'HARNESS=other' | grep 'this environment is claude' | head -1)
