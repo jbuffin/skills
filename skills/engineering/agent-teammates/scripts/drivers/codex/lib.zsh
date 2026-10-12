@@ -27,13 +27,14 @@ rollout_of() { print -r -- $CXHOME/sessions/*/*/*/rollout-*-$THREAD.jsonl(NOm[1]
 # toml_str <value>: a TOML basic string, for -c values.
 toml_str() { print -rn -- "\"${${1//\\/\\\\}//\"/\\\"}\""; }
 # sandbox_args launch|resume: sets SANDBOX to codex's sandbox flags for the role (RO, D, PERM are set). `exec resume` takes
-# no -s, so a resumed turn passes the same choice as -c config.
+# no -s, so a resumed turn passes the same choice as -c config. A read-only role gets --ignore-rules: an allow rule runs its
+# command outside the sandbox, which would let it write and reach the network.
 sandbox_args() {
   SANDBOX=()
   if [[ $1 == launch ]]; then
-    if [[ -n $RO ]]; then SANDBOX=(-s read-only -o ${EVENTS%.events}.out)
+    if [[ -n $RO ]]; then SANDBOX=(-s read-only --ignore-rules -o ${EVENTS%.events}.out)
     else SANDBOX=(-s workspace-write -c sandbox_workspace_write.network_access=true --add-dir $D/reports); fi
-  elif [[ -n $RO ]]; then SANDBOX=(-c "sandbox_mode=$(toml_str read-only)" -o ${EVENTS%.events}.out)
+  elif [[ -n $RO ]]; then SANDBOX=(-c "sandbox_mode=$(toml_str read-only)" --ignore-rules -o ${EVENTS%.events}.out)
   else SANDBOX=(-c "sandbox_mode=$(toml_str workspace-write)" -c sandbox_workspace_write.network_access=true -c "sandbox_workspace_write.writable_roots=[$(toml_str $D/reports)]"); fi
 }
 # bg_start <workdir> <stdin-file> <events> <errlog> <command...>: starts the command in the background in a new session

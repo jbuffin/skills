@@ -53,7 +53,7 @@ while true; do
   (( rc == 9 )) && { echo "WATCH the $HARNESS driver has no status operation; the watchdog can't run"; exit 5; }
   # a failed or unreadable listing says nothing about the teammates; skip the session checks this poll
   if (( rc != 0 )); then
-    [[ -n $BOUND ]] && { save_state; (( ++POLLS >= BOUND )) && { echo "WATCH timeout $BOUND"; exit 0; }; }
+    [[ -n $BOUND ]] && { save_state; (( EVENTS )) && exit 0; (( ++POLLS >= BOUND )) && { echo "WATCH timeout $BOUND"; exit 0; }; }
     sleep 60; continue
   fi
   # latest registry row per teammate; a "closed" row ends the watch for that name

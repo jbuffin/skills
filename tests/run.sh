@@ -886,12 +886,13 @@ cx_resumed() { cx_wait 10 'grep -aq "^codex cwd=.*\[resume\]" $SC/claude.log'; }
 cx_resume() { cx_resumed; L=$(grep -a '^codex cwd=.*\[resume\]' $SC/claude.log | tail -1); [[ -n $L ]] || { P+="no 'codex exec resume' call was logged"; return 1; }; }
 A_ro() {  # A_ro launch|resume: the read-only flags
   if [[ $1 == launch ]]; then A_pair -s read-only; else A_cfg 'sandbox_mode=read-only' 'sandbox_mode="read-only"'; A_no -s; A_no -C; fi
+  [[ $L == *" [--ignore-rules]"* ]] || P+="argv lacks --ignore-rules"
   [[ $L == *" [-o] [$D/codex-"*".out]"* ]] || P+="argv lacks -o <team>/codex-<name>.<n>.out (a path no sandbox can write)"; A_no $D/reports/t1.md; A_no --add-dir; [[ $L != *network_access* ]] || P+="argv has network_access"; A_safe
 }
 A_rw() {  # A_rw launch|resume: the writer flags
   if [[ $1 == launch ]]; then A_pair -s workspace-write; A_pair --add-dir $D/reports
   else A_cfg 'sandbox_mode=workspace-write' 'sandbox_mode="workspace-write"'; A_cfg "sandbox_workspace_write.writable_roots=[\"$D/reports\"]" "sandbox_workspace_write.writable_roots=['$D/reports']"; A_no -s; A_no -C; A_no --add-dir; fi
-  A_cfg sandbox_workspace_write.network_access=true; A_no -o; A_safe
+  A_cfg sandbox_workspace_write.network_access=true; A_no -o; A_no --ignore-rules; A_safe
 }
 cx_streams() {  # the background codex never holds the caller's stdout or stderr: its events and its stderr went to files under the team dir
   local f ev errs
@@ -1295,9 +1296,7 @@ want codex-marker && {
 }
 
 # ---- AC2: team-preflight on a Codex run ---------------------------------------------------------------------------------
-RULES_ALL=( 'prefix_rule(pattern=["gh", "pr", "view"], decision="allow")' 'prefix_rule(pattern=["gh", "pr", "diff"], decision="allow")'
-            'prefix_rule(pattern=["gh", "issue", "view"], decision="allow")' 'prefix_rule(pattern=["git", "add"], decision="allow")'
-            'prefix_rule(pattern=["git", "commit"], decision="allow")' )
+RULES_ALL=( 'prefix_rule(pattern=["git", "add"], decision="allow")' 'prefix_rule(pattern=["git", "commit"], decision="allow")' )
 cxp() {  # cxp <scenario> [VAR=val ...]: team-preflight on a Codex run (no ADVISOR_PROBE); rules come from $SC/codex-home/rules
   cx_sc $1; mk_repo; mkdir -p $SC/codex-home/rules; shift
 }
@@ -1311,34 +1310,34 @@ want codex-preflight && {
   grep -q Traceback $SC/out $SC/err && P+="a traceback: $(grep -h -A3 Traceback $SC/out $SC/err | head -4 | tr '\n' '|')"
   verdict "CODEX AC2 preflight with every rule present: ADVISOR n/a (codex), an OK line for codex, nothing to FAIL or WARN"
 
-  cxp codex-pf-missing; print -rl -- ${RULES_ALL:#*diff*} > $SC/codex-home/rules/default.rules; cxp_run
-  want_line='prefix_rule(pattern=["gh", "pr", "diff"], decision="allow")'
+  cxp codex-pf-missing; print -rl -- ${RULES_ALL:#*commit*} > $SC/codex-home/rules/default.rules; cxp_run
+  want_line='prefix_rule(pattern=["git", "commit"], decision="allow")'
   [[ $RC == 1 ]] || P+="exit $RC (want 1)"
   [[ -n $(grep '^FAIL' $SC/out | grep -F -- $want_line) ]] || P+="no FAIL line with $want_line; FAIL lines: $(grep '^FAIL' $SC/out | head -3 | tr '\n' '|')"
   [[ $(cxp_bad | grep -c prefix_rule) == 1 ]] || P+="want exactly one rule line named; got: $(cxp_bad | tr '\n' '|')"
-  verdict "CODEX AC2 preflight with gh pr diff missing: FAIL naming that exact prefix_rule line, exit 1"
+  verdict "CODEX AC2 preflight with git commit missing: FAIL naming that exact prefix_rule line, exit 1"
 
   cxp codex-pf-norules; cxp_run
   for r in $RULES_ALL; do [[ -n $(grep '^FAIL' $SC/out | grep -F -- $r) ]] || P+="no FAIL naming $r"; done
   grep -qi 'push' $SC/out && P+="the output mentions push: $(grep -i push $SC/out | head -2 | tr '\n' '|')"
-  verdict "CODEX AC2 preflight without a rules file: a FAIL for each of the five rules, never suggests git push"
+  verdict "CODEX AC2 preflight without a rules file: a FAIL for each of the two writer rules, never suggests git push"
 
-  cxp codex-pf-broad; print -rl -- 'prefix_rule(pattern=["gh"], decision="allow")' $RULES_ALL[4,5] > $SC/codex-home/rules/default.rules; cxp_run
-  grep '^WARN' $SC/out | grep -qi 'broader' || P+="no WARN saying the gh rule is broader than needed: $(cxp_bad | tr '\n' '|')"
-  [[ -z $(grep '^FAIL' $SC/out | grep -E 'prefix_rule|codex') ]] || P+="FAIL lines although a broad gh rule covers them: $(grep '^FAIL' $SC/out | grep -E 'prefix_rule|codex' | tr '\n' '|')"
-  verdict "CODEX AC2 preflight with a blanket gh rule: counts as present, WARN that it's broader than needed"
+  cxp codex-pf-broad; print -rl -- 'prefix_rule(pattern=["git"], decision="allow")' > $SC/codex-home/rules/default.rules; cxp_run
+  grep '^WARN' $SC/out | grep -qi 'broader' || P+="no WARN saying the git rule is broader than needed: $(cxp_bad | tr '\n' '|')"
+  [[ -z $(grep '^FAIL' $SC/out | grep -E 'prefix_rule|codex') ]] || P+="FAIL lines although a broad git rule covers them: $(grep '^FAIL' $SC/out | grep -E 'prefix_rule|codex' | tr '\n' '|')"
+  verdict "CODEX AC2 preflight with a blanket git rule: counts as present, WARN that it's broader than needed"
 
-  cxp codex-pf-longer; print -rl -- $RULES_ALL[1,3] 'prefix_rule(pattern=["git", "add", "-A"], decision="allow")' $RULES_ALL[5] > $SC/codex-home/rules/default.rules; cxp_run
+  cxp codex-pf-longer; print -rl -- 'prefix_rule(pattern=["git", "add", "-A"], decision="allow")' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
   [[ -n $(grep '^FAIL' $SC/out | grep -F -- 'prefix_rule(pattern=["git", "add"], decision="allow")') ]] || P+="a longer git add -A rule was taken to cover git add; FAIL lines: $(grep '^FAIL' $SC/out | head -3 | tr '\n' '|')"
   verdict "CODEX AC2 preflight: a longer rule (git add -A) doesn't cover git add"
 
-  cxp codex-pf-alternatives; print -rl -- 'prefix_rule(pattern=["gh", "pr", ["view", "diff"]], decision="allow")' $RULES_ALL[3,5] > $SC/codex-home/rules/default.rules; cxp_run
-  [[ -z $(cxp_bad) ]] || P+="FAIL/WARN with alternatives covering view and diff: $(cxp_bad | tr '\n' '|')"
+  cxp codex-pf-alternatives; print -rl -- 'prefix_rule(pattern=["git", ["add", "commit"]], decision="allow")' > $SC/codex-home/rules/default.rules; cxp_run
+  [[ -z $(cxp_bad) ]] || P+="FAIL/WARN with alternatives covering add and commit: $(cxp_bad | tr '\n' '|')"
   grep -q Traceback $SC/out $SC/err && P+="a traceback on an alternatives list"
   grep -qE '^OK +codex' $SC/out || P+="no OK line about codex besides the advisor one"
   verdict "CODEX AC2 preflight: a pattern element that lists alternatives covers each one, no crash"
 
-  cxp codex-pf-two-files; print -rl -- $RULES_ALL[4,5] > $SC/codex-home/rules/default.rules; print -rl -- $RULES_ALL[1,3] > $SC/codex-home/rules/team.rules; cxp_run
+  cxp codex-pf-two-files; print -rl -- $RULES_ALL[1] > $SC/codex-home/rules/default.rules; print -rl -- $RULES_ALL[2] > $SC/codex-home/rules/team.rules; cxp_run
   [[ -z $(cxp_bad) ]] || P+="FAIL/WARN although the rules are split over two files: $(cxp_bad | tr '\n' '|')"
   grep -qE '^OK +codex' $SC/out || P+="no OK line about codex besides the advisor one"
   verdict "CODEX AC2 preflight reads every *.rules file in the rules directory"
@@ -1354,21 +1353,30 @@ want codex-preflight && {
   for r in $RULES_ALL; do [[ -n $(grep '^FAIL' $SC/out | grep -F -- $r) ]] || P+="a commented-out rule counted: no FAIL naming $r"; done
   verdict "CODEX AC2 preflight: commented-out rules don't count"
 
-  cxp codex-pf-decision-first; print -rl -- 'prefix_rule(decision="forbidden", pattern=["gh", "pr", "view"])' $RULES_ALL[2,5] > $SC/codex-home/rules/default.rules; cxp_run
-  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'view') ]] || P+="a forbidden rule written decision-first counted as allow: exit $RC; $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  cxp codex-pf-decision-first; print -rl -- 'prefix_rule(decision="forbidden", pattern=["git", "add"])' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git add') ]] || P+="a forbidden rule written decision-first counted as allow: exit $RC; $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
   verdict "CODEX AC2 preflight: a forbidden rule with decision= before pattern= is a FAIL"
 
   cxp codex-pf-forbid-broad; print -rl -- $RULES_ALL 'prefix_rule(pattern=["git"], decision="forbidden")' > $SC/codex-home/rules/default.rules; cxp_run
   [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git add') && -n $(grep '^FAIL' $SC/out | grep -i forbid | grep 'git commit') ]] || P+="a broader forbidden rule didn't beat the exact allow rules: exit $RC; $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
   verdict "CODEX AC2 preflight: a broader forbidden rule wins over an exact allow rule"
 
-  cxp codex-pf-prompt; print -rl -- 'prefix_rule(pattern=["gh", "pr", "view"], decision="prompt")' $RULES_ALL[2,5] > $SC/codex-home/rules/default.rules; cxp_run
-  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'gh pr view') ]] || P+="a prompt rule counted as present: exit $RC"
+  cxp codex-pf-prompt; print -rl -- 'prefix_rule(pattern=["git", "add"], decision="prompt")' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'git add') ]] || P+="a prompt rule counted as present: exit $RC"
   verdict "CODEX AC2 preflight: a rule that prompts isn't an allow"
 
-  cxp codex-pf-justification; print -rl -- 'prefix_rule(pattern=["gh", "pr", "view"], decision="allow", justification="never prompt, a # here is no comment")' $RULES_ALL[2,5] > $SC/codex-home/rules/default.rules; cxp_run
+  cxp codex-pf-justification; print -rl -- 'prefix_rule(pattern=["git", "add"], decision="allow", justification="never prompt, a # here is no comment")' $RULES_ALL[2] > $SC/codex-home/rules/default.rules; cxp_run
   [[ -z $(cxp_bad) && $RC == 0 ]] || P+="an allow rule whose justification says 'prompt' was dropped: exit $RC; $(cxp_bad | tr '\n' '|')"
   verdict "CODEX AC2 preflight: an allow rule with 'prompt' in its justification still counts"
+
+  hk_repo() { git -C $SC/repo config core.hooksPath $1; }
+  cxp codex-pf-hooks-rel; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo .githooks; cxp_run
+  [[ $RC == 1 && -n $(grep '^FAIL' $SC/out | grep 'core.hooksPath' | grep 'relative' | grep 'unset') ]] || P+="a relative core.hooksPath wasn't a FAIL naming the problem and the fix: exit $RC; $(grep -E '^FAIL' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: a relative core.hooksPath in the run's repo is a FAIL"
+
+  cxp codex-pf-hooks-abs; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; hk_repo /opt/hooks; cxp_run
+  [[ -z $(cxp_bad) && -z $(grep core.hooksPath $SC/out) ]] || P+="an absolute core.hooksPath was reported: $(grep -E '^(FAIL|WARN)' $SC/out | head -3 | tr '\n' '|')"
+  verdict "CODEX AC2 preflight: an absolute core.hooksPath is fine"
 
   cxp codex-pf-nocodex; print -rl -- $RULES_ALL > $SC/codex-home/rules/default.rules; cxp_run PATH=/usr/bin:/bin:/usr/sbin:/sbin
   [[ $RC == 1 ]] || P+="exit $RC (want 1)"

@@ -8,9 +8,9 @@ python3 - "${CODEX_HOME:-$HOME/.codex}/rules" <<'PY' || fail=1
 import ast, glob, itertools, os, re, sys
 
 d = sys.argv[1]
-# the command prefixes each role kind needs, as prefix_rule patterns; rules are user-level (~/.codex/rules)
-NEEDED = [("read-only roles", ["gh", "pr", "view"]), ("read-only roles", ["gh", "pr", "diff"]), ("read-only roles", ["gh", "issue", "view"]),
-          ("writers", ["git", "add"]), ("writers", ["git", "commit"])]
+# the command prefixes writers need, as prefix_rule patterns; rules are user-level (~/.codex/rules). An allow rule runs its
+# command outside the sandbox, so read-only roles run with --ignore-rules and need none.
+NEEDED = [("writers", ["git", "add"]), ("writers", ["git", "commit"])]
 STRICT = {"allow": 0, "prompt": 1, "forbidden": 2}
 
 def strip_comments(text):
@@ -92,4 +92,14 @@ for r, needs in broad.items():
 if not fail and not broad: print("OK    codex rules cover what read-only roles and writers need")
 sys.exit(fail)
 PY
+# A rule runs `git commit` outside the sandbox, and git then runs the hooks core.hooksPath names. A relative path is tracked
+# in each worktree, so a writer can edit a hook and run it unsandboxed through the rule.
+repo=$(unset REPO WORKTREE; source $1/team.env; print -r -- ${REPO:-$WORKTREE})
+if [[ -n $repo ]]; then
+  hp=$(git -C $repo config core.hooksPath 2>/dev/null)
+  if [[ -n $hp && $hp != /* ]]; then
+    echo "FAIL  codex: core.hooksPath is the relative path '$hp' in $repo, so each worktree has its own tracked hooks; a writer can edit one and then run it outside the sandbox through the git commit rule. Unset it (git -C $repo config --unset core.hooksPath) or point it at an absolute path outside every worktree"
+    fail=1
+  fi
+fi
 exit $fail
