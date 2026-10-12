@@ -28,7 +28,7 @@ for a in "$@"; do case $a in --record) RECORD=1 ;; *) FILTER=$a ;; esac; done
 
 SB=$(mktemp -d ${TMPDIR:-/tmp}/harness-tests.XXXXXX) || exit 1
 SB=${SB:A}
-trap 'rm -rf $SB' EXIT
+trap 'reap_fakes; rm -rf $SB' EXIT
 trap 'exit 130' INT TERM HUP
 
 NOW=1790000000                       # the fake clock, 2026-09-21T13:33:20Z
@@ -158,6 +158,8 @@ if [[ -z $RECORD ]]; then
   [[ $got == $SB/bin/claude ]] && pass "SANDBOX claude resolves to the fake" || fail "SANDBOX claude resolves to the fake" "got '$got'"
   got=$(env -i PATH=$SANDBOX_PATH /bin/sh -c 'command -v codex')
   [[ $got == $SB/bin/codex ]] && pass "SANDBOX codex resolves to the fake" || fail "SANDBOX codex resolves to the fake" "got '$got'"
+  got=$(env -i PATH=$SANDBOX_PATH /bin/sh -c 'command -v copilot')
+  [[ $got == $SB/bin/copilot ]] && pass "SANDBOX copilot resolves to the fake" || fail "SANDBOX copilot resolves to the fake" "got '$got'"
 fi
 
 # ======================================================================================================================
@@ -565,12 +567,529 @@ want watchdog-retask && {
 }
 
 # ======================================================================================================================
-# C1: nothing outside drivers/claude calls claude or reads its transcripts.
+# CP: the Copilot driver (#40), driven through the shared scripts against tests/bin/copilot, with HARNESS=copilot and
+# MODEL_<ROLE> written into team.env (detection and team-init defaults are #63). Every `copilot -p` call lands in
+# $FAKE_DIR/copilot.call.<n> (cwd first, then argv, NUL-separated) and is parsed into flag -> values, so the checks accept
+# `--f v`, `--f=v`, variadic and comma-separated tool lists. The fake exits on its own, stays alive until killed
+# (FAKE_COPILOT_MODE=stay), or prints nothing (silent). Everything the driver does after `launch` returns is
+# asynchronous, so the scenarios poll with `await`; scenarios that leave a fake alive kill it (reap_fakes).
+# ======================================================================================================================
+reap_fakes() {  # kill every fake copilot (and child) a scenario left alive
+  local f p
+  for f in $SB/w/*/fake/copilot.pids(N) $SB/w/*/fake/copilot.children(N); do
+    for p in ${(f)"$(<$f)"}; do kill -9 $p 2>/dev/null; done
+  done
+  return 0
+}
+cpwant() { [[ -z $RECORD ]] && want $1; }
+CPSTOP=0
+cpmk() {  # cpmk <scenario> [team.env line...]: a copilot run with a reviewer (t1, read-only) and an implementer (w1) prompt
+  mk $1 HARNESS=copilot MODEL_IMPLEMENTER=claude-sonnet-5.5 MODEL_REVIEWER=claude-opus-5.5 "$@[2,-1]"
+  print -r -- "write it" > $D/prompts/w1.md; print -r -- "next job" > $SC/job.md
+  CPSTOP=0; NOTE=
+}
+cpnote() { NOTE+="[$1: exit $RC; stdout: $(head -c 240 $SC/out | tr '\n' '|'); stderr: $(head -c 240 $SC/err | tr '\n' '|')] "; }
+# txrun [VAR=val ...] cmd args...: xrun with a 20 s limit, for scripts that start a long-lived fake. A non-zero exit
+# (a refused launch, or a hang) ends the scenario's waits.
+txrun() {
+  ( cd $SC/cwd && exec env -i $BASE "$@" ) > $SC/out 2> $SC/err &
+  local pid=$! i=0
+  while kill -0 $pid 2>/dev/null && (( i++ < 200 )); do /bin/sleep 0.1; done
+  if kill -0 $pid 2>/dev/null; then kill -9 $pid 2>/dev/null; wait $pid 2>/dev/null; RC=124; else wait $pid; RC=$?; fi
+  (( RC )) && CPSTOP=1
+  return 0
+}
+await() {  # await <seconds> <command...>: poll until the command succeeds; gives up at once after a failed step
+  local n=$1 i=0; shift
+  until "$@"; do (( CPSTOP || i++ >= n * 10 )) && return 1; /bin/sleep 0.1; done
+}
+cp_pids() { cat $SC/fake/copilot.pids 2>/dev/null; }
+cp_runs() { local p=(${(f)"$(cp_pids)"}); (( $#p >= $1 )); }       # at least n copilot -p runs have started
+cp_alive() { local p; for p in ${(f)"$(cp_pids)"}; do kill -0 $p 2>/dev/null && return 0; done; return 1; }
+cp_settled() { cp_runs $1 && ! cp_alive; }                          # n runs have started and none is alive
+cp_calls() { local f=($SC/fake/copilot.call.*(N)); (( $#f >= $1 )); }
+cp_id() { awk -v n=$1 '$1==n {v=$2} END {print v}' $D/teammates.tsv; }
+cp_sd() { print -r -- $SC/home/.copilot/session-state/$(cp_id $1); }
+cp_lock() { local p=(${(f)"$(cp_pids)"}); [[ -n $p[-1] && -e $(cp_sd $1)/inuse.$p[-1].lock ]]; }   # the newest run holds its lock
+cp_child_gone() { local c=(${(f)"$(cat $SC/fake/copilot.children 2>/dev/null)"}) p; (( $#c )) || return 1; for p in $c; do kill -0 $p 2>/dev/null && return 1; done; return 0; }
+cp_has() { [[ -e $1 ]]; }
+cpverdict() { if (( $#P )); then fail "$1" "${(F)P}"$'\n'"$NOTE"; else pass "$1"; fi }
+cpstate() { awk -v i=$(cp_id $1) '$1==i {print $3}' $SC/out; }   # the state column of `status` output for a teammate
+cpact() { awk -v i=$(cp_id $1) '$1==i {print $4}' $SC/out; }
+
+# cparse <call-file>: CCWD, CARGS, and F: flag -> its values one per line (1 for a flag with none). Handles `--f=v`,
+# `--f v`, `--f a b c` for the three tool flags, and comma-separated --available-tools.
+typeset -A F
+typeset -a CARGS RUNS
+cpadd() { local f=$1 v=$2 t NL=$'\n'; if [[ $f == --available-tools ]]; then for t in ${(s:,:)v}; do F[$f]+="${F[$f]:+$NL}$t"; done; else F[$f]+="${F[$f]:+$NL}$v"; fi; }
+cparse() {
+  local -a a; local -i i=1; local x f
+  F=(); a=("${(@0)$(<$1)}")
+  [[ -z $a[-1] ]] && a[-1]=()
+  CCWD=$a[1]; CARGS=("${(@)a[2,-1]}")
+  while (( i <= $#CARGS )); do
+    x=$CARGS[i]; i+=1
+    case $x in
+      --*=*) cpadd ${x%%=*} ${x#*=} ;;
+      -*) f=$x
+          case $f in
+            -p|--session-id|--model|--add-dir|-C|-n|--name|--reasoning-effort|--output-format|--config-dir|-r|--resume)
+              cpadd $f $CARGS[i]; i+=1 ;;
+            --available-tools|--allow-tool|--deny-tool)
+              F[$f]=${F[$f]-}
+              while (( i <= $#CARGS )) && [[ $CARGS[i] != -* ]]; do cpadd $f $CARGS[i]; i+=1; done ;;
+            *) F[$f]=1 ;;
+          esac ;;
+    esac
+  done
+}
+cp_load() {  # RUNS: the `copilot -p` calls so far, in order
+  local c; RUNS=()
+  for c in $SC/fake/copilot.call.*(nN); do cparse $c; [[ -n ${F[-p]+x} ]] && RUNS+=$c; done
+}
+hasv() { local x; for x in ${(f)F[$1]}; do [[ $x == "$2" ]] && return 0; done; return 1; }   # flag $1 has the value $2
+hasf() { [[ -n ${F[$1]+x} ]]; }                                                              # flag $1 is present
+sorted() { print -r -- ${(j:,:)${(o)${(f)F[$1]}}}; }
+toolsig() { print -r -- "avail=$(sorted --available-tools) allow=$(sorted --allow-tool) deny=$(sorted --deny-tool) all=${F[--allow-all-tools]-} model=${F[--model]-} adddir=${F[--add-dir]-} s=${F[-s]-}${F[--silent]-}"; }
+UUID='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+READ_ALLOW=( 'shell(git log)' 'shell(git show)' 'shell(git diff)' 'shell(git status)' 'shell(gh pr view)' 'shell(gh pr diff)' 'shell(gh issue view)' )
+WRITE_DENY=( 'shell(git push:*)' 'shell(gh pr merge:*)' 'shell(gh pr create:*)' 'shell(gh api:*)' 'shell(gh issue:*)' )
+
+# ---- AC1, AC2, AC4, engineer decisions: the command lines ------------------------------------------------------------
+cpwant cp-argv && {
+  cpmk cp-argv
+  txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 2
+  txrun $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
+  await 10 cp_settled 3
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1"
+  await 10 cp_settled 4
+  xrun $AT/drivers/copilot/preflight $D; cpnote "driver preflight"
+  CPSTOP=0; await 5 cp_calls 5
+  reap_fakes; cp_load
+  id1=$(cp_id t1); id2=$(cp_id w1)
+  typeset -A by; for c in $RUNS; do cparse $c; by[${F[--session-id]}]+="$c "; done
+  l1=(${=by[$id1]}); l2=(${=by[$id2]})
+  want5="want 5 copilot -p calls (a launch and a resume for each of t1 and w1, and the driver preflight's turn), got $#RUNS"
+
+  P=()
+  (( $#RUNS >= 5 )) || P+=$want5
+  for c in $RUNS; do cparse $c
+    hasf --available-tools && [[ -n ${F[--available-tools]} ]] || P+="${c:t}: no --available-tools list"
+    [[ ${F[--session-id]} =~ $UUID ]] || P+="${c:t}: no --session-id <lowercase uuid> (got '${F[--session-id]}')"
+    hasf --no-ask-user || P+="${c:t}: no --no-ask-user"
+    { hasf -n || hasf --name; } && P+="${c:t}: names the session with -n/--name"
+  done
+  cpverdict "CP AC1 every copilot command line has --available-tools, --session-id <uuid>, --no-ask-user and no -n"
+
+  P=()
+  (( $#l1 == 2 )) || P+="t1 (registry session '$id1'): $#l1 copilot calls carry that --session-id, want 2 (launch, resume)"
+  (( $#l2 == 2 )) || P+="w1 (registry session '$id2'): $#l2 copilot calls carry that --session-id, want 2 (launch, resume)"
+  cpverdict "CP AC1 a resume passes the launch's --session-id (the id launch-teammate.sh registered)"
+
+  P=()
+  if (( $#l1 )); then
+    cparse $l1[1]
+    [[ $(sorted --available-tools) == bash,glob,grep,view ]] || P+="read-only launch --available-tools is '$(sorted --available-tools)', want bash glob grep view"
+    hasv --deny-tool write || P+="read-only launch has no --deny-tool=write (deny tools: '$(sorted --deny-tool)')"
+    for e in $READ_ALLOW; do hasv --allow-tool $e || P+="read-only launch lacks the allow entry $e"; done
+    for fl in --allow-all-tools --allow-all --yolo; do hasf $fl && P+="read-only launch passes $fl"; done
+    [[ ${(j: :)CARGS} == *'shell(gh api)'* ]] && P+="read-only launch mentions shell(gh api)"
+  else P+="no read-only launch call"; fi
+  cpverdict "CP AC2 read-only launch: bash view glob grep, --deny-tool write, the seven read entries, no allow-all or gh api"
+
+  P=()
+  if (( $#l2 )); then
+    cparse $l2[1]
+    hasf --allow-all-tools || P+="writer launch has no --allow-all-tools"
+    for e in $WRITE_DENY; do hasv --deny-tool $e || P+="writer launch lacks the deny entry $e"; done
+    [[ -n ${F[--available-tools]} ]] || P+="writer launch has no --available-tools list"
+  else P+="no writer launch call"; fi
+  cpverdict "CP AC2 writer launch: --allow-all-tools and the five deny entries"
+
+  P=()
+  for pair in "t1 $id1 claude-opus-5.5" "w1 $id2 claude-sonnet-5.5"; do
+    set -- ${=pair}; cs=(${=by[$2]})
+    (( $#cs == 2 )) || { P+="$1: need a launch and a resume to compare, found $#cs calls"; continue; }
+    cparse $cs[1]; s1=$(toolsig); w1=$CCWD; c1=${F[-C]-}; m1=${F[--model]-}; p1=${F[-p]}
+    cparse $cs[2]; s2=$(toolsig); w2=$CCWD; c2=${F[-C]-}; p2=${F[-p]}
+    [[ $s1 == $s2 ]] || P+="$1: the resume's tool flags differ from the launch's: launch '$s1', resume '$s2'"
+    [[ $m1 == $3 ]] || P+="$1: launch --model is '$m1', want $3 (from MODEL_<ROLE> in team.env)"
+    [[ $w1 == $SC/wt || $c1 == $SC/wt ]] || P+="$1: launch runs in '$w1' (-C '$c1'), want the workdir $SC/wt"
+    [[ $w2 == $SC/wt || $c2 == $SC/wt ]] || P+="$1: resume runs in '$w2' (-C '$c2'), want the workdir $SC/wt"
+    [[ $p1 == *$D/prompts/$1.md* || $p1 == *"$(<$D/prompts/$1.md)"* ]] || P+="$1: launch prompt names neither the prompt file nor its content: '$p1'"
+    [[ $p2 == *$SC/job.md* || $p2 == *"next job"* ]] || P+="$1: resume prompt names neither the message file nor its content: '$p2'"
+  done
+  cpverdict "CP AC4 a resume runs in the teammate's workdir with the launch's tool flags and model, and the message as its prompt"
+
+  P=()
+  (( $#l1 == 2 && $#l2 == 2 )) || P+="want a launch and a resume for each of t1 and w1 (matched by the registered session id), got $#l1 and $#l2"
+  for c in ${=by[$id1]} ${=by[$id2]}; do cparse $c
+    hasv --add-dir $D || P+="${c:t}: no --add-dir $D (add-dir: '${F[--add-dir]}')"
+    { hasf -s || hasf --silent; } || P+="${c:t}: no -s"
+  done
+  for c in ${=by[$id1]}; do cparse $c; hasv --deny-tool write || P+="${c:t} (read-only): no --deny-tool=write"; done
+  cpverdict "CP engineer decisions: every launch and resume has --add-dir <team-dir> and -s; read-only keeps --deny-tool=write"
+}
+
+# ---- AC4: the resumed process is the one status watches --------------------------------------------------------------
+cpwant cp-retask-live && {
+  cpmk cp-retask-live
+  txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch"
+  await 10 cp_settled 1
+  txrun FAKE_COPILOT_MODE=stay $AT/retask.sh $D t1 $SC/job.md; cpnote "retask"
+  await 10 cp_runs 2; await 10 cp_lock t1
+  P=()
+  (( ${#${(f)"$(cp_pids)"}} == 2 )) || P+="want 2 copilot runs (launch, resume), got ${#${(f)"$(cp_pids)"}}"
+  cp_alive || P+="the resumed copilot isn't running right after retask.sh returned"
+  grep -q 're-tasked' $SC/out || P+="retask.sh didn't print 're-tasked'"
+  [[ $(awk '$1=="t1" {n++} END {print n}' $D/teammates.tsv) == 2 ]] || P+="teammates.tsv should hold the launch row and the re-task row for t1"
+  xrun $AT/drivers/copilot/status $D; cpnote "status"
+  [[ $(cpstate t1) == working ]] || P+="status after retask (resumed copilot alive, holding its lock) reports '$(cpstate t1)' for t1, want working"
+  [[ $(cpact t1) == $NOW ]] || P+="status last activity is '$(cpact t1)', want $NOW (events.jsonl's mtime and timestamps)"
+  reap_fakes
+  cpverdict "CP AC4 after retask.sh with the fake still alive, status reports working with the session's last activity"
+}
+
+# ---- Status: working, done or blocked, stopped; and close -----------------------------------------------------------
+cpwant cp-status && {
+  cpmk cp-status
+  txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_TS=$((NOW - 300)) $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stay)"
+  P=()
+  await 10 cp_lock w1
+  (( CPSTOP )) || cp_alive || P+="launch-teammate.sh returned but no copilot is running"
+  xrun $AT/drivers/copilot/status $D; cpnote "status while running"
+  [[ $(cpstate w1) == working ]] || P+="alive copilot with its lock: status reports '$(cpstate w1)', want working"
+  [[ $(cpact w1) == $((NOW - 300)) ]] || P+="last activity is '$(cpact w1)', want $((NOW - 300)) (events.jsonl's mtime and last event)"
+  [[ $(awk 'NF != 4' $SC/out | wc -l | tr -d ' ') == 0 ]] || P+="status rows must have 4 fields: $(head -c 200 $SC/out)"
+  reap_fakes
+  cpverdict "CP status: working while the copilot is alive with its lock; last activity from events.jsonl; 4 columns"
+
+  cpmk cp-status-exit
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (exit)"
+  await 10 cp_settled 1
+  P=()
+  cp_runs 1 || P+="no copilot run happened"
+  xrun $AT/drivers/copilot/status $D; cpnote "status after exit"
+  case $(cpstate w1) in done|blocked) ;; *) P+="after the process exited, status reports '$(cpstate w1)' for w1, want done or blocked (never stopped or failed)" ;; esac
+  cpverdict "CP status: done or blocked, never stopped or failed, after the process exits"
+}
+cpwant cp-close && {
+  cpmk cp-close
+  txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_CHILD=1 $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stay, child)"
+  await 10 cp_lock w1; await 5 cp_has $SC/fake/copilot.children
+  P=()
+  cp_alive || P+="the fake copilot isn't running before close-teammate.sh, so the check proves nothing"
+  [[ -s $SC/fake/copilot.children ]] || P+="the fake copilot started no child"
+  txrun $AT/close-teammate.sh $D w1; cpnote "close w1"
+  CPSTOP=0; await 5 cp_child_gone
+  cp_alive && P+="the copilot process is still alive after close-teammate.sh"
+  cp_child_gone || P+="the copilot's child process is still alive: the process group wasn't killed"
+  [[ $RC == 0 && $(<$SC/out) == "stopped w1 ($(cp_id w1))" ]] || P+="close-teammate.sh exit $RC, stdout '$(head -c 200 $SC/out)', want 'stopped w1 (<id>)'"
+  [[ -s $(cp_sd w1)/events.jsonl ]] || P+="the session-state dir or its events.jsonl is gone: $(cp_sd w1)"
+  xrun $AT/drivers/copilot/status $D; cpnote "status after close"
+  [[ $(cpstate w1) == stopped ]] || P+="status after the driver's stop reports '$(cpstate w1)', want stopped"
+  reap_fakes
+  cpverdict "CP AC6 close-teammate.sh kills the process group, leaves the session-state dir, and status reports stopped"
+}
+
+# ---- AC5: the watchdog -----------------------------------------------------------------------------------------------
+cpwant cp-watch && {
+  # DONE: a teammate that wrote its marker and exited. status must also list the exited session (state done or blocked).
+  cpmk cp-watch-done
+  txrun FAKE_COPILOT_DONE=$D/reports/w1.done $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1; await 5 cp_has $D/reports/w1.done
+  xrun $AT/drivers/copilot/status $D; cpnote "status"; st=$(cpstate w1)
+  xrun_watch 1 $AT/watch-teammates.sh $D
+  P=()
+  [[ $st == done || $st == blocked ]] || P+="status reports '$st' for the exited w1, want done or blocked"
+  [[ -n $REACHED ]] || P+="the watcher never finished a poll; stdout: $(head -c 200 $SC/out) stderr: $(head -c 200 $SC/err)"
+  grep -q '^DONE w1$' $SC/out || P+="no 'DONE w1' line; stdout: $(head -c 200 $SC/out)"
+  grep -qE '^(GONE|WATCH)' $SC/out && P+="unexpected GONE/WATCH line: $(grep -E '^(GONE|WATCH)' $SC/out | head -2 | tr '\n' '|')"
+  cpverdict "CP AC5 watch-teammates.sh reports DONE, no GONE, for a teammate that wrote its marker and exited"
+  reap_fakes
+
+  # BLOCKED: the teammate exited after a retask without a new marker; the old marker doesn't count. status must list the
+  # exited session from the driver's own state, or the watcher says GONE.
+  cpmk cp-watch-blocked
+  txrun FAKE_COPILOT_DONE=$D/reports/w1.done $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1; await 5 cp_has $D/reports/w1.done
+  settime $((NOW - 1000)) $D/reports/w1.done
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1"
+  await 10 cp_settled 2
+  xrun_watch 2 $AT/watch-teammates.sh $D
+  P=()
+  cp_runs 2 || P+="want 2 copilot runs (launch, resume); the scenario never got there"
+  [[ -n $REACHED ]] || P+="the watcher never finished two polls; stdout: $(head -c 200 $SC/out) stderr: $(head -c 200 $SC/err)"
+  grep -q "^BLOCKED w1 $(cp_id w1)\$" $SC/out || P+="no 'BLOCKED w1 <id>' line after two polls; stdout: $(head -c 300 $SC/out | tr '\n' '|')"
+  grep -qE '^(GONE|WATCH)' $SC/out && P+="unexpected GONE/WATCH line: $(grep -E '^(GONE|WATCH)' $SC/out | head -2 | tr '\n' '|')"
+  cpverdict "CP AC4/AC5 after a retask the old marker no longer counts: BLOCKED on the second poll, no GONE"
+  reap_fakes
+
+  # STALL: a live teammate whose last activity is older than STALL_MIN (10): 30 min.
+  cpmk cp-watch-stall
+  txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_TS=$((NOW - 1800)) $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stay)"
+  await 10 cp_lock w1
+  xrun_watch 1 $AT/watch-teammates.sh $D
+  P=()
+  cp_alive || P+="the fake copilot isn't running"
+  [[ -n $REACHED ]] || P+="the watcher never finished a poll; stdout: $(head -c 200 $SC/out) stderr: $(head -c 200 $SC/err)"
+  grep -q "^STALL w1 $(cp_id w1) 30\$" $SC/out || P+="no 'STALL w1 <id> 30' line; stdout: $(head -c 300 $SC/out | tr '\n' '|')"
+  grep -qE '^(GONE|WATCH)' $SC/out && P+="unexpected GONE/WATCH line: $(grep -E '^(GONE|WATCH)' $SC/out | head -2 | tr '\n' '|')"
+  cpverdict "CP AC5 STALL for a live teammate whose events.jsonl is 30 minutes old"
+  reap_fakes
+  # control: the same teammate with fresh activity doesn't stall
+  cpmk cp-watch-fresh
+  txrun FAKE_COPILOT_MODE=stay $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stay)"
+  await 10 cp_lock w1
+  xrun_watch 1 $AT/watch-teammates.sh $D
+  P=()
+  cp_alive || P+="the fake copilot isn't running"
+  [[ -n $REACHED ]] || P+="the watcher never finished a poll; stdout: $(head -c 200 $SC/out) stderr: $(head -c 200 $SC/err)"
+  grep -qE '^(STALL|GONE|WATCH|BLOCKED)' $SC/out && P+="unexpected line for a fresh working teammate: $(head -c 200 $SC/out | tr '\n' '|')"
+  cpverdict "CP AC5 no STALL, GONE or BLOCKED for a live teammate with fresh activity"
+  reap_fakes
+}
+
+# ---- Tail ------------------------------------------------------------------------------------------------------------
+cpwant cp-tail && {
+  cpmk cp-tail
+  txrun FAKE_COPILOT_SAY='all green' $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1
+  xrun $AT/teammate-tail.sh $D w1; cpnote "tail"
+  P=()
+  cp_runs 1 || P+="no copilot run happened"
+  [[ $RC == 0 ]] || P+="teammate-tail.sh exit $RC, want 0"
+  [[ $(head -1 $SC/out) == "transcript: "* ]] || P+="first line isn't 'transcript: ...': $(head -1 $SC/out)"
+  grep -qE '^TOOL +.*git status' $SC/out || P+="no TOOL line naming the bash call (git status)"
+  grep -qE '^SAID +.*all green' $SC/out || P+="no SAID line with the final message"
+  cpverdict "CP tail prints TOOL and SAID lines from events.jsonl"
+}
+
+# ---- Read-only reports written by the driver (engineer decision, option b) --------------------------------------------
+cp_report_is() { [[ -f $D/reports/t1.md && $(<$D/reports/t1.md) == $1 && $D/reports/t1.done -nt $SC/oldref ]]; }
+cpwant cp-report && {
+  cpmk cp-report
+  txrun FAKE_COPILOT_SAY='first report' $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  await 10 cp_has $D/reports/t1.done
+  P=()
+  cp_runs 1 || P+="no copilot run happened"
+  [[ -s $D/reports/t1.md ]] || P+="reports/t1.md is missing or empty when t1.done appeared (.md must come first)"
+  [[ -f $D/reports/t1.md && $(<$D/reports/t1.md) == 'first report' ]] || P+="reports/t1.md holds '$(head -c 200 $D/reports/t1.md 2>/dev/null)', want the final message 'first report'"
+  [[ -f $D/reports/t1.done ]] || P+="no reports/t1.done"
+  [[ ! -f $D/reports/t1.md || ! $D/reports/t1.md -nt $D/reports/t1.done ]] || P+="reports/t1.md is newer than t1.done: the marker must come second"
+  cpverdict "CP read-only launch: the driver writes reports/<name>.md from the final message, then <name>.done"
+  await 5 cp_settled 1
+  : > $SC/oldref; settime 1500000001 $SC/oldref; settime 1500000000 $D/reports/t1.md $D/reports/t1.done
+  txrun FAKE_COPILOT_SAY='second report' $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
+  await 10 cp_report_is 'second report'
+  P=()
+  cp_runs 2 || P+="no resumed copilot run happened"
+  [[ -f $D/reports/t1.md && $(<$D/reports/t1.md) == 'second report' ]] || P+="after the resume reports/t1.md holds '$(head -c 200 $D/reports/t1.md 2>/dev/null)', want 'second report'"
+  [[ $D/reports/t1.done -nt $SC/oldref ]] || P+="reports/t1.done wasn't touched after the resume"
+  cpverdict "CP read-only retask: the resumed session's final message replaces the report, and the marker is touched again"
+  reap_fakes
+
+  # no final message: neither file; the session reads done or blocked with no marker
+  cpmk cp-report-none
+  txrun FAKE_COPILOT_MODE=silent $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1 (silent)"
+  await 10 cp_settled 1
+  txrun FAKE_COPILOT_MODE=silent $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1 (silent)"
+  await 10 cp_settled 2
+  /bin/sleep 1.5
+  P=()
+  cp_runs 2 || P+="want 2 silent runs (launch, resume), got ${#${(f)"$(cp_pids)"}}"
+  [[ ! -e $D/reports/t1.md ]] || P+="reports/t1.md was written with no final message"
+  [[ ! -e $D/reports/t1.done ]] || P+="reports/t1.done was written with no final message"
+  cpverdict "CP read-only with no final message: the driver writes neither the report nor the marker"
+  reap_fakes
+
+  # writers write their own report
+  cpmk cp-report-writer
+  txrun FAKE_COPILOT_SAY='writer text' $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1
+  /bin/sleep 1.5
+  P=()
+  cp_runs 1 || P+="no copilot run happened"
+  [[ ! -e $D/reports/w1.md && ! -e $D/reports/w1.done ]] || P+="the driver wrote a report or marker for a writer: $(ls $D/reports | tr '\n' ' ')"
+  cpverdict "CP a writer session gets no driver-written report or marker"
+  reap_fakes
+}
+
+# ---- Preflight (AC1 for the headless turn, and the two FAILs) -------------------------------------------------------
+cpwant cp-preflight && {
+  cpmk cp-preflight-ok
+  xrun $AT/drivers/copilot/preflight $D; cpnote "preflight"
+  P=()
+  [[ $RC == 0 ]] || P+="driver preflight exit $RC with the fake copilot on PATH, want 0"
+  grep -q '^FAIL' $SC/out && P+="FAIL line: $(grep '^FAIL' $SC/out | head -2 | tr '\n' '|')"
+  grep -q '^OK' $SC/out || P+="no OK line"
+  cp_calls 1 || P+="no copilot call logged: the preflight ran no headless turn"
+  cpverdict "CP preflight passes with the fake copilot and runs one headless turn"
+
+  cpmk cp-preflight-nopath
+  xrun PATH=/usr/bin:/bin:/usr/sbin:/sbin $AT/drivers/copilot/preflight $D; cpnote "preflight, no copilot"
+  P=()
+  [[ $RC == 1 ]] || P+="exit $RC, want 1"
+  grep -qiE '^FAIL.*copilot' $SC/out || P+="no FAIL line naming copilot (copilot not on PATH)"
+  cpverdict "CP preflight FAILs, naming copilot, when copilot isn't on PATH"
+
+  cpmk cp-preflight-silent
+  xrun FAKE_COPILOT_MODE=silent $AT/drivers/copilot/preflight $D; cpnote "preflight, silent copilot"
+  P=()
+  cp_calls 1 || P+="no copilot call logged: the preflight ran no headless turn"
+  [[ $RC == 1 ]] || P+="exit $RC, want 1"
+  grep -qiE '^FAIL.*(no output|empty|nothing|overflow|context)' $SC/out || P+="no FAIL line about the headless turn printing nothing"
+  cpverdict "CP preflight FAILs when the headless turn prints nothing (the context-overflow symptom)"
+}
+
+# ---- Fix round 1: preflight failures, resume activity, send waits, a launch that dies, stale reports ----------------
+cpwant cp-round1 && {
+  cpmk cp-preflight-stderr
+  xrun FAKE_COPILOT_MODE=stderr $AT/drivers/copilot/preflight $D; cpnote "preflight, stderr-only copilot"
+  P=()
+  cp_calls 1 || P+="no copilot call logged: the preflight ran no headless turn"
+  [[ $RC == 1 ]] || P+="exit $RC, want 1 (stdout was empty; the message went to stderr)"
+  grep -qiE '^FAIL.*(no output|empty|nothing|overflow|context)' $SC/out || P+="no FAIL line about the headless turn printing nothing"
+  cpverdict "CP preflight FAILs when the turn's only output is on stderr"
+
+  cpmk cp-preflight-fail
+  xrun FAKE_COPILOT_MODE=fail $AT/drivers/copilot/preflight $D; cpnote "preflight, failing copilot"
+  P=()
+  cp_calls 1 || P+="no copilot call logged: the preflight ran no headless turn"
+  [[ $RC == 1 ]] || P+="exit $RC, want 1"
+  grep -q '^FAIL.*exited 1.*fake copilot failed' $SC/out || P+="no FAIL line with the exit code and the first stderr line"
+  grep -q '^OK.*returned output' $SC/out && P+="an OK line for a turn that exited 1"
+  cpverdict "CP preflight FAILs, quoting stderr, when the headless turn exits non-zero"
+
+  cpmk cp-launch-dies
+  txrun FAKE_COPILOT_MODE=fail $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (fails at once)"
+  P=()
+  [[ $RC == 124 ]] && P+="launch hung"
+  (( RC )) || P+="launch-teammate.sh exit 0 although copilot exited 1 at once"
+  grep -q 'exited at once' $SC/out || P+="no 'exited at once' message; stdout: $(head -c 200 $SC/out)"
+  [[ -z $(awk '$1=="w1"' $D/teammates.tsv) ]] || P+="a failed launch was registered"
+  cpverdict "CP launch exits non-zero, registering nothing, when copilot dies at once"
+
+  # a resume's fresh start is activity: stale events.jsonl must not read as a stall
+  cpmk cp-resume-activity
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1
+  txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_TS=$((NOW - 1800)) $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (stay, stale events)"
+  await 10 cp_lock w1
+  xrun $AT/drivers/copilot/status $D; cpnote "status"
+  P=()
+  [[ $(cpact w1) == $NOW ]] || P+="last activity is '$(cpact w1)', want $NOW (the resume's start; events.jsonl is 30 min old)"
+  xrun_watch 1 $AT/watch-teammates.sh $D
+  cp_alive || P+="the resumed fake copilot isn't running"
+  grep -q '^STALL' $SC/out && P+="STALL for a teammate that was just resumed: $(head -c 200 $SC/out)"
+  reap_fakes
+  cpverdict "CP a fresh resume counts as activity: status reports its start, no STALL"
+
+  # send refuses, after waiting, while the previous turn runs
+  cpmk cp-send-busy
+  txrun FAKE_COPILOT_MODE=stay $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stay)"
+  await 10 cp_lock w1
+  CPSTOP=0; txrun COPILOT_SEND_WAIT=1 $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (busy)"
+  P=()
+  (( RC )) || P+="retask.sh exit 0 while the previous turn is still running"
+  grep -q 'still running' $SC/out || P+="no 'still running' message; stdout: $(head -c 200 $SC/out)"
+  [[ $(awk '$1=="w1" {n++} END {print n}' $D/teammates.tsv) == 1 ]] || P+="a refused re-task was recorded"
+  pp=(${(f)"$(cp_pids)"}); (( $#pp == 1 )) || P+="a second copilot run started: $pp"
+  reap_fakes
+  cpverdict "CP send refuses, recording nothing, while the previous turn is still running"
+
+  cpmk cp-send-wait
+  txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_STAY_MAX=2 $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stays 2 s)"
+  await 10 cp_lock w1
+  CPSTOP=0; txrun COPILOT_SEND_WAIT=20 $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (waits)"
+  await 10 cp_settled 2
+  P=()
+  [[ $RC == 0 ]] || P+="retask.sh exit $RC, want 0 after waiting for the previous turn to end"
+  cp_runs 2 || P+="no resumed run"
+  reap_fakes
+  cpverdict "CP send waits for a turn that is ending, then resumes"
+
+  # a read-only resume with no final message leaves the earlier report alone
+  cpmk cp-report-stale
+  txrun FAKE_COPILOT_SAY='first report' $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  await 10 cp_has $D/reports/t1.done; await 5 cp_settled 1
+  : > $SC/oldref; settime 1500000001 $SC/oldref; settime 1500000000 $D/reports/t1.md $D/reports/t1.done
+  txrun FAKE_COPILOT_MODE=silent $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1 (silent)"
+  await 10 cp_settled 2
+  /bin/sleep 1.5
+  P=()
+  cp_runs 2 || P+="no silent resume ran"
+  [[ -f $D/reports/t1.md && $(<$D/reports/t1.md) == 'first report' ]] || P+="reports/t1.md holds '$(head -c 100 $D/reports/t1.md 2>/dev/null)', want the first report"
+  [[ ! $D/reports/t1.md -nt $SC/oldref ]] || P+="reports/t1.md was rewritten by the silent resume"
+  [[ ! $D/reports/t1.done -nt $SC/oldref ]] || P+="reports/t1.done was touched by the silent resume"
+  reap_fakes
+  cpverdict "CP a silent read-only resume doesn't rewrite the report from the earlier turn's message"
+}
+
+# ---- Fix round 2: state files are untrusted (a writer can write the team dir), and ro fails closed ---------------
+cpwant cp-round2 && {
+  cpmk cp-state-payload
+  id=11111111-2222-4333-8444-555555555555
+  printf '%s\n' "name=x" "workdir=$SC/wt" "model=m" "ro=0" "pid=1" "pgid=1" 'started=a[$(touch '$SC'/pwned1)]' 'resumed=a[$(touch '$SC'/pwned2)]' > $D/copilot-$id
+  xrun $AT/drivers/copilot/status $D; cpnote "status"
+  P=()
+  [[ -e $SC/pwned1 || -e $SC/pwned2 ]] && P+="a command in a state file's started= or resumed= ran in status"
+  grep -q "^$id - " $SC/out || P+="no row for the session; stdout: $(head -c 200 $SC/out)"
+  [[ $(awk -v i=$id '$1==i {print $4}' $SC/out) == - ]] || P+="last activity is '$(awk -v i=$id '$1==i {print $4}' $SC/out)', want - (no usable number)"
+  printf '%s\n' "name=x" "workdir=$SC/wt" "model=m" "ro=0" 'pid=a[$(touch '$SC'/pwned3)]' 'pgid=a[$(touch '$SC'/pwned3)]' > $D/copilot-$id
+  xrun $AT/drivers/copilot/status $D; xrun $AT/drivers/copilot/stop $D $id
+  [[ -e $SC/pwned3 ]] && P+="a command in a state file's pid= or pgid= ran"
+  cpverdict "CP a state file's started/resumed/pid/pgid are never evaluated as arithmetic"
+
+  # a blank ro in the state file fails closed to the read-only flags on resume
+  cpmk cp-ro-closed
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1
+  sed -i.bak 's/^ro=.*/ro=/' $D/copilot-$(cp_id w1)
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (blank ro)"
+  await 10 cp_settled 2
+  cp_load
+  P=()
+  (( $#RUNS == 2 )) || P+="want 2 runs, got $#RUNS"
+  if (( $#RUNS == 2 )); then
+    cparse $RUNS[2]
+    hasv --deny-tool write || P+="the resume with a blank ro has no --deny-tool=write"
+    hasf --allow-all-tools && P+="the resume with a blank ro passes --allow-all-tools"
+  fi
+  cpverdict "CP a blank ro in the state file gets the read-only flags (fails closed)"
+  reap_fakes
+
+  # a failed read-only run doesn't replace the report or touch the marker
+  cpmk cp-report-failed
+  txrun FAKE_COPILOT_MODE=fail FAKE_COPILOT_SAY=late $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1 (fails)"
+  /bin/sleep 1
+  P=()
+  [[ ! -e $D/reports/t1.md && ! -e $D/reports/t1.done ]] || P+="a failed run wrote a report or marker: $(ls $D/reports | tr '\n' ' ')"
+  cpverdict "CP a read-only run that exits non-zero writes no report and no marker"
+}
+
+# ---- AC7: ADVISOR n/a (copilot). detect-harness.sh knows only claude (#63), so a scratch tree whose detection says copilot.
+cpwant cp-ac7 && {
+  cp -R $SKILLS $SB/src-cop; printf '#!/bin/sh\necho copilot\n' > $SB/src-cop/agent-teammates/scripts/detect-harness.sh
+  TREE=$SB/src-cop; cpmk cp-ac7; TREE=$SKILLS; mk_repo
+  xrun $SB/src-cop/commodore/scripts/team-preflight.sh $D; cpnote "team-preflight"
+  na=$(grep -c '^OK    ADVISOR n/a (copilot)$' $SC/out)
+  P=()
+  [[ $na == 1 ]] || P+="want one 'OK    ADVISOR n/a (copilot)' line, got $na; advisor lines: $(grep -i advisor $SC/out | head -3 | tr '\n' '|')"
+  grep -qE '^(FAIL|WARN.*ADVISOR)' $SC/out && P+="FAIL or advisor WARN lines: $(grep -E '^(FAIL|WARN.*ADVISOR)' $SC/out | head -3 | tr '\n' '|')"
+  [[ $RC == 0 ]] || P+="exit $RC, want 0"
+  cpverdict "CP AC7 team-preflight.sh on a copilot run prints ADVISOR n/a (copilot)"
+}
+
+# ======================================================================================================================
+# C1: nothing outside the drivers calls claude or copilot or reads their transcripts.
 # ======================================================================================================================
 shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineering/commodore/scripts )
 shared_code() {  # shared_code <egrep-pattern>: matching non-comment lines in shared scripts, as file:line:text
   local f
-  find $shared \( -path '*/drivers/claude' -o -path '*/drivers/codex' \) -prune -o -type f -print | LC_ALL=C sort | while read -r f; do
+  find $shared \( -path '*/drivers/claude' -o -path '*/drivers/codex' -o -path '*/drivers/copilot' \) -prune -o -type f -print | LC_ALL=C sort | while read -r f; do
     grep -nE -- "$1" $f | grep -vE '^[0-9]+:[[:space:]]*#' | sed -e 's#== \.claude ||#== DOTCLAUDE ||#' | grep -E -- "$1" | sed "s#^#${f#$ROOT/}:#"
   done
 }
@@ -586,6 +1105,12 @@ $(print -r -- $hits | head -6)"
 hits=$(shared_code '\.codex/')
 [[ -z $hits ]] && pass "C1 no shared script reads ~/.codex paths" || fail "C1 no shared script reads ~/.codex paths" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
 $(print -r -- $hits | head -6)"
+hits=$(shared_code '(^|[^-/a-z])copilot ')
+[[ -z $hits ]] && pass "C1 no shared script calls copilot" || fail "C1 no shared script calls copilot" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
+$(print -r -- $hits | head -6)"
+hits=$(shared_code '\.copilot|session-state|events\.jsonl|inuse\.')
+[[ -z $hits ]] && pass "C1 no shared script reads Copilot session state" || fail "C1 no shared script reads Copilot session state" "$(print -r -- $hits | wc -l | tr -d ' ') lines, first 6:
+$(print -r -- $hits | head -6)"
 
 # ======================================================================================================================
 # C3: team-init detects the harness.
@@ -599,11 +1124,9 @@ want c3 && {
   if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *claude* ]]; then pass "C3 no harness detected: exit 7, no run, names claude"
   else fail "C3 no harness detected: exit 7, no run, names claude" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
 
-  for h in copilot; do
-    sc c3-$h; xrun HARNESS=$h $CM/team-init.sh run1 $SC/repo
-    if [[ $RC == 7 && ! -e $SC/teams/run1 && $(cat $SC/out $SC/err) == *"$h: not supported yet"* ]]; then pass "C3 HARNESS=$h: not supported yet, exit 7"
-    else fail "C3 HARNESS=$h: not supported yet, exit 7" "exit $RC (want 7); run dir exists: $([[ -e $SC/teams/run1 ]] && echo yes || echo no) (want no); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"; fi
-  done
+  sc c3-copilot; xrun HARNESS=copilot $CM/team-init.sh run1 $SC/repo
+  n=$(grep -c '^HARNESS=copilot$' $SC/teams/run1/team.env 2>/dev/null)
+  [[ $RC == 0 && $n == 1 ]] && pass "C3 HARNESS=copilot preset: exit 0, HARNESS=copilot once in team.env" || fail "C3 HARNESS=copilot preset: exit 0, HARNESS=copilot once in team.env" "exit $RC, ${n:-0} HARNESS=copilot lines in team.env (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"
   sc c3-codex-inside-claude; xrun HARNESS=codex CLAUDECODE=1 $CM/team-init.sh run1 $SC/repo
   n=$(grep -c '^HARNESS=codex$' $SC/teams/run1/team.env 2>/dev/null)
   [[ $RC == 0 && $n == 1 ]] && pass "C3 HARNESS=codex wins over CLAUDECODE=1" || fail "C3 HARNESS=codex wins over CLAUDECODE=1" "exit $RC, ${n:-0} HARNESS=codex lines in team.env (want exit 0, 1 line); output: $(cat $SC/out $SC/err | head -c 300 | tr '\n' ' ')"

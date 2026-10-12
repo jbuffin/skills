@@ -1,0 +1,19 @@
+#!/bin/zsh
+# usage: status <team-dir>   (see ../claude/driver.env)
+[[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+for f in $D/copilot-*(N); do
+  [[ ${f:t} == *.* ]] && continue
+  id=${f:t}; id=${id#copilot-}
+  # A live process is working, whether or not its lock exists yet; an exited one is done, never stopped or failed.
+  if cp_alive $f; then state=working; else state=done; fi
+  [[ -n $(cp_get $f stopped) ]] && state=stopped
+  ev=$(cp_events $id); act=$(cp_num $f started)
+  [[ -f $ev ]] && act=$(stat -f %m $ev)
+  # A resume's fresh start counts as activity until the new turn writes an event.
+  r=$(cp_num $f resumed); [[ -n $r && ( -z $act || $r -gt $act ) ]] && act=$r
+  echo "$id - $state ${act:--}"
+done
+exit 0
