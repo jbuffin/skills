@@ -524,13 +524,9 @@ want d3 && if (( HAVE_REF )); then fail "D3 harness-claude.md holds every role's
   (( $#miss )) && fail "D3 harness-claude.md holds every role's default model" "missing from ${CMH#$ROOT/}: ${miss[*]}" || pass "D3 harness-claude.md holds every role's default model"
 fi
 
-# C6: the changeset, the Markdown lint, and the descriptions.
+# C6: the Markdown lint and the descriptions. There is no changeset test: the release consumes the pending changeset, so
+# a test that requires one fails on every release PR. Whether a PR carries a changeset is a review check.
 want c6 && {
-  cs=(); for f in $ROOT/.changeset/*.md(N); do [[ ${f:t} == README.md ]] && continue; git -C $ROOT cat-file -e ${REF}:.changeset/${f:t} 2>/dev/null || cs+=$f; done
-  if (( HAVE_REF )); then fail "C6 a new changeset bumps jasonbuffin-skills minor" "$NOREF"
-  elif (( $#cs )) && grep -qE '^"jasonbuffin-skills": minor$' $cs; then pass "C6 a new changeset bumps jasonbuffin-skills minor"
-  else fail "C6 a new changeset bumps jasonbuffin-skills minor" "new .changeset/*.md since $REF: ${#cs}; with '\"jasonbuffin-skills\": minor': $(( $#cs ? $(grep -lE '^"jasonbuffin-skills": minor$' $cs | wc -l) : 0 ))"; fi
-
   if command -v markdownlint-cli2 >/dev/null; then
     if [[ -s $ATH && -s $CMH ]]; then
       out=$(cd $ROOT && markdownlint-cli2 ${skill_md#$ROOT/} 2>&1) && pass "C6 markdownlint-cli2 on both skills' Markdown" || fail "C6 markdownlint-cli2 on both skills' Markdown" "$(print -r -- $out | tail -8)"
