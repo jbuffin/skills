@@ -1,0 +1,12 @@
+#!/bin/sh
+# Fake `date` for tests/run.sh: `date +%s` and `date -u +%s` print $FAKE_NOW, so epochs in registries and the watchdog's
+# arithmetic are exact. Everything else is the real date.
+case "$*" in
+  "+%s" | "-u +%s")
+    if [ -n "$FAKE_NOW" ]; then
+      echo "$FAKE_NOW"
+      exit 0
+    fi
+    ;;
+esac
+exec /bin/date "$@"

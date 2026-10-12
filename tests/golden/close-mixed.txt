@@ -1,0 +1,32 @@
+## argv
+claude cwd=@SB@/w/close-mixed/cwd [stop] [c51dbe46]
+## stdout
+ghost not registered; skipping
+stopped t1 (c51dbe46)
+## exit
+0
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/close-mixed/run
+  | REPO=@SB@/w/close-mixed/repo
+  | WORKTREE=@SB@/w/close-mixed/repo
+  | WORKTREES_DIR=@SB@/w/close-mixed/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/close-mixed/cfg
+  | MODE=single
+./teammates.tsv
+  | t1 c51dbe46 1789999000 - @SB@/w/close-mixed/wt
+  | t1 c51dbe46 closed - @SB@/w/close-mixed/wt

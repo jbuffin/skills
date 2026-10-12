@@ -1,6 +1,6 @@
 #!/bin/zsh
 # usage: watch-teammates.sh <team-dir>     (run under the Monitor tool; re-arm when it expires)
-# Polls every 60 s, from `claude agents --json` and the team's .done markers. Emits one line per event:
+# Polls every 60 s, from the driver's session status and the team's .done markers. Emits one line per event:
 #   DONE <name>              reports/<name>.done appeared or was touched
 #   BLOCKED <name> <id>      its turn ended (or it's waiting on a prompt) with no new .done; twice running
 #   STALL <name> <id> <min>  working, but its transcript hasn't changed for <min> (>= STALL_MIN) minutes
@@ -22,12 +22,12 @@ while true; do
     m=$(stat -f %m "$f"); [[ "${seen[$f]}" != "$m" ]] && { seen[$f]=$m; print -r -- "$f $m" >> $SEEN; echo "DONE ${${f:t}%.done}"; }
   done
   now=$(date -u +%s)
-  states=$(claude agents --json --all 2>/dev/null | python3 -c 'import json,sys
-try: rows=json.load(sys.stdin)
-except Exception: sys.exit(3)
-for r in rows: print(r.get("id",""), r.get("status") or "-", r.get("state") or "-")')
+  states=$(drv status $D)
+  rc=$?
+  # the driver can't report status at all: say so and stop, rather than skip every poll silently
+  (( rc == 9 )) && { echo "WATCH the $HARNESS driver has no status operation; the watchdog can't run"; exit 5; }
   # a failed or unreadable listing says nothing about the teammates; skip the session checks this poll
-  (( $? == 0 )) || { sleep 60; continue; }
+  (( rc == 0 )) || { sleep 60; continue; }
   # latest registry row per teammate; a "closed" row ends the watch for that name
   awk '{last[$1]=$0} END {for (n in last) print last[n]}' $REG | while read -r name id started viewer workdir; do
     [[ -z $name || $started == closed ]] && continue
@@ -39,8 +39,8 @@ for r in rows: print(r.get("id",""), r.get("status") or "-", r.get("state") or "
       blocked|done) blocked[$name]=$(( ${blocked[$name]:-0} + 1 )) ;;
       *) blocked[$name]=0 ;;
     esac
-    tr=$(transcript_of $id); quiet=0
-    [[ -n $tr ]] && quiet=$(( (now - $(stat -f %m $tr)) / 60 ))
+    mt=$(print -r -- "$states" | awk -v i=$id '$1==i {print $4}'); quiet=0
+    [[ -n $mt && $mt != - ]] && quiet=$(( (now - mt) / 60 ))
     ev=
     if [[ $st == stopped || $st == failed || $st == missing ]]; then ev="GONE $name $id $st"
     elif (( ${blocked[$name]:-0} >= 2 )); then ev="BLOCKED $name $id"

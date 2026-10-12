@@ -1,0 +1,32 @@
+## argv
+claude cwd=@SB@/w/launch-model-flag/cwd [agents] [--json]
+claude cwd=@SB@/w/launch-model-flag/wt [--bg] [-n] [t1] [--advisor] [opus] [--model] [haiku] [--permission-mode] [auto] [You are teammate t1. Read @SB@/w/launch-model-flag/run/prompts/t1.md and do exactly what it says.]
+## stdout
+launched t1 as background session c51dbe46 in @SB@/w/launch-model-flag/wt
+  watch: claude agents   ·   attach: claude attach c51dbe46   ·   output: claude logs c51dbe46
+## exit
+0
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/launch-model-flag/run
+  | REPO=@SB@/w/launch-model-flag/repo
+  | WORKTREE=@SB@/w/launch-model-flag/repo
+  | WORKTREES_DIR=@SB@/w/launch-model-flag/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/launch-model-flag/cfg
+  | MODE=single
+./teammates.tsv
+  | t1 c51dbe46 1790000000 - @SB@/w/launch-model-flag/wt

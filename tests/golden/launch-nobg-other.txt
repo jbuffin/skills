@@ -1,0 +1,31 @@
+## argv
+claude cwd=@SB@/w/launch-nobg-other/cwd [agents] [--json]
+claude cwd=@SB@/w/launch-nobg-other/wt [--bg] [-n] [t1] [--advisor] [opus] [--model] [sonnet] [--permission-mode] [auto] [You are teammate t1. Read @SB@/w/launch-nobg-other/run/prompts/t1.md and do exactly what it says.]
+## stdout
+Error: background sessions are disabled
+NO_BG: run t1 as an in-process subagent with model=sonnet, working in @SB@/w/launch-nobg-other/wt, task: read @SB@/w/launch-nobg-other/run/prompts/t1.md. It inherits the coordinator's configured advisor, if any.
+## exit
+2
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/launch-nobg-other/run
+  | REPO=@SB@/w/launch-nobg-other/repo
+  | WORKTREE=@SB@/w/launch-nobg-other/repo
+  | WORKTREES_DIR=@SB@/w/launch-nobg-other/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/launch-nobg-other/cfg
+  | MODE=single
+./teammates.tsv

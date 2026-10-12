@@ -5,6 +5,7 @@
 # Run it in the background or with a long timeout: it starts one real session per distinct teammate model (in
 # parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2,4p $0; exit 5; }
+unset HARNESS   # HARNESS comes from team.env alone, never from the caller's environment
 source $1/team.env
 fail=0
 ok()   { echo "OK    $*"; }
@@ -13,19 +14,23 @@ bad()  { echo "FAIL  $*"; fail=1; }
 REPO=${REPO:-$WORKTREE}
 MODEL=${MODEL:-sonnet}; ADVISOR=${ADVISOR:-opus}
 
-command -v claude >/dev/null && ok "claude found" || bad "claude not on PATH"
-claude agents --json >/dev/null 2>&1 && ok "claude background sessions available (claude agents)" \
-  || bad "claude agents --json failed; background sessions unavailable; teammates would fall back to in-process subagents"
-python3 - "$REPO" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" <<'PY' && ok "repository is trusted for background sessions" || warn "repository not marked trusted; run \`claude\` once in $REPO and accept the prompt, or launches fail with 'Workspace not trusted'"
-import json, os, sys
-repo = os.path.realpath(sys.argv[1]); cfgs = [os.path.join(sys.argv[2], ".claude.json"), os.path.expanduser("~/.claude.json")]
-for c in cfgs:
-    try: projects = json.load(open(c)).get("projects", {})
-    except Exception: continue
-    for path, v in projects.items():
-        if v.get("hasTrustDialogAccepted") and (repo == path or repo.startswith(path.rstrip("/") + "/")): sys.exit(0)
-sys.exit(1)
-PY
+# The harness this run was started from: HARNESS in team.env (a team.env from before drivers has none; every earlier
+# run was Claude) must match the environment, and have a driver.
+HARNESS=${HARNESS:-claude}
+harness_ok=1
+if [[ ! $HARNESS =~ '^[a-z0-9-]+$' ]]; then
+  bad "invalid HARNESS '$HARNESS' in team.env: use lowercase letters, digits and '-'"; harness_ok=
+else
+  DRIVER=${0:A:h:h:h}/agent-teammates/scripts/drivers/$HARNESS
+  detected=(${(f)"$(${0:A:h:h:h}/agent-teammates/scripts/detect-harness.sh)"})
+  if [[ ! -f $DRIVER/driver.env ]]; then
+    bad "HARNESS=$HARNESS in team.env has no driver (looked in $DRIVER)"; harness_ok=
+  elif [[ ${detected[(Ie)$HARNESS]} == 0 ]]; then
+    bad "HARNESS=$HARNESS in team.env, but this environment is ${detected:-no supported harness}; start the run from $HARNESS, or fix HARNESS in team.env"; harness_ok=
+  elif [[ -x $DRIVER/preflight ]]; then
+    $DRIVER/preflight $1 || fail=1
+  fi
+fi
 case ${VIEWER:-none} in
   cmux) [[ -x $CMUX && -n $CMUX_WORKSPACE ]] && $CMUX list-panes --workspace $CMUX_WORKSPACE >/dev/null 2>&1 \
           && ok "cmux viewer: workspace $CMUX_WORKSPACE found" || warn "VIEWER=cmux but workspace '$CMUX_WORKSPACE' not found (cmux identify); teammates still run, just without panes" ;;
@@ -43,6 +48,10 @@ fi
 # teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment).
 if [[ $ADVISOR == none ]]; then
   ok "advisor check skipped (ADVISOR=none)"
+elif [[ -z $harness_ok ]]; then
+  :   # the harness check failed above; don't start probes through a driver that isn't the run's
+elif [[ -z $ADVISOR_PROBE && ! -x $DRIVER/advisor-probe ]]; then
+  ok "ADVISOR n/a ($HARNESS)"
 else
   models=(); typeset -A model_roles
   add_model() { [[ -n ${model_roles[$1]+x} ]] || models+=$1; model_roles[$1]+="${model_roles[$1]:+, }$2"; }

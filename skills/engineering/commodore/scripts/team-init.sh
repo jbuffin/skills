@@ -4,6 +4,8 @@
 # prompts/ and reports/, and prints the run directory and the resolved script directories of this skill, agent-teammates and run-preflight.
 # Safe to re-run: never overwrites existing files.
 # Exits 6, before creating anything, if agent-teammates, run-preflight or target-evaluation isn't installed next to this skill.
+# Exits 7, before creating anything, if the harness can't be detected, is ambiguous, or has no driver yet. Detection reads
+# the environment (agent-teammates/scripts/detect-harness.sh); HARNESS preset in the environment names the harness instead.
 set -e
 NAME=$1; WT=${2:A}
 [[ -z $NAME || -z $WT ]] && { echo "usage: team-init.sh <run-name> <repo>"; exit 5; }
@@ -19,6 +21,27 @@ if (( $#missing )); then
   exit 6
 fi
 RUN=${AGENT_TEAMS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/teams}/$NAME
+# The harness this run is for. It is written to team.env, and every later script uses that harness's driver. A run that
+# already has a team.env keeps it, so a re-run needs no detection.
+DRIVERS=${SKILL:h}/agent-teammates/scripts/drivers
+SUPPORTED=(); for d in $DRIVERS/*(/N); do [[ -f $d/driver.env ]] && SUPPORTED+=${d:t}; done   # a driver counts only with its driver.env
+if [[ ! -f $RUN/team.env ]]; then
+  if [[ -n $HARNESS ]]; then
+    [[ $HARNESS =~ '^[a-z0-9-]+$' && -f $DRIVERS/$HARNESS/driver.env ]] || { print -r -- "$HARNESS: not supported yet (supported: ${(j:, :)SUPPORTED})"; exit 7; }
+  else
+    detected=(${(f)"$(${SKILL:h}/agent-teammates/scripts/detect-harness.sh)"})
+    case $#detected in
+      0) echo "no supported harness detected (supported: ${(j:, :)SUPPORTED}). Start the run from one of them, for example Claude Code."; exit 7 ;;
+      1) HARNESS=$detected[1]
+         [[ -f $DRIVERS/$HARNESS/driver.env ]] || { print -r -- "$HARNESS: has no driver yet (supported: ${(j:, :)SUPPORTED})"; exit 7; } ;;
+      *) echo "more than one harness detected (${(j:, :)detected}). Start the run from one of them."; exit 7 ;;
+    esac
+  fi
+elif [[ -n $HARNESS ]]; then
+  # The run keeps the harness in its team.env; say so when the caller asked for another.
+  kept=$(unset HARNESS; source $RUN/team.env 2>/dev/null; print -r -- ${HARNESS:-claude})
+  [[ $kept == $HARNESS ]] || print -r -- "note: $RUN already exists and keeps HARNESS=$kept from its team.env; ignoring HARNESS=$HARNESS" >&2
+fi
 mkdir -p $RUN/prompts $RUN/reports
 
 CMUX_BIN=${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}
@@ -37,6 +60,7 @@ if [[ ! -f $RUN/team.env ]]; then
   cat > $RUN/team.env <<EOF
 # Read by every script in $SKILL/scripts. Edit freely.
 RUN=$RUN
+HARNESS=$HARNESS
 # The repository (any checkout of it). Nobody works here: every unit gets its own worktree
 # (scripts/unit-worktree.sh), and teammates start in their unit's worktree.
 REPO=$WT

@@ -1,0 +1,31 @@
+## argv
+## stdout
+transcript: @SB@/w/tail-n/cfg/projects/p1/b7e2a911.jsonl  (last write 7 min ago)
+TOOL  Bash: git status
+SAID  All done here
+## exit
+0
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/tail-n/run
+  | REPO=@SB@/w/tail-n/repo
+  | WORKTREE=@SB@/w/tail-n/repo
+  | WORKTREES_DIR=@SB@/w/tail-n/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/tail-n/cfg
+  | MODE=single
+./teammates.tsv
+  | t1 b7e2a911 1789999000 - @SB@/w/tail-n/wt

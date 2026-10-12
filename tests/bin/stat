@@ -1,0 +1,8 @@
+#!/bin/sh
+# `stat` shim for tests/run.sh on Linux only (run.sh leaves it out of the fake bin on macOS). The scripts use BSD
+# `stat -f %m <file>`; this translates it to GNU `stat -c %Y <file>`.
+if [ "$1" = -f ] && [ "$2" = %m ]; then
+  shift 2
+  exec /usr/bin/stat -c %Y "$@"
+fi
+exec /usr/bin/stat "$@"

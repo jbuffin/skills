@@ -1,0 +1,28 @@
+## argv
+## stdout
+invalid name '.bad': use letters, digits, '.', '_' and '-', not starting with '.'
+## exit
+5
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/launch-invalid-name/run
+  | REPO=@SB@/w/launch-invalid-name/repo
+  | WORKTREE=@SB@/w/launch-invalid-name/repo
+  | WORKTREES_DIR=@SB@/w/launch-invalid-name/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/launch-invalid-name/cfg
+  | MODE=single
+./teammates.tsv

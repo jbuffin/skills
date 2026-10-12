@@ -1,0 +1,36 @@
+## argv
+claude cwd=@SB@/w/preflight-no-trust/cwd [agents] [--json]
+## stdout
+OK    claude found
+OK    claude background sessions available (claude agents)
+WARN  repository not marked trusted; run `claude` once in @SB@/w/preflight-no-trust/repo and accept the prompt, or launches fail with 'Workspace not trusted'
+OK    advisor on for sonnet (default)
+OK    git found
+OK    repository @SB@/w/preflight-no-trust/repo
+OK    git identity set
+## exit
+0
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./team.env
+  | RUN=@SB@/w/preflight-no-trust/run
+  | REPO=@SB@/w/preflight-no-trust/repo
+  | WORKTREE=@SB@/w/preflight-no-trust/repo
+  | WORKTREES_DIR=@SB@/w/preflight-no-trust/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/preflight-no-trust/cfg
+  | MODE=single
+  | ADVISOR_PROBE=@SB@/w/preflight-no-trust/probe-stub
+./worktrees.tsv
+  | u1 branch-u1 @SB@/w/preflight-no-trust/wt

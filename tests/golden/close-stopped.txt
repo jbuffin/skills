@@ -1,0 +1,31 @@
+## argv
+claude cwd=@SB@/w/close-stopped/cwd [stop] [c51dbe46]
+## stdout
+stopped t1 (c51dbe46)
+## exit
+0
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/close-stopped/run
+  | REPO=@SB@/w/close-stopped/repo
+  | WORKTREE=@SB@/w/close-stopped/repo
+  | WORKTREES_DIR=@SB@/w/close-stopped/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/close-stopped/cfg
+  | MODE=single
+./teammates.tsv
+  | t1 c51dbe46 1789999000 - @SB@/w/close-stopped/wt
+  | t1 c51dbe46 closed - @SB@/w/close-stopped/wt
