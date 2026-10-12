@@ -31,13 +31,13 @@ There is no advisor on Codex. The preflight prints `ADVISOR n/a (codex)`, and Co
 
 ## Who is live
 
-Run `<teammates>/drivers/codex/status <run>` when you resume and before any push, stack submit or close. It prints `<thread-id> - <working|done|stopped> <mtime>` per session; map a thread id to a name through column 2 of `<run>/teammates.tsv`. A teammate closed after its turn ended still reads `done`; the registry's `closed` row marks it closed. There's no dashboard. `<teammates>/teammate-tail.sh <run> <name>` shows what one teammate is doing. A teammate whose turn has ended reads `done` until you re-task it.
+Run `<teammates>/drivers/codex/status <run>` when you resume and before any push, stack submit or close. agent-teammates' reference says how to read its lines and map a thread id to a name. There's no dashboard. `<teammates>/teammate-tail.sh <run> <name>` shows what one teammate is doing.
 
 ## Fix rounds
 
 An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round, as on any harness.
 
-Run the watchdog as agent-teammates' reference says: `<teammates>/watch-teammates.sh --until-event <max-min> <run>`, as one bare call between jobs, with an explicit long timeout on the call and `<max-min>` under it. Run it again after every exit while anyone is live. `DONE` can arrive before `status` reads `done`: check `status` before you re-task.
+Run the watchdog in its bounded mode, as agent-teammates' "Run the watchdog" says. `DONE` can arrive before `status` reads `done`, so check `status` before you re-task.
 
 ## Where commodore says X, on Codex do Y
 
@@ -48,7 +48,7 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 | Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer |
 | Send searches to a subagent | There are no subagents. Search yourself, narrowly |
 | Run `/code-review` or `/security-review` | Those are Claude Code skills. Do the equivalent review the role's section in `references/roles.md` describes, by hand |
-| An allow rule is a `Bash(…)` line in settings | Teammates need only the two `git` rules in agent-teammates' reference. They run outside the sandbox on every Codex session on the machine, so writers effectively run with the engineer's permissions (follow-up [#66](https://github.com/jbuffin/skills/issues/66)). Never turn your own calls (`gh`, `push-branch.sh`, `retask.sh`, `launch-teammate.sh`, `close-teammate.sh`, file writes) into user-level `prefix_rule` lines: every writer would inherit them outside its sandbox. The engineer approves them for your session through Codex's own approval, which is unverified from inside a real Codex session. No `<teammates>` script is safe as a user-level prefix rule: each takes a `<team-dir>` argument and sources `<team-dir>/team.env`, and `watch-teammates.sh` also writes into it, so a writer could run its own code through such a rule. |
+| An allow rule is a `Bash(…)` line in settings | Teammates need only the two `git` rules in agent-teammates' "The `~/.codex/rules` lines". Your own calls (`gh`, the `<teammates>` and `<team>` scripts, file writes) stay out of `~/.codex/rules`, for the reason that section gives; the engineer approves them for your session through Codex's own approval |
 | A read-only role runs `gh` (`gh pr diff`, `gh pr view`, `gh issue view`) | Read-only Codex roles have no network. You fetch that data into files in the run directory and name them in the brief (see "Read-only roles have no network") |
 | An exact allow rule for each `evidence.sh` proof, or for each `gh api graphql` reply | Write neither. A prefix rule can't be exact, and `evidence.sh … -- <command>` would run anything. Writers run `evidence.sh` inside their sandbox. You post every GitHub reply, review and push yourself |
 | The review mission's PR-controlled-config guard (`CLAUDE.md`, `.claude/`, `.mcp.json`) | Also cover, at least, the project files codex loads: `AGENTS.md` and `AGENTS.override.md` at any depth, and a project `.codex/` directory, plus the tracked hook directories (`.husky/`, `.githooks/`, whatever `core.hooksPath` names) and `.gitattributes`. Which files codex 0.162.0 loads isn't verified, so treat this list as a minimum |
@@ -58,19 +58,13 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 
 ## Read-only roles have no network
 
-Read-only Codex roles (reviewer, security reviewer, brief checker, triager) launch with their sandbox read-only and the user's rules ignored, so their shell writes nothing and can't run `gh`. Always pass `--read-only` with these roles: on Codex the sandbox follows the flag, not the role. Fetch any GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments) yourself before the launch, save it to files in the run directory, and name the files in the brief. Before you launch or re-task a read-only role, record its worktree's `git -C <worktree> rev-parse HEAD` and `git -C <worktree> status --short`, and run it only while no writer in that worktree is `working`. After the turn, both must match. A change means the isolation failed: stop and ask the engineer.
-
-A read-only role's teammate contract differs too: see "The teammate contract" in agent-teammates' `SKILL.md`. Its report is its final message, so give it no `.proof`.
+Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Codex the sandbox follows the flag, not the role. Their shell can't run `gh`, so fetch the GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments) before the launch, save it to files in the run directory, and name the files in the brief. agent-teammates' "Sandbox per role" gives the HEAD and `git status` check to run around each read-only turn, and "How a read-only teammate reports" covers its report. Give it no `.proof`.
 
 ## Caveats to settle before a Codex run
 
-agent-teammates' reference lists the known limits of Codex teammates. Put these to the engineer in the decision batch, and record each answer in `state.md`:
+Put every item in agent-teammates' "Known limits" to the engineer in the decision batch, and record each answer in `state.md`. Only start a Codex run whose writers you'd trust with the engineer's own shell. List the MCP servers in `~/.codex/config.toml` by name, and have the engineer disable for the run any that can write or post, or accept the risk.
 
-- **Writers run with the engineer's permissions**, through the two `git` rules (follow-up [#66](https://github.com/jbuffin/skills/issues/66)). Only start a Codex run whose writers you'd trust with the engineer's own shell.
-- **MCP servers aren't sandboxed.** The servers in `~/.codex/config.toml` start for every teammate, read-only ones included, and their tools are offered to it. List them by name, and have the engineer disable for the run any that can write or post, or accept the risk.
-- **A writer can replace a read-only report.** Before you act on any read-only report while a writer is live or has run since, check it against the teammate's events log, as agent-teammates' reference describes.
-
-The review mission adds to all three, because the PR is someone else's and its text and code are untrusted:
+The review mission raises the stakes, because the PR is someone else's and its text and code are untrusted:
 
 - The reviewers read text an attacker wrote, with MCP tools in reach. Settle the MCP question before launching them.
 - The target steward is a writer that runs the PR's code, with network, the `git` rules and write access to `<run>/reports`. On Codex, launch it only when the engineer trusts the PR's author. Otherwise skip it and list the light check as not done.

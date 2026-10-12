@@ -1,6 +1,6 @@
 ---
 name: commodore
-description: Entry point for team work, harness-aware (Claude Code and Codex are supported). Works out the mission from what you point it at, confirms it, and runs that mission's task force as chief of staff. The build mission takes a spec, issue, design doc or request, plans the work into units, briefs fresh teammates, each on the model its role calls for, in git worktrees, reviews and evaluates each unit on the real target, and delivers one PR, a gh stack, or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve the findings. The PR-feedback mission triages the review comments and failing checks on your own PR, fixes what you approve, and posts the replies you approve.
+description: Runs a team of agent teammates as their chief of staff. Works out the mission (build, review or pr-feedback) from what you point it at, confirms it, then plans, briefs, reviews and delivers. Use when you want a spec, issue or request built in git worktrees and delivered as a PR or gh stack, someone else's PR reviewed, or the review comments and failing checks on your own PR fixed.
 disable-model-invocation: true
 ---
 

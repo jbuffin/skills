@@ -1,6 +1,6 @@
 ---
 name: agent-teammates
-description: Run teammates as background agent sessions on a harness (Claude Code and Codex are supported). Launch, re-task, watch with a watchdog, verify their proof, and close them. Use when work is handed to parallel agent sessions that run unattended, including from an orchestrating skill.
+description: Run teammates as background agent sessions in Claude Code or Codex. Launch, re-task, watch with a watchdog, verify their proof, and close them. Use when work is handed to parallel agent sessions that run unattended, including from an orchestrating skill.
 ---
 
 # Agent teammates
@@ -68,7 +68,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 
 Names use letters, digits, `.`, `_` and `-`; the scripts refuse anything else.
 
-Give each teammate only what its job needs. Launch a teammate that only reads the source (a reviewer, a brief checker, a probe that only reads) with `--read-only`. On Claude that denies the file-editing tools inside its working directory and still lets it write its report in the team directory. Bash isn't covered, so the brief still says read-only. The flag catches slips. It isn't a sandbox. On Codex it is one: the teammate runs in a read-only sandbox with the user's rules ignored, so its shell writes no files and has no network, and its final message becomes its report. The sandbox doesn't cover the MCP servers in the user's Codex config, which still start; see the reference's "Known limits". Never give it a `.proof`, and record its worktree's HEAD and `git status` before the turn and check them after it anyway.
+Give each teammate only what its job needs. Launch a teammate that only reads the source (a reviewer, a brief checker, a probe that only reads) with `--read-only`. On Claude that denies the file-editing tools inside its working directory and still lets it write its report in the team directory. Bash isn't covered, so the brief still says read-only. The flag catches slips. It isn't a sandbox. On Codex the flag selects a read-only sandbox, which changes how the teammate reports and what you check after its turn; the harness reference's "Sandbox per role" covers both.
 
 Write a teammate's `prompts/<name>.proof` before launching or re-tasking it, one `<label> <command>` per line. A proof file that changes after the tasking fails verification, so a teammate can't rewrite its own proof. An exact allow rule per proof (`Bash(<teammates>/evidence.sh <team-dir> <name> <label>)`) approves it without approving anything else. A prefix rule on `evidence.sh` would approve any command, because the `--` form runs whatever follows.
 

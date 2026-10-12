@@ -830,9 +830,11 @@ want c6 && {
   for s in agent-teammates commodore; do
     d=$(sed -n 's/^description: //p' $ROOT/skills/engineering/$s/SKILL.md | head -1)
     (( ${#d} > 0 && ${#d} <= 1024 )) && pass "C6 $s description is 1-1024 characters" || fail "C6 $s description is 1-1024 characters" "${#d} characters"
-    [[ $d == *[Hh]arness* && $d == *"Claude Code"* ]] && pass "C6 $s description says harness-aware, Claude Code supported" || fail "C6 $s description says harness-aware, Claude Code supported" "description lacks 'harness' or 'Claude Code': ${d:0:160}"
   done
+  d=$(sed -n 's/^description: //p' $ROOT/skills/engineering/commodore/SKILL.md | head -1)
+  [[ $d != *[Hh]arness* && $d == *"Use when"* ]] && pass "C6 commodore description says when to use it and leaves the harness to the body" || fail "C6 commodore description says when to use it and leaves the harness to the body" "${d:0:160}"
   d=$(sed -n 's/^description: //p' $ATD/SKILL.md | head -1)
+  [[ $d == *"Claude Code"* && $d == *Codex* ]] && pass "C6 agent-teammates description names Claude Code and Codex" || fail "C6 agent-teammates description names Claude Code and Codex" "${d:0:160}"
   [[ $d == *unattended* ]] && pass "C6 agent-teammates description keeps its unattended trigger" || fail "C6 agent-teammates description keeps its unattended trigger" "no 'unattended' in the description"
 }
 
