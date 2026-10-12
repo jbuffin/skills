@@ -1,0 +1,98 @@
+#!/bin/sh
+# Fake `copilot` for tests/run.sh, modelled on Copilot CLI 1.0.95. Logs every call (cwd and argv) to $FAKE_LOG, and
+# keeps each call's argv NUL-separated in $FAKE_DIR/copilot.call.<n> (first record: the cwd), so the tests can read
+# arguments that contain spaces or newlines. A `-p` run creates $HOME/.copilot/session-state/<session-id>/ with an
+# events.jsonl (every line has data, id, parentId, timestamp and type) and, while it runs, inuse.<pid>.lock and
+# inuse.<pid>.hold. Nothing traps TERM, so a killed run leaves both files behind, as the real CLI does. Any wait calls
+# /bin/sleep (tests/bin/sleep returns at once). Every pid goes to $FAKE_DIR/copilot.pids (the run) or
+# $FAKE_DIR/copilot.children (its child), so the tests can kill what a scenario leaves alive. Behaviour comes from:
+#   FAKE_COPILOT_MODE      exit (default): write the whole turn, print the final message under -s, remove the lock
+#                          stay: write the turn up to its tool call, then idle until killed or $FAKE_COPILOT_STAY_MAX
+#                                seconds (default 60) have passed
+#                          silent: the context-overflow symptom: exit 0, print nothing, write no final message
+#   FAKE_COPILOT_SAY       the final message (default OK)
+#   FAKE_COPILOT_TS        epoch of every event and of events.jsonl's mtime (default $FAKE_NOW, else the real clock)
+#   FAKE_COPILOT_DONE      a path: the run creates that file (a teammate's .done marker) before it ends
+#   FAKE_COPILOT_CHILD     1: the run starts a child process that outlives it unless the process group is killed
+{
+  printf 'copilot cwd=%s' "$(pwd -P)"
+  for a in "$@"; do printf ' [%s]' "$a"; done
+  printf '\n'
+} >> "${FAKE_LOG:?}"
+n=1
+while ! mkdir "${FAKE_DIR:?}/copilot.claim.$n" 2>/dev/null; do n=$((n + 1)); done
+{
+  printf '%s\000' "$(pwd -P)"
+  for a in "$@"; do printf '%s\000' "$a"; done
+} > "$FAKE_DIR/copilot.call.$n"
+
+sid=; has_p=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --session-id=*) sid=${1#--session-id=} ;;
+    --session-id) sid=$2; shift ;;
+    -p) has_p=1; shift ;;
+  esac
+  shift
+done
+if [ -z "$has_p" ]; then
+  echo "GitHub Copilot CLI 1.0.95"
+  exit 0
+fi
+[ -n "$sid" ] || sid=auto-$$
+echo "$$" >> "$FAKE_DIR/copilot.pids"
+
+mode=${FAKE_COPILOT_MODE:-exit}
+say=${FAKE_COPILOT_SAY:-OK}
+epoch=${FAKE_COPILOT_TS:-${FAKE_NOW:-$(/bin/date -u +%s)}}
+iso=$(/bin/date -u -r "$epoch" +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || /bin/date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%S.000Z)
+tstamp=$(/bin/date -u -r "$epoch" +%Y%m%d%H%M.%S 2>/dev/null || /bin/date -u -d "@$epoch" +%Y%m%d%H%M.%S)
+
+sd=$HOME/.copilot/session-state/$sid
+ev=$sd/events.jsonl
+if [ -d "$sd" ]; then first=session.resume; else first=session.start; fi
+mkdir -p "$sd"
+: > "$sd/inuse.$$.lock"
+: > "$sd/inuse.$$.hold"
+
+seq=0
+event() {  # event <type> <data-json>
+  seq=$((seq + 1))
+  printf '{"type":"%s","data":%s,"id":"%s-%s","parentId":null,"timestamp":"%s"}\n' "$1" "$2" "$$" "$seq" "$iso" >> "$ev"
+}
+settime() { TZ=UTC touch -t "$tstamp" "$ev"; }
+
+event "$first" "{\"sessionId\":\"$sid\"}"
+event user.message '{"content":"(prompt)"}'
+event assistant.turn_start '{"turnId":"0"}'
+event assistant.message '{"content":"","toolRequests":[{"toolCallId":"toolu_01","name":"bash"}],"turnId":"0"}'
+event tool.execution_start '{"toolCallId":"toolu_01","toolName":"bash","arguments":{"command":"git status","description":"Run git status"},"turnId":"0"}'
+event tool.execution_complete '{"toolCallId":"toolu_01","success":true,"result":{"content":"On branch main"},"turnId":"0"}'
+settime
+
+if [ -n "$FAKE_COPILOT_CHILD" ]; then
+  /bin/sleep 120 > /dev/null 2>&1 &
+  echo "$!" >> "$FAKE_DIR/copilot.children"
+fi
+
+if [ "$mode" = stay ]; then
+  i=0
+  while [ "$i" -lt $((${FAKE_COPILOT_STAY_MAX:-60} * 10)) ]; do
+    /bin/sleep 0.1
+    i=$((i + 1))
+  done
+fi
+
+if [ "$mode" != silent ]; then
+  event assistant.message "{\"content\":\"$say\",\"toolRequests\":[],\"turnId\":\"1\"}"
+fi
+event assistant.turn_end '{"turnId":"1"}'
+event session.shutdown '{"shutdownType":"routine"}'
+settime
+if [ -n "$FAKE_COPILOT_DONE" ]; then
+  : > "$FAKE_COPILOT_DONE"
+  TZ=UTC touch -t "$tstamp" "$FAKE_COPILOT_DONE"
+fi
+rm -f "$sd/inuse.$$.lock" "$sd/inuse.$$.hold"
+if [ "$mode" != silent ]; then echo "$say"; fi
+exit 0
