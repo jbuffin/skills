@@ -56,6 +56,64 @@ c=d.get("caller") or d.get("focused") or {}
 print(c.get("workspace_ref",""), c.get("surface_ref",""))' 2>/dev/null) || true
 fi
 
+# The harness-specific lines of team.env: only that harness's driver reads the ones left out of the other.
+case $HARNESS in
+  codex) HARNESS_SETTINGS=$(cat <<'EOF'
+# Teammates are Codex sessions (agent-teammates), one turn at a time. Codex teammates have no viewer panes.
+VIEWER=none
+MODEL=gpt-6.1-sol
+# Fill from the profile:
+# MODEL is the fallback for a teammate launched without --role. REQUIRE_ROLE=1 makes every launch pass --role or --model.
+# MODEL_<ROLE> is the model for --role <role>; an empty one refuses that launch.
+# EFFORT_<ROLE> is the reasoning effort for --role <role>.
+REQUIRE_ROLE=1
+MODEL_BRIEF_CHECKER=gpt-6-astra
+EFFORT_BRIEF_CHECKER=high
+MODEL_TEST_WRITER=gpt-6.1-sol
+EFFORT_TEST_WRITER=medium
+MODEL_IMPLEMENTER=gpt-6.1-sol
+EFFORT_IMPLEMENTER=medium
+MODEL_REVIEWER=gpt-6-astra
+EFFORT_REVIEWER=high
+MODEL_SECURITY_REVIEWER=gpt-6-astra
+EFFORT_SECURITY_REVIEWER=high
+MODEL_TRIAGER=gpt-6-astra
+EFFORT_TRIAGER=high
+MODEL_TARGET_STEWARD=gpt-6.1-sol
+EFFORT_TARGET_STEWARD=medium
+MODEL_SCRIBE=gpt-6-luna
+EFFORT_SCRIBE=medium
+EOF
+) ;;
+  *) HARNESS_SETTINGS=$(cat <<EOF
+# Teammates are Claude Code background sessions (agent-teammates). VIEWER: none | cmux | tmux; optional panes that
+# attach to each teammate; closing one never stops it.
+VIEWER=none
+CMUX=$CMUX_BIN
+# For VIEWER=cmux: the pane to split from, from \`cmux identify\`. Fix by hand if wrong.
+CMUX_WORKSPACE=$WS
+CMUX_SURFACE=$SF
+MODEL=sonnet
+# Built-in advisor for every teammate (none turns it off). It must rank at or above every teammate model below.
+ADVISOR=opus
+PERMISSION_MODE=auto
+CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+# Fill from the profile:
+# MODEL is the fallback for a teammate launched without --role. REQUIRE_ROLE=1 makes every launch pass --role or --model.
+# MODEL_<ROLE> is the model for --role <role>; an empty one refuses that launch.
+REQUIRE_ROLE=1
+MODEL_BRIEF_CHECKER=opus
+MODEL_TEST_WRITER=sonnet
+MODEL_IMPLEMENTER=sonnet
+MODEL_REVIEWER=opus
+MODEL_SECURITY_REVIEWER=opus
+MODEL_TRIAGER=opus
+MODEL_TARGET_STEWARD=sonnet
+MODEL_SCRIBE=sonnet
+EOF
+) ;;
+esac
+
 if [[ ! -f $RUN/team.env ]]; then
   cat > $RUN/team.env <<EOF
 # Read by every script in $SKILL/scripts. Edit freely.
@@ -81,30 +139,7 @@ WORKTREE_SETUP_SKIP=".DS_Store .vscode .idea coverage"
 # Checked by run-preflight's preflight.sh. agent-teammates' teammate-tail.sh needs jq, and teammates use it to
 # parse JSON from server and CLI calls.
 REQUIRED_TOOLS="git gh python3 jq security curl"
-# Teammates are Claude Code background sessions (agent-teammates). VIEWER: none | cmux | tmux; optional panes that
-# attach to each teammate; closing one never stops it.
-VIEWER=none
-CMUX=$CMUX_BIN
-# For VIEWER=cmux: the pane to split from, from \`cmux identify\`. Fix by hand if wrong.
-CMUX_WORKSPACE=$WS
-CMUX_SURFACE=$SF
-MODEL=sonnet
-# Built-in advisor for every teammate (none turns it off). It must rank at or above every teammate model below.
-ADVISOR=opus
-PERMISSION_MODE=auto
-CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
-# Fill from the profile:
-# MODEL is the fallback for a teammate launched without --role. REQUIRE_ROLE=1 makes every launch pass --role or --model.
-# MODEL_<ROLE> is the model for --role <role>; an empty one refuses that launch.
-REQUIRE_ROLE=1
-MODEL_BRIEF_CHECKER=opus
-MODEL_TEST_WRITER=sonnet
-MODEL_IMPLEMENTER=sonnet
-MODEL_REVIEWER=opus
-MODEL_SECURITY_REVIEWER=opus
-MODEL_TRIAGER=opus
-MODEL_TARGET_STEWARD=sonnet
-MODEL_SCRIBE=sonnet
+$HARNESS_SETTINGS
 MODE=            # single | stack | independent | pr
 BASE_BRANCH=
 BRANCH_PREFIX=

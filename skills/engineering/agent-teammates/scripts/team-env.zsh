@@ -3,6 +3,7 @@
 #   MODEL            teammate model (default sonnet), for launches without --model or --role
 #   ADVISOR          built-in advisor model for every teammate (default opus; none turns it off)
 #   MODEL_<ROLE>     model for launches with --role <role> (the role uppercased, "-" and "." as "_"); no default: unset or empty refuses the launch
+#   EFFORT_<ROLE>   reasoning effort for launches with --role <role>, on harnesses that take one (Codex); no default
 #   REQUIRE_ROLE     1: a launch needs --role or --model; no default
 #   PERMISSION_MODE  teammate permission mode (default auto); same class as the coordinator, or messages are held
 #   VIEWER           none | cmux | tmux; optional panes that attach to a teammate; closing one never stops it
