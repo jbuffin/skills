@@ -1,0 +1,29 @@
+## argv
+## stdout
+t1 is closed; launch a new teammate instead
+## exit
+5
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/retask-closed/run
+  | REPO=@SB@/w/retask-closed/repo
+  | WORKTREE=@SB@/w/retask-closed/repo
+  | WORKTREES_DIR=@SB@/w/retask-closed/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/retask-closed/cfg
+  | MODE=single
+./teammates.tsv
+  | t1 c51dbe46 closed - @SB@/w/retask-closed/wt

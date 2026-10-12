@@ -7,7 +7,7 @@ Copy this to `<run>/profile.md`. Fill in every field, or write `n/a`. The profil
 - What's being done (feature, fix, refactor, migration, investigation, docs), the issue or epic link, and the work item if the project uses a tracker.
 - Mode: single unit (one PR), stack (multi-phase, or related issues in order), independent units (one PR each), or existing PR (its number and what to do on it). Why this mode. The base branch.
 - The skill each role runs, from the user's own skills. For example implementer `/tdd`, reviewer `/code-review`, security reviewer `/security-review` (the default), PR body `/pr`. Leave a role blank to have it follow its section in roles.md.
-- The model for each role the run uses (`MODEL_<ROLE>` in `team.env`), written even when it's the default. Role names, defaults and the capability rule are in roles.md.
+- The model for each role the run uses (`MODEL_<ROLE>` in `team.env`), written even when it's the default. Role names and the capability rule are in roles.md; the defaults are in the harness reference (`references/harness-<HARNESS>.md`).
 - Security review settings:
   - Security-sensitive paths: focus hints for the security reviewer, such as auth, payments, parsing of untrusted input, CI and deploy config.
   - The blocking severity threshold. Default: HIGH and MEDIUM block, LOW doesn't.

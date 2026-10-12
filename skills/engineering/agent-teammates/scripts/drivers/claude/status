@@ -1,0 +1,17 @@
+#!/bin/zsh
+# usage: status <team-dir>   (see driver.env)
+[[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+rows=$(claude agents --json --all 2>/dev/null | python3 -c 'import json,sys
+try: rows=json.load(sys.stdin)
+except Exception: sys.exit(3)
+for r in rows: print(r.get("id",""), r.get("status") or "-", r.get("state") or "-")') || exit 3
+reg_ids=" $(awk '{print $2}' $REG | tr '\n' ' ') "
+print -r -- "$rows" | while read -r id st state; do
+  [[ -z $id ]] && continue
+  tr=; [[ $reg_ids == *" $id "* ]] && tr=$(transcript_of $id)
+  echo "$id $st $state ${${tr:+$(stat -f %m $tr)}:--}"
+done
+exit 0

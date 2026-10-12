@@ -1,0 +1,14 @@
+#!/bin/sh
+# Fake `sleep` for tests/run.sh. Returns at once, so the advisor probe and the watchdog never wait. With
+# FAKE_SLEEP_POLLS=<n> (the watchdog): the n-th call creates $FAKE_DIR/sleep.reached and blocks until
+# $FAKE_DIR/sleep.release appears or its parent exits, so the test can stop the watcher after exactly n polls.
+[ -n "$FAKE_SLEEP_POLLS" ] || exit 0
+n=$(cat "$FAKE_DIR/sleep.count" 2>/dev/null || echo 0)
+n=$((n + 1))
+echo "$n" > "$FAKE_DIR/sleep.count"
+[ "$n" -ge "$FAKE_SLEEP_POLLS" ] || exit 0
+: > "$FAKE_DIR/sleep.reached"
+while [ ! -e "$FAKE_DIR/sleep.release" ] && kill -0 "$PPID" 2>/dev/null; do
+  /bin/sleep 0.1
+done
+exit 0

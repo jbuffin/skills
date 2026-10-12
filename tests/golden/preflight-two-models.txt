@@ -1,0 +1,38 @@
+## argv
+claude cwd=@SB@/w/preflight-two-models/cwd [agents] [--json]
+## stdout
+OK    claude found
+OK    claude background sessions available (claude agents)
+OK    repository is trusted for background sessions
+OK    advisor on for sonnet (default)
+OK    advisor on for opus (reviewer)
+OK    git found
+OK    repository @SB@/w/preflight-two-models/repo
+OK    git identity set
+## exit
+0
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./team.env
+  | RUN=@SB@/w/preflight-two-models/run
+  | REPO=@SB@/w/preflight-two-models/repo
+  | WORKTREE=@SB@/w/preflight-two-models/repo
+  | WORKTREES_DIR=@SB@/w/preflight-two-models/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/preflight-two-models/cfg
+  | MODE=single
+  | ADVISOR_PROBE=@SB@/w/preflight-two-models/probe-stub
+  | MODEL_REVIEWER=opus
+./worktrees.tsv
+  | u1 branch-u1 @SB@/w/preflight-two-models/wt

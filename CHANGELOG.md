@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 1.2.0
+
+### Minor Changes
+
+- [#44](https://github.com/jbuffin/skills/pull/44) [`83df522`](https://github.com/jbuffin/skills/commit/83df5225e597d8ddff3bdaf8e926038f5fe45c3d) Thanks [@jbuffin](https://github.com/jbuffin)! - `agent-teammates` and `commodore` are now harness-aware, with Claude Code the supported harness today (Codex and Copilot CLI are planned, [#9](https://github.com/jbuffin/skills/issues/9)). `team-init.sh` detects the harness from where the run starts and writes `HARNESS` to `team.env`, and the Claude calls live in a driver under `agent-teammates/scripts/drivers/claude/`. The skill text is harness-neutral and reads `references/harness-<HARNESS>.md` for anything Claude-specific: sending work with SendMessage, running the watchdog under Monitor, the default model per role, and the advisor. The teammate contract has `LIVE_MESSAGING=1` and `LIVE_MESSAGING=0` variants. Claude runs behave as before.
+
 ## 1.1.0
 
 ### Minor Changes

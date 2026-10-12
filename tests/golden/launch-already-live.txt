@@ -1,0 +1,29 @@
+## argv
+claude cwd=@SB@/w/launch-already-live/cwd [agents] [--json]
+## stdout
+a live session is already named t1; close it first or pick another name
+## exit
+5
+## files
+./prompts/
+./prompts/t1.md
+  | do the thing
+./reports/
+./team.env
+  | RUN=@SB@/w/launch-already-live/run
+  | REPO=@SB@/w/launch-already-live/repo
+  | WORKTREE=@SB@/w/launch-already-live/repo
+  | WORKTREES_DIR=@SB@/w/launch-already-live/worktrees
+  | SKILL=@SB@/src/skills/engineering/commodore
+  | SKILLS_DIR=@SB@/src/skills/engineering
+  | TEAM_SCRIPTS=@SB@/src/skills/engineering/commodore/scripts
+  | TEAMMATES_SCRIPTS=@SB@/src/skills/engineering/agent-teammates/scripts
+  | PREFLIGHT_SCRIPTS=@SB@/src/skills/engineering/run-preflight/scripts
+  | REQUIRED_TOOLS="git"
+  | VIEWER=none
+  | MODEL=sonnet
+  | ADVISOR=opus
+  | PERMISSION_MODE=auto
+  | CLAUDE_CONFIG_DIR=@SB@/w/launch-already-live/cfg
+  | MODE=single
+./teammates.tsv

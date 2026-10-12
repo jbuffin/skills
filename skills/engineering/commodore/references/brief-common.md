@@ -36,6 +36,8 @@ Secrets reach a command only through run-preflight's helper, as a bare call: `<p
 
 ## Asking the advisor
 
+<Drop this section when the harness has no advisor, which the preflight shows as `ADVISOR n/a`.>
+
 Your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. The teammate contract below says what to ask it and how to log each call; this section says when. If you have no advisor tool, skip it. You decide whether to call it; these are the moments it helps most:
 
 - After you've looked around (read the files and the source of truth) but before substantive work: before the first edit, or before you settle on an interpretation.
@@ -49,6 +51,6 @@ If the advice conflicts with evidence you already have, don't switch quietly. Ca
 
 ## Working as a teammate
 
-<Paste the "teammate contract" section of the agent-teammates skill here word for word, with <team-dir> set to this run directory and <teammates> to agent-teammates' scripts directory (TEAMMATES_SCRIPTS in team.env).>
+<Paste the "teammate contract" section of the agent-teammates skill here word for word, with <team-dir> set to this run directory and <teammates> to agent-teammates' scripts directory (TEAMMATES_SCRIPTS in team.env). Keep only the variant lines for the run's harness: the `LIVE_MESSAGING=1` lines when `LIVE_MESSAGING=1` in the harness's `driver.env`, the `LIVE_MESSAGING=0` lines when it is 0. When the preflight printed `ADVISOR n/a`, drop only the contract's "If your harness gives you an advisor…" line; always keep the `## Advisor consults` line, where teammates write `none`.>
 
 Commit before you write your marker. The proof check fails on uncommitted changes, and they block the stack's cascade rebase.
