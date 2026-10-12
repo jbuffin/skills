@@ -41,7 +41,7 @@ Every test fails, and for the right reason. Prefer deterministic seams to sample
 
 Make the tests pass with code that reads like the code around it and follows the project's rules. Run the full suites, lint, and any UI or integration tests the brief names, and commit on the unit's branch. Then, after the last commit, run each declared proof (`<teammates>/evidence.sh <run> <name> <label>`) and put `commit: <sha>` in the report. Report where you departed from the source of truth, and why.
 
-Then stay alive. On the coordinator's next job (a fix round), apply the findings, re-run everything, commit, run the proofs again, overwrite the report and touch `.done`. When you disagree with a finding, say why in the report.
+Then wait for the coordinator's next job the way the teammate contract says. On a fix round, apply the findings, re-run everything, commit, run the proofs again, overwrite the report and touch `.done`. When you disagree with a finding, say why in the report.
 
 ## Reviewer
 
@@ -74,7 +74,7 @@ Report one entry per item, in the item list's order: the item ID, its source (pe
 
 You're the only teammate that touches the evaluation target. Run the `target-evaluation` skill, which supplies the option choice, the light check, the full evaluation and its cadence, the house rules and the report format.
 
-You live for the whole run and take requests one at a time from the coordinator. Each request says which kind it is, a light check or a full evaluation, and names the unit's worktree to build from, the scenarios, and the reference to compare against. Answer each one by overwriting `reports/target-steward.md` and touching `target-steward.done`. Screenshots and logs go under `reports/target-steward-evidence/<n>/`, with `<n>` counting the requests.
+You serve the whole run, and take requests one at a time from the coordinator, each as a new job. Each request says which kind it is, a light check or a full evaluation, and names the unit's worktree to build from, the scenarios, and the reference to compare against. Answer each one by overwriting `reports/target-steward.md` and touching `target-steward.done`. Screenshots and logs go under `reports/target-steward-evidence/<n>/`, with `<n>` counting the requests.
 
 ## Scribe
 

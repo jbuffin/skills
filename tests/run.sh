@@ -504,9 +504,10 @@ want commodore-retask && {
   verdict "COMMODORE-RETASK Phase 2 step 5 writes the findings to a file and defers to agent-teammates' re-tasking section"
   vl=$(grep 'verdict: unverified' $CMD/SKILL.md)
   print -r -- $vl | grep -qiE 're-?task' || P+="SKILL.md's verify-FAIL line doesn't say re-task"
+  print -r -- $vl | grep -q 'agent-teammates' || P+="SKILL.md's verify-FAIL line doesn't point at agent-teammates"
   print -r -- $vl | grep -q 'next instruction' && P+="SKILL.md's verify-FAIL line still says 'next instruction'"
   verdict "COMMODORE-RETASK SKILL.md verify-FAIL line re-tasks the teammate"
-  grep -qE 'fix-round message|by message' $CMD/references/roles.md && P+="roles.md still says 'fix-round message' or 'by message'"
+  grep -qE 'fix-round message|by message|stay alive|live for the whole run' $CMD/references/roles.md && P+="roles.md still says 'fix-round message', 'by message', 'stay alive' or 'live for the whole run'"
   verdict "COMMODORE-RETASK roles.md holds under both LIVE_MESSAGING variants"
 }
 
