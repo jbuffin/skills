@@ -22,9 +22,10 @@
 #       shape. Driven through the shared scripts against tests/bin/copilot.
 #   CODEX  The Codex driver (turn-based): launch, send/retask, status, tail, stop, preflight, the read-only marker, effort
 #       plumbing and the driver's shape. Assertion style (no goldens); `tests/run.sh codex` runs just these.
-#   U4  Tail output per the driver contract, codex without its CLI, codex .state without PERM, copilot effort validation,
+#   U4  Tail output per the driver contract, codex without its CLI, codex .state without PERM, copilot effort shape check,
 #       REPO over WORKTREE. The RESEND and D2 checks read drivers/CONTRACT.md. The tail-* and init-* goldens were
 #       edited by hand to match; `--record` would revert them.
+#   U5  Copilot passes any well-formed effort through to the CLI (which validates it), and claude launch without its CLI.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -1142,7 +1143,7 @@ cpwant cp-effort-empty && {
 }
 
 cpwant cp-effort-hostile && {
-  # Copilot CLI 1.0.95 takes none minimal low medium high xhigh max, so a hostile value is refused (U4), never launched.
+  # A value with spaces and shell syntax fails the effort shape check (U4, U5), so it is refused, never launched.
   cpmk cp-effort-hostile "EFFORT_REVIEWER='a b \$(touch effort-pwned) \"q\"'"
   txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
   /bin/sleep 0.3
@@ -2198,6 +2199,23 @@ want codex-u4-nocodex && {
   verdict "U4 codex send without codex on PATH: exit 1, 'codex is not on PATH', registry untouched"
 }
 
+# Claude without the CLI: PATH holds the fakes except claude. Launch says so before it lists live sessions.
+mk_nocl() {
+  local f; mkdir -p $SC/nocl
+  for f in $SB/bin/*(N); do [[ ${f:t} == claude ]] || ln -sf $f $SC/nocl/${f:t}; done
+  NOCL=$SC/nocl:/usr/bin:/bin:/usr/sbin:/sbin
+  [[ -z $(env -i PATH=$NOCL /bin/sh -c 'command -v claude') ]] || P+="sanity: claude still resolves on the no-claude PATH"
+}
+want u5-claude-noclaude && {
+  mk u5-claude-noclaude; mk_nocl
+  xrun PATH=$NOCL $AT/launch-teammate.sh $D t1 $SC/wt
+  [[ $RC == 1 ]] || P+="launch exit $RC (want 1)"
+  out_has "claude is not on PATH"
+  [[ "$(cat $SC/out $SC/err)" == *"couldn't list live sessions"* ]] && P+="launch blames the session list, not the missing CLI"
+  [[ -s $D/teammates.tsv ]] && P+="registry has a row: $(tr '\n' '|' < $D/teammates.tsv)"
+  verdict "U5 claude launch without claude on PATH: exit 1, 'claude is not on PATH', no session-list message, no registry row"
+}
+
 # Codex state: no PERM. The first check reads the driver's own state file (white-box; the CODEX section is otherwise
 # black-box). The second is a guard: an old state file that still has a PERM= line loads in status, send and tail.
 want codex-u4-state && {
@@ -2221,12 +2239,14 @@ want codex-u4-state && {
   verdict "U4 guard: a codex .state with a stale PERM= line still loads (status, tail, send)"
 }
 
-# Copilot effort: Copilot CLI 1.0.95 takes none minimal low medium high xhigh max. Anything else, or a newline, exits 5
-# from launch before any state file, registry row or copilot call exists.
+# Copilot effort shape: an effort with a character outside [A-Za-z0-9._-], or one that starts with a dash, exits 5 from
+# launch before any state file, registry row or copilot call exists. The message points at `copilot --help` for the
+# values (the brief's wording). A well-formed effort is passed through whatever it says (cp-u5-effort-pass).
 want_nl() { (source $D/team.env >/dev/null 2>&1; [[ $EFFORT_IMPLEMENTER == *$'\n'* ]]); }
 typeset -a BADEFF; BADEFF=(
   "newline-between|EFFORT_IMPLEMENTER=\$'high\nlow'|nl" "newline-trailing|EFFORT_IMPLEMENTER=\$'high\n'|nl"
-  "upper|EFFORT_IMPLEMENTER=HIGH|" "space|EFFORT_IMPLEMENTER='very high'|" "unknown|EFFORT_IMPLEMENTER=ultra|" )
+  "space|EFFORT_IMPLEMENTER='very high'|" "dash-x|EFFORT_IMPLEMENTER=-x|" "dash-version|EFFORT_IMPLEMENTER=--version|"
+  "dollar|EFFORT_IMPLEMENTER='\$(touch effort-pwned-ns)'|" )
 cpwant cp-u4-effort-invalid && {
   for spec in $BADEFF; do
     parts=("${(@s:|:)spec}")
@@ -2240,8 +2260,11 @@ cpwant cp-u4-effort-invalid && {
     st=($D/copilot-*(N)); (( $#st )) && P+="state file written: ${(j: :)st:t}"
     cl=($SC/fake/copilot.call.*(N)); (( $#cl )) && P+="copilot was called ${#cl} time(s)"
     [[ -s $D/teammates.tsv ]] && P+="registry has a row"
+    out_has "copilot --help"
+    hit=$(find $SB $PWD -name effort-pwned-ns 2>/dev/null)
+    [[ -n $hit ]] && P+="the effort was evaluated: ${hit//$'\n'/ } exists"
     reap_fakes
-    cpverdict "U4 copilot launch refuses effort '$parts[1]' with exit 5, before any state file or run"
+    cpverdict "U4 copilot launch refuses effort '$parts[1]' with exit 5, before any state file or run, and points at copilot --help"
   done
 }
 cpwant cp-u4-effort-valid && {
@@ -2255,7 +2278,33 @@ cpwant cp-u4-effort-valid && {
     [[ $got == ${v:-absent} ]] || P+="'$v': --reasoning-effort is '$got', want '${v:-absent}'"
     reap_fakes
   done
-  cpverdict "U4 guard: each of none minimal low medium high xhigh max, and the empty effort, still launches with that effort"
+  cpverdict "U4 guard: the efforts copilot 1.0.95 lists (none to max), and the empty effort, still launch with that effort"
+}
+# A well-formed effort goes to copilot as one --reasoning-effort argument whatever it says; the CLI validates it. The
+# last value uses every allowed punctuation character away from the front.
+cpwant cp-u5-effort-pass && {
+  P=()
+  for v in HIGH ultra bogus x-high.2_b; do
+    cpmk cp-u5-effort-pass-$v "EFFORT_IMPLEMENTER=$v"
+    txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch $v"
+    await 10 cp_settled 1
+    [[ $RC == 0 ]] || P+="'$v': exit $RC, want 0"
+    cp_load; got=absent; (( $#RUNS )) && { cparse $RUNS[1]; got=${F[--reasoning-effort]-absent}; }
+    [[ $got == $v ]] || P+="'$v': --reasoning-effort is '$got', want '$v'"
+    reap_fakes
+  done
+  cpverdict "U5 copilot launch passes a well-formed effort (HIGH, ultra, bogus, x-high.2_b) to copilot as --reasoning-effort <value>"
+}
+# When copilot itself rejects the value it exits at once; launch reports that as exit 1, not as a shape refusal.
+cpwant cp-u5-effort-copilot-rejects && {
+  cpmk cp-u5-effort-copilot-rejects EFFORT_IMPLEMENTER=ultra
+  txrun FAKE_COPILOT_MODE=fail $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch ultra"
+  P=()
+  [[ $RC == 1 ]] || P+="exit $RC, want 1"
+  out_has "copilot exited at once with 1"
+  reap_fakes
+  cpverdict "U5 copilot launch: a well-formed effort that copilot exits on at once gives exit 1 'copilot exited at once with 1'"
+  P=()   # cpverdict keeps P, and the next scenario's verdict would report it
 }
 
 # REPO, with WORKTREE only a fallback. team-init writes REPO alone; watch-ci.sh reads either.

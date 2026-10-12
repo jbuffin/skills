@@ -4,6 +4,7 @@
 D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
+command -v claude >/dev/null || { echo "claude is not on PATH"; exit 1; }
 LIVE=$(claude agents --json 2>/dev/null) || { echo "couldn't list live sessions (claude agents --json failed); retry before launching $NAME"; exit 1; }
 live_named "$LIVE" $NAME && { echo "a live session is already named $NAME; close it first or pick another name"; exit 5; }
 

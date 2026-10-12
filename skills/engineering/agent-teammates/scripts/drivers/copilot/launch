@@ -5,8 +5,9 @@ D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=0; [[ $6 == 1 ]] && RO=1
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
 command -v copilot >/dev/null || { echo "copilot is not on PATH"; exit 1; }
-# Copilot CLI 1.0.95 takes these reasoning efforts; the value is stored as a key=value line, so a newline would add keys.
-[[ -z $TEAMMATE_EFFORT || $TEAMMATE_EFFORT == (none|minimal|low|medium|high|xhigh|max) ]] || { echo "effort ${(q-)TEAMMATE_EFFORT} isn't one of none minimal low medium high xhigh max; fix EFFORT_<ROLE> in team.env"; exit 5; }
+# Only the shape is checked here: the value is stored as a key=value line, so a newline would add keys, and a dash-led
+# value would read as a flag. Copilot validates the value itself.
+[[ -z $TEAMMATE_EFFORT || ( $TEAMMATE_EFFORT != *[^A-Za-z0-9._-]* && $TEAMMATE_EFFORT != -* ) ]] || { echo "effort ${(q-)TEAMMATE_EFFORT} has the wrong shape: use letters, digits, . _ - only, not starting with -; 'copilot --help' lists the values; fix EFFORT_<ROLE> in team.env"; exit 5; }
 for f in $D/copilot-*(N); do
   [[ ${f:t} == *.* ]] && continue
   [[ $(cp_get $f name) == $NAME ]] && cp_alive $f && { echo "a copilot session is already running as $NAME (${f:t}); close it first or pick another name"; exit 5; }
