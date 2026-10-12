@@ -1,0 +1,5 @@
+---
+"jasonbuffin-skills": minor
+---
+
+Copilot CLI runs are documented end to end. `agent-teammates` and `commodore` each get a `references/harness-copilot.md`. agent-teammates' covers the `team.env` settings `team-init.sh` writes for Copilot (including `EFFORT_<ROLE>`, passed as `--reasoning-effort` only when set), turn-based re-tasking with `retask.sh`, the permission flags per role, the three checks the coordinator runs before each read-only re-task (the state file still has `ro=1` and its `workdir`, `team.env`'s checksum is unchanged, `git status --porcelain` in the workdir is empty), the bounded watchdog (`watch-teammates.sh --until-event`), where sessions live (`~/.copilot/session-state/`, kept on stop, no delete command), and the commands never to run in place of `close-teammate.sh`. commodore's gives the default model per role, the capability rule, the advisor as n/a, who is live, fix rounds and the read-only roles. The `agent-teammates` team.env table gains an `EFFORT_<ROLE>` row, and the README lists Copilot CLI as supported with its requirements.
