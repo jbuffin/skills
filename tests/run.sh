@@ -1036,7 +1036,7 @@ want codex-retask && {
     print -r -- "next job" > $SC/msg.md; cp $D/teammates.tsv $SC/tsv.before
     xrunb 20 FAKE_NOW=$((NOW + 500)) $AT/retask.sh $D t1 $SC/msg.md
     [[ -z $HUNG && $RC != 0 ]] || P+="retask.sh on a teammate whose turn is still running: exit $RC${HUNG:+ (hung)} (want non-zero)"
-    grep -aq '^codex cwd=.*\[resume\]' $SC/claude.log && P+="a second codex was started while the first still runs"
+    cx_wait 2 'grep -aq "^codex cwd=.*\[resume\]" $SC/claude.log' && P+="a second codex was started while the first still runs"
     cmp -s $D/teammates.tsv $SC/tsv.before || P+="the registry changed: $(tr '\n' '|' < $D/teammates.tsv)"
   }
   cx_reap
