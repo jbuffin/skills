@@ -68,7 +68,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 
 Names use letters, digits, `.`, `_` and `-`; the scripts refuse anything else.
 
-Give each teammate only what its job needs. Launch a teammate that only reads the source (a reviewer, a brief checker, a probe that only reads) with `--read-only`. On Claude that denies the file-editing tools inside its working directory and still lets it write its report in the team directory. Bash isn't covered, so the brief still says read-only. The flag catches slips. It isn't a sandbox. On Codex it is one: the teammate runs in a read-only sandbox, writes no files, and its final message becomes its report. Never give it a `.proof`.
+Give each teammate only what its job needs. Launch a teammate that only reads the source (a reviewer, a brief checker, a probe that only reads) with `--read-only`. On Claude that denies the file-editing tools inside its working directory and still lets it write its report in the team directory. Bash isn't covered, so the brief still says read-only. The flag catches slips. It isn't a sandbox. On Codex it is one: the teammate runs in a read-only sandbox with the user's rules ignored, so it writes no files and has no network, and its final message becomes its report. Never give it a `.proof`, and check its worktree's HEAD and `git status` after its turn anyway.
 
 Write a teammate's `prompts/<name>.proof` before launching or re-tasking it, one `<label> <command>` per line. A proof file that changes after the tasking fails verification, so a teammate can't rewrite its own proof. An exact allow rule per proof (`Bash(<teammates>/evidence.sh <team-dir> <name> <label>)`) approves it without approving anything else. A prefix rule on `evidence.sh` would approve any command, because the `--` form runs whatever follows.
 
@@ -92,7 +92,7 @@ With `VIEWER` set, launching also opens a pane attached to the session. That pan
 
 ## Watch
 
-Run `<teammates>/watch-teammates.sh <team-dir>` (on Codex, `--until-event`) for as long as any teammate is live, the way the harness reference says, so its events reach you. Re-arm it whenever it ends or expires and someone is still live. Every minute it reads the harness's session status, the markers and each teammate's session activity time, and it emits these events.
+Run `<teammates>/watch-teammates.sh <team-dir>` (on Codex, `--until-event <max-min>`) for as long as any teammate is live, the way the harness reference says, so its events reach you. Re-arm it whenever it ends or expires and someone is still live. Every minute it reads the harness's session status, the markers and each teammate's session activity time, and it emits these events.
 
 | Event | Meaning | Do |
 | --- | --- | --- |
