@@ -2,7 +2,7 @@
 
 Read this when the run's `HARNESS` is `copilot`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/copilot/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session.
 
-Copilot support is partial. Set `HARNESS=copilot` yourself: detection, Copilot model defaults in `team-init.sh`, reasoning effort and commodore's Copilot reference are [#63](https://github.com/jbuffin/skills/issues/63). Read [Security caveats](#security-caveats) before you launch anyone.
+Copilot support is partial. Detection, Copilot model defaults in `team-init.sh`, reasoning effort and commodore's Copilot reference are still to come in [#63](https://github.com/jbuffin/skills/issues/63), so set `HARNESS=copilot` yourself. Read [Security caveats](#security-caveats) before you launch anyone.
 
 ## What a teammate is
 
@@ -35,13 +35,13 @@ What these flags need in order to work, on Copilot 1.0.95:
 - The `:*` suffix on the writer denies. Without it, three-token denies such as `shell(gh pr merge)` never match, and `gh pr merge` and `gh pr create` reach GitHub. The read-only allows match with arguments as written.
 - `-s`, so stdout is the final message only.
 
-Put every prompt and message file in the team directory. A file anywhere else is outside the teammate's added directories, so the teammate can't read it. A read-only teammate's final message then says so, the driver saves it as its report, and the watchdog prints `DONE`.
+Put every prompt and message file in the team directory. A file anywhere else is outside the teammate's added directories, so the teammate can't read it. A read-only teammate then says so in its final message, the driver saves that as its report, and the watchdog prints `DONE` for a job that never ran.
 
 ## How a read-only teammate reports
 
 A read-only teammate can't write its report, so the contract's "write the report, then the marker" doesn't apply to it. Its launch and re-task prompts tell it that its final message is its report. When its run exits 0 with a non-empty final message, the driver writes `<team-dir>/reports/<name>.md`, then `<team-dir>/reports/<name>.done`. A run that fails or ends with no message gets neither, so the watchdog reports it `BLOCKED`.
 
-Never write a `.proof` for a read-only Copilot role. It can't run `evidence.sh`, so it could never verify. Writers write their own report, marker and evidence.
+Give a read-only Copilot role no `.proof` file. It can't run `evidence.sh`, so `verify-report.sh` would never pass it. Writers write their own report, marker and evidence.
 
 ## Security caveats
 
@@ -56,7 +56,7 @@ The Copilot permission flags are guardrails against mistakes, not a sandbox. Cop
 
   A writer can do all of this through its shell anyway. The new risk is a read-only teammate doing it after reading hostile content, such as a PR under review.
 
-The cheap checks that go with this:
+Run these checks:
 
 1. Before every `retask.sh` of a read-only teammate, read its state file. Re-task it only when the state file still has `ro=1` and `workdir=` matches column 5 of its row in `teammates.tsv`.
 2. Record `shasum <team-dir>/team.env` at launch, and compare it after every read-only turn.
@@ -79,7 +79,7 @@ To give a teammate its next job:
 
 A teammate that is stuck mid-turn can't be nudged. Close it with `close-teammate.sh` and relaunch it fresh with the stuck step spelled out.
 
-When you paste the teammate contract into a brief, keep the `LIVE_MESSAGING=0` lines and drop the advisor line.
+When you paste the teammate contract into a brief, keep the `LIVE_MESSAGING=0` lines and drop the advisor line. For a read-only teammate, replace the report-and-marker line with "Your final message is your report. Write no files.", which matches what its launch prompt says.
 
 ## Run the watchdog
 
@@ -114,5 +114,5 @@ Close teammates with `close-teammate.sh`. It sends `TERM`, then `KILL`, to the r
 
 There is no `NO_BG` on Copilot: a launch exits 1 or 5, never 2, so the in-process subagent fallback in `SKILL.md` doesn't apply.
 
-- Exit `5` means the launch was refused. Close the live session or pick another name only when the message says a session is already running under that name.
+- Exit `5` means the launch was refused. When the message says a session is already running under that name, close it or pick another name. Otherwise fix what the message names and launch again.
 - Exit `1` means copilot isn't on `PATH`, or it exited non-zero within 1 s. Retry once. If it fails again, stop and ask the engineer, attaching `<team-dir>/copilot-<session-id>.err`.
