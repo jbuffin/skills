@@ -324,6 +324,170 @@ want init-missing-skills && {
 [[ -n $RECORD ]] && { echo "recorded goldens from $REF into tests/golden"; exit 0; }
 
 # ======================================================================================================================
+# RESEND: retask.sh gives a registered teammate its next job through the driver's `send` (SEND=script harnesses).
+# The test driver `other` lives in a scratch copy of the skills tree, never in the shipped one: its `send` logs its argv
+# to $SEND_LOG (and can fail or be absent), its `status` reports the teammate blocked, and its driver.env varies.
+# ======================================================================================================================
+RT=$SB/src-resend; RAT=$RT/agent-teammates/scripts
+rdrv() {  # rdrv <ok|fail|none> <driver.env line...|NOENV>: rebuild the test driver in the scratch tree
+  local m=$1 dd=$RT/agent-teammates/scripts/drivers/other; shift
+  rm -rf $dd; mkdir -p $dd
+  [[ $1 == NOENV ]] || print -rl -- "$@" > $dd/driver.env
+  case $m in
+    ok)   printf '#!/bin/sh\n{ printf send; for a in "$@"; do printf " [%%s]" "$a"; done; echo; } >> "${SEND_LOG:-/dev/null}"\nexit 0\n' > $dd/send ;;
+    fail) printf '#!/bin/sh\n{ printf send; for a in "$@"; do printf " [%%s]" "$a"; done; echo; } >> "${SEND_LOG:-/dev/null}"\necho "driver says: session $2 could not be started"\nexit 3\n' > $dd/send ;;
+  esac
+  [[ -f $dd/send ]] && chmod +x $dd/send
+  printf '#!/bin/sh\necho "d0e1f2a3 idle blocked -"\n' > $dd/status; chmod +x $dd/status
+}
+rs() {  # rs <scenario>: a run with HARNESS=other, t1 registered (viewer %7), a message file, and a snapshot of the registry
+  TREE=$RT; mk $1 HARNESS=other; TREE=$SKILLS
+  reg t1 d0e1f2a3 $((NOW - 600)) %7 $SC/wt
+  print -r -- "next job" > $SC/msg.md; : > $SC/send.log; cp $D/teammates.tsv $SC/tsv.before
+}
+P=()
+verdict() { (( $#P )) && fail "$1" "${(j:; :)P}" || pass "$1"; P=(); }
+tsv_same() { cmp -s $D/teammates.tsv $SC/tsv.before || P+="teammates.tsv changed: $(diff $SC/tsv.before $D/teammates.tsv | tr '\n' '|')"; }
+no_send() { [[ -s $SC/send.log ]] && P+="send ran: $(<$SC/send.log)"; return 0; }
+out_has() { [[ "$(cat $SC/out $SC/err)" == *$1* ]] || P+="output lacks '$1': $(cat $SC/out $SC/err | head -c 300 | tr '\n' '|')"; }
+
+want resend && {
+  cp -R $SKILLS $RT
+  OKENV=('# SEND=tool in a comment must not count' 'LIVE_MESSAGING=0' 'SEND=script')
+
+  # AC1: send gets the session id and the message file; the registry gets the row retasked.sh would append.
+  rdrv ok $OKENV; rs resend-ok
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+  [[ $RC == 0 ]] || P+="exit $RC (want 0): $(cat $SC/out $SC/err | head -c 300)"
+  [[ $(<$SC/send.log) == "send [$D] [d0e1f2a3] [$SC/msg.md]" ]] || P+="send argv: '$(<$SC/send.log)' (want send [<team-dir>] [d0e1f2a3] [<message-file>])"
+  [[ $(tail -1 $D/teammates.tsv) == "t1 d0e1f2a3 $NOW %7 $SC/wt" && $(wc -l < $D/teammates.tsv) -eq 2 ]] || P+="registry: $(tr '\n' '|' < $D/teammates.tsv) (want the old row, then t1 d0e1f2a3 $NOW %7 $SC/wt)"
+  out_has t1; out_has d0e1f2a3
+  verdict "RESEND SEND=script: send gets the session id and message file, one retasked.sh-style row, confirmation"
+
+  # AC1, watchdog: the old .done marker stops counting after retask.sh. Control: without it the marker is still reported.
+  watch_sc() {
+    rdrv ok $OKENV; rs $1; mkdir -p $D/reports; : > $D/reports/t1.done; settime $((NOW - 100)) $D/reports/t1.done
+    print -r -- "$D/reports/t1.done $((NOW - 100))" > $D/.watch-seen
+  }
+  watch_sc resend-watch
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md; retask_rc=$RC
+  xrun_watch 3 $RAT/watch-teammates.sh $D
+  [[ $retask_rc == 0 ]] || P+="retask.sh exit $retask_rc (want 0)"
+  [[ -n $REACHED ]] || P+="the watcher never reached its poll limit"
+  grep -qx 'BLOCKED t1 d0e1f2a3' $SC/out || P+="no 'BLOCKED t1 d0e1f2a3' after retask.sh; stdout: $(tr '\n' '|' < $SC/out)"
+  grep -q '^DONE t1' $SC/out && P+="the old marker was reported DONE after retask.sh"
+  verdict "RESEND after retask.sh the watchdog doesn't report the old marker as DONE, and fires BLOCKED"
+  watch_sc resend-watch-control
+  xrun_watch 3 $RAT/watch-teammates.sh $D
+  [[ -n $REACHED && ! -s $SC/out ]] && pass "RESEND control: without retask.sh the old marker counts and nothing fires" || fail "RESEND control: without retask.sh the old marker counts and nothing fires" "reached: ${REACHED:-no}; stdout: $(tr '\n' '|' < $SC/out)"
+
+  # AC2: a failing send leaves the registry byte-for-byte alone; its exit code and message come through (D3).
+  rdrv fail $OKENV; rs resend-fail
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+  [[ $RC == 3 ]] || P+="exit $RC (want send's own code, 3)"
+  [[ -s $SC/send.log ]] || P+="send never ran"
+  tsv_same; out_has "driver says: session d0e1f2a3 could not be started"
+  verdict "RESEND failing send: registry unchanged, send's exit code and message come through"
+
+  # AC3 / D2: refusals. Nothing is sent and the registry doesn't change.
+  rdrv ok $OKENV; rs resend-unregistered
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D ghost $SC/msg.md
+  [[ $RC == 5 ]] || P+="exit $RC (want 5)"; out_has "ghost is not registered in $D/teammates.tsv"; no_send; tsv_same
+  verdict "RESEND unregistered teammate: retasked.sh's message, exit 5, nothing sent"
+
+  rdrv ok $OKENV; rs resend-closed; reg t1 d0e1f2a3 closed - $SC/wt; cp $D/teammates.tsv $SC/tsv.before
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+  [[ $RC == 5 ]] || P+="exit $RC (want 5)"; out_has "t1 is closed; launch a new teammate instead"; no_send; tsv_same
+  verdict "RESEND closed teammate: retasked.sh's message, exit 5, nothing sent"
+
+  rdrv ok $OKENV; rs resend-usage
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1
+  [[ $RC == 5 ]] || P+="exit $RC (want 5)"; out_has "usage: retask.sh"; no_send; tsv_same
+  verdict "RESEND missing argument: usage, exit 5, nothing sent"
+
+  rdrv ok $OKENV; rs resend-no-message-file
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/nope.md
+  [[ $RC != 0 && $RC != 127 && $RC != 126 ]] || P+="exit $RC (want a refusal)"; out_has "nope.md"; no_send; tsv_same
+  verdict "RESEND missing message file: refused before send, registry unchanged"
+
+  rdrv ok $OKENV; rs resend-empty-message; : > $SC/msg.md
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+  [[ $RC != 0 && $RC != 127 && $RC != 126 ]] || P+="exit $RC (want a refusal)"; out_has "msg.md"; no_send; tsv_same
+  verdict "RESEND empty message file: refused before send, registry unchanged"
+
+  # D2's order: unregistered/closed come before the message file, which comes before the SEND value.
+  rdrv ok $OKENV; rs resend-order-unregistered
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D ghost $SC/nope.md
+  [[ $RC == 5 ]] || P+="exit $RC (want 5)"; out_has "ghost is not registered"; no_send
+  verdict "RESEND order: an unregistered name is refused before the message file is checked"
+  rdrv ok 'SEND=bogus'; rs resend-order-message; : > $SC/msg.md
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+  [[ $RC != 0 && $RC != 127 && $RC != 126 ]] || P+="exit $RC (want a refusal)"
+  [[ "$(cat $SC/out $SC/err)" == *driver.env* ]] && P+="an empty message was refused for the SEND value: $(cat $SC/out $SC/err | head -c 200 | tr '\n' '|')"
+  no_send; tsv_same
+  verdict "RESEND order: an empty message file is refused before the SEND value is read"
+
+  # AC4 / D3: SEND=tool sends nothing (even if the driver has a send), changes nothing, exits 4, and points at the
+  # harness's own tool and retasked.sh. The message names $HARNESS.
+  rdrv ok 'SEND=tool'; rs resend-tool
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+  [[ $RC == 4 ]] || P+="exit $RC (want 4)"; no_send; tsv_same
+  out_has "references/harness-other.md"; out_has "retasked.sh"
+  verdict "RESEND SEND=tool: nothing sent, registry unchanged, exit 4, names harness-<HARNESS>.md and retasked.sh"
+  sc resend-claude; env_file; reg t1 c51dbe46 1789999000 - $SC/wt; print -r -- "next job" > $SC/msg.md; cp $D/teammates.tsv $SC/tsv.before
+  xrun $AT/retask.sh $D t1 $SC/msg.md
+  [[ $RC == 4 ]] || P+="exit $RC (want 4)"; [[ -s $SC/claude.log ]] && P+="claude was called: $(head -c 200 $SC/claude.log)"; tsv_same
+  out_has "references/harness-claude.md"; out_has "retasked.sh"
+  verdict "RESEND Claude driver (SEND=tool): no claude call, registry unchanged, exit 4, the use-the-harness's-tool message"
+
+  # AC5: SEND=script without a send executable.
+  rdrv none $OKENV; rs resend-nosend
+  xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+  [[ $RC == 5 ]] || P+="exit $RC (want 5)"; tsv_same; out_has "no send operation"
+  verdict "RESEND SEND=script with no send executable: exit 5, registry unchanged"
+
+  # D1: SEND comes from the ^SEND= line of driver.env; anything else is refused with exit 5 and a message naming the file.
+  d1_case() {  # d1_case <check name> <scenario> <driver.env line...|NOENV>
+    local nm=$1 s=$2; shift 2
+    rdrv ok $@; rs $s
+    xrun SEND_LOG=$SC/send.log $RAT/retask.sh $D t1 $SC/msg.md
+    [[ $RC == 5 ]] || P+="exit $RC (want 5)"; no_send; tsv_same; out_has "driver.env"
+    verdict "$nm"
+  }
+  d1_case "RESEND D1: no driver.env is refused, naming the file" resend-d1-nofile NOENV
+  d1_case "RESEND D1: driver.env with SEND= only in a comment is refused" resend-d1-comment '# SEND=script' 'LIVE_MESSAGING=0'
+  d1_case "RESEND D1: an unknown SEND value is refused" resend-d1-bogus 'SEND=bogus'
+}
+
+# RESEND docs: the contract's send text, and SKILL.md. Key phrases only.
+want resend && {
+  DE=$ROOT/skills/engineering/agent-teammates/scripts/drivers/claude/driver.env
+  snd=$(awk '/^#   send /{p=1; print; next} p && /^#   [a-z]/{p=0} p && /^#/{print}' $DE)
+  [[ -n $snd ]] || P+="no '#   send' entry in ${DE#$ROOT/}"
+  print -r -- $snd | grep -qi 'resum' || P+="the send text doesn't say it resumes the session"
+  print -r -- $snd | grep -qi 'exit' || P+="the send text doesn't mention the process having exited"
+  verdict "RESEND driver.env send text: gives the session its next job, resuming it if its process exited"
+  print -r -- $snd | grep -qiE 'without waiting' || P+="the send text doesn't say it returns without waiting for the turn"
+  print -r -- $snd | grep -qiE 'once .*(started|start)' || P+="the send text doesn't say it returns once the job has started"
+  verdict "RESEND driver.env send text: returns once the job has started, without waiting for the turn"
+  print -r -- $snd | grep -qiE 'non-zero' && print -r -- $snd | grep -qiE "couldn't|could not|cannot|can't" || P+="the send text doesn't say it exits non-zero if it couldn't start the job"
+  verdict "RESEND driver.env send text: exits non-zero if it couldn't start the job"
+  sed -n 1,3p $DE | grep -q 'retask\.sh' || P+="the header's opening doesn't mention retask.sh reading the SEND= line"
+  verdict "RESEND driver.env header opening says retask.sh reads the SEND= line"
+  [[ ! -e ${DE:h}/send ]] && grep -q '^SEND=tool$' $DE || P+="the Claude driver must keep SEND=tool and have no send executable"
+  verdict "RESEND the Claude driver keeps SEND=tool and no send executable"
+
+  sm=$ROOT/skills/engineering/agent-teammates/SKILL.md
+  grep -qE '^<teammates>/retask\.sh ' $sm || P+="the Launch, re-task, close command list has no '<teammates>/retask.sh' line"
+  verdict "RESEND SKILL.md command list has retask.sh"
+  para=$(awk -v RS= '/LIVE_MESSAGING=0/ && /retasked\.sh/' $sm)
+  [[ -n $para ]] || P+="no paragraph mentions LIVE_MESSAGING=0 and retasked.sh"
+  print -r -- $para | grep -qE 'retask\.sh' || P+="the re-tasking paragraph never mentions retask.sh"
+  print -r -- $para | grep -q 'SEND=script' || P+="the re-tasking paragraph never mentions SEND=script"
+  verdict "RESEND SKILL.md re-tasking section points LIVE_MESSAGING=0 and SEND=script at retask.sh"
+}
+
+# ======================================================================================================================
 # C1: nothing outside drivers/claude calls claude or reads its transcripts.
 # ======================================================================================================================
 shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineering/commodore/scripts )
