@@ -2,7 +2,7 @@
 
 Read this when the run's `HARNESS` is `copilot`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/copilot/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session.
 
-Copilot support is partial. Detection, Copilot model defaults in `team-init.sh`, reasoning effort and commodore's Copilot reference are still to come in [#63](https://github.com/jbuffin/skills/issues/63), so set `HARNESS=copilot` yourself. Read [Security caveats](#security-caveats) before you launch anyone.
+Read [Security caveats](#security-caveats) before you launch anyone. commodore's `references/harness-copilot.md` covers the default models, the capability rule and fix rounds.
 
 ## What a teammate is
 
@@ -10,19 +10,34 @@ A teammate is a background `copilot -p` run in its own process group, with a fix
 
 - There is no live messaging. A turn takes no input mid-turn.
 - The coordinator is the only thing that wakes a finished teammate, with `retask.sh`.
-- There is no advisor. `team-preflight.sh` prints `ADVISOR n/a (copilot)`, and teammates write `none` under `## Advisor consults`.
+- There is no advisor. `team-preflight.sh` prints `ADVISOR n/a (copilot)`, and Copilot teammates aren't told to use a custom agent through `task` as a stand-in. They write `none` under `## Advisor consults`.
 - There are no viewer panes. `VIEWER` is ignored.
 
 ## Setting up a run
 
-1. Create the run with the harness preset: `HARNESS=copilot <team>/team-init.sh <run-name> <repo>`. It writes `HARNESS=copilot` to `team.env`.
-2. `team-init.sh` still writes Claude model names. Replace every `MODEL_<ROLE>` the run uses, and `MODEL`, with names `copilot --model` accepts, for example `claude-sonnet-5.5` and `claude-opus-5.5`. `ADVISOR`, `PERMISSION_MODE`, `CMUX*` and `CLAUDE_CONFIG_DIR` are ignored.
+1. Create the run from inside Copilot CLI: `<team>/team-init.sh <run-name> <repo>`. Detection sees `COPILOT_CLI=1` and writes the settings in [Settings in `team.env`](#settings-in-teamenv). A shell that also sets `CLAUDECODE=1` (Copilot passes its parent's environment through) makes detection print both harnesses, and `team-init.sh` stops with "more than one harness detected". Start Copilot from a shell with `CLAUDECODE` unset.
+2. Change a model only when the engineer names one `copilot --model` accepts.
 3. Run `<teammates>/drivers/copilot/preflight <team-dir>`. It fails when `copilot` isn't on `PATH`, or when one headless read-only turn on `MODEL_REVIEWER` (else `MODEL_IMPLEMENTER`, else `MODEL`) exits non-zero or prints nothing. A bad model name fails here with copilot's own message. It doesn't check `jq`, which `teammate-tail.sh` needs.
 4. Copilot uses the engineer's existing sign-in. Have them sign in before the run.
 
+## Settings in `team.env`
+
+`team-init.sh` writes a Copilot `team.env` with these lines.
+
+| Setting | Value | Meaning |
+| --- | --- | --- |
+| `HARNESS` | `copilot` | selects `scripts/drivers/copilot` and this reference |
+| `MODEL` | `claude-sonnet-5.5` | the model for a launch with neither `--model` nor `--role` |
+| `REQUIRE_ROLE` | `1` | every launch passes `--role` or `--model` |
+| `MODEL_<ROLE>` | per role | the model for `--role <role>` (commodore's reference has the table) |
+| `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, passed as `--reasoning-effort <effort>` on launch and resume only when set, because some models reject the flag. `send` reuses the effort recorded at launch, so a later `EFFORT_<ROLE>` edit doesn't affect a session that's already launched |
+| `VIEWER` | `none` | Copilot teammates have no viewer panes |
+
+Never write `ADVISOR`, `PERMISSION_MODE`, `CMUX*` or `CLAUDE_CONFIG_DIR` for a Copilot run. `team-env.zsh` still defaults `MODEL=sonnet` on every harness, so write `MODEL` as `claude-sonnet-5.5`: a missing `MODEL` falls back to the Claude name `sonnet`, which would reach copilot.
+
 ## Permissions per role
 
-The flag set is chosen from `--read-only`, not from `--role`. Every run, launch and resume alike, gets `--no-ask-user`, `-s`, `--session-id <id>` and `--add-dir <team-dir>`.
+The flag set is chosen from `--read-only`, not from `--role`. Every run, launch and resume alike, gets `--no-ask-user`, `-s`, `--session-id <id>` and `--add-dir <team-dir>`, plus `--model <model>` and `--reasoning-effort <effort>` when set.
 
 | Teammate | Flags | What it can do |
 | --- | --- | --- |
@@ -50,20 +65,32 @@ The Copilot permission flags are guardrails against mistakes, not a sandbox. Cop
 - **Writers run as the engineer.** `--allow-all-tools` lets a writer run any command. The five denies stop only those exact command prefixes: other spellings (`git -C . push`, `git -c k=v push`, `env git push`, a script that calls git), `curl` with `gh auth token`, and `gh` commands nobody listed (`gh pr review`, `gh pr comment`, `gh release create`) all get through. Keep any credential a writer must not use out of its environment.
 - **Read-only teammates can write files.** `git log`, `git show` and `git diff` accept `--output=<file>`, and the read-only allowlist allows them with any arguments. On Copilot 1.0.95, a read-only teammate's `git log -1 --output=<team-dir>/x` and `git diff --output=<team-dir>/x` both wrote into the team dir, and `ls` showed it the file names there. `--deny-tool=write` removes only Copilot's own write tool.
 - **Every teammate can write the team directory**, because `--add-dir <team-dir>` covers all of it. That includes:
-  - its own state file, `<team-dir>/copilot-<session-id>`. `send` re-reads `ro`, `workdir` and `model` from it on every re-task, so a forged `ro=0` resumes a read-only teammate with the writer flags, in any directory it names. Its `pid` and `pgid` decide which process group `close-teammate.sh` kills;
+  - its own state file, `<team-dir>/copilot-<session-id>`. `send` re-reads `name`, `ro`, `workdir`, `model` and `effort` from it on every re-task, so a forged `ro=0` resumes a read-only teammate with the writer flags, in any directory it names. Its `pid` and `pgid` decide which process group `close-teammate.sh` kills;
   - `team.env`, which every coordinator script sources, so code written there runs in the coordinator;
-  - other teammates' reports and markers.
+  - other teammates' reports and markers;
+  - `brief-common.md`, `prompts/*` and job files, which writers follow, plus `state.md`, `worktrees.tsv`, `teammates.tsv`, `.watch-seen` and `.watch-state`.
 
   A writer can do all of this through its shell anyway. The new risk is a read-only teammate doing it after reading hostile content, such as a PR under review.
 
-Run these checks:
+The writer denies are guardrails, not a boundary, and adding more denies wouldn't make them one.
 
-1. Before every `retask.sh` of a read-only teammate, read its state file. Re-task it only when the state file still has `ro=1` and `workdir=` matches column 5 of its row in `teammates.tsv`.
-2. Record `shasum <team-dir>/team.env` at launch, and compare it after every read-only turn.
-3. After every read-only turn, run `git -C <workdir> status --porcelain` and check it's empty.
-4. Treat a read-only report that's surprising as unverified until `teammate-tail.sh` shows the turn that produced it.
+Run these checks. Launch each read-only teammate in a linked worktree, or another directory whose git dir is outside it (commodore's default worktrees are). In a plain clone, `.git/config` is inside the workdir, so a read-only teammate could plant a `core.fsmonitor` or a filter driver that runs inside your own `git status` and every later git command there.
 
-If any check fails, stop the run and tell the engineer. Don't re-task the teammate.
+Hold every baseline in your own context, never in a file under the team directory, which a read-only teammate can write. `teammates.tsv` and `state.md` sit there, so neither can be a baseline. Right after each of your own `launch-teammate.sh` and `retask.sh` calls returns, record:
+
+- `shasum` of the teammate's whole state file (`cp_start` writes `pid`, `pgid` and `started` before the call returns);
+- `shasum <team-dir>/team.env`;
+- `shasum` of the repo's git config and, if present, its `config.worktree`, found by path and not by running git in the workdir.
+
+Before each read-only re-task, before any `close-teammate.sh`, and after each read-only turn before you act on its report, all three must hold:
+
+1. `shasum` of the state file equals the one you recorded. The driver reads the last matching line of each key, so a forged file can carry `ro=1` first and `ro=0` last; `send` interpolates `name`, and `stop` kills `-$pgid`. As a supplementary read, each of `name`, `workdir`, `model`, `effort`, `ro`, `pid` and `pgid` appears exactly once, `ro` is `1`, and `workdir` equals the one you recorded.
+2. `shasum <team-dir>/team.env` equals the one you recorded. This detects tampering only after the fact: the bounded watchdog sources `team.env` on its next poll.
+3. The git config `shasum` equals the one you recorded, and only then `git -C <workdir> status --porcelain` exits 0 and prints nothing. A config mismatch stops the run without running git there, and a non-zero exit fails the check. That a read-only teammate can't write `.git/config` through Copilot's path guard isn't verified, so the config check stands in for it.
+
+The checks hold only while no other read-only teammate is mid-turn: check, then re-task or close, when none is live. A report that's surprising stays unverified until `teammate-tail.sh` shows the turn that produced it. The checks don't cover `brief-common.md`, `prompts/*` or job files: read the brief or job a writer is about to follow if a read-only turn has run since you wrote it.
+
+If any check fails, the run stops: tell the engineer, and don't re-task the teammate.
 
 ## Launch, re-task, close
 
@@ -72,7 +99,7 @@ Launch and close as in `SKILL.md`. `launch` and `send` wait up to 1 s and exit 1
 To give a teammate its next job:
 
 1. Write the job to a file in the team directory, with the file-writing tool.
-2. For a read-only teammate, run the checks in [Security caveats](#security-caveats).
+2. For a read-only teammate, run the three checks in [Security caveats](#security-caveats). They must all hold before the re-task.
 3. Run `<teammates>/retask.sh <team-dir> <name> <message-file>`.
 
 `retask.sh` resumes the session with the same `--session-id` and the flags its state file records, and resets the watchdog clock. Don't run `retasked.sh` after it. `send` waits up to `COPILOT_SEND_WAIT` seconds (default 60) for the previous turn to exit, then refuses with exit 1 and records nothing. Wait and run it again.
@@ -83,7 +110,15 @@ When you paste the teammate contract into a brief, keep the `LIVE_MESSAGING=0` l
 
 ## Run the watchdog
 
-Run `<teammates>/watch-teammates.sh <team-dir>` as on any other harness. Each poll reads `<teammates>/drivers/copilot/status <team-dir>`, which prints one line per session: `<session-id> - <state> <last-activity>`.
+Run the watchdog in its bounded mode only, as one bare call between jobs, and again whenever it returns while anyone is live:
+
+```bash
+<teammates>/watch-teammates.sh --until-event <max-min> <team-dir>
+```
+
+It polls once a minute and exits 0 right after the poll that printed an event, or prints `WATCH timeout <max-min>` after `<max-min>` polls with none. Pass an explicit long timeout on the call itself, and pick `<max-min>` (in minutes) comfortably under it, so the call isn't cut off. The Copilot shell tool's default timeout is unverified. Rerun it after each exit. Seen markers persist in `<team-dir>/.watch-seen` and the `BLOCKED` counts in `<team-dir>/.watch-state`, so a rerun repeats no `DONE` and doesn't reset the two-in-a-row rule. The events are the ones in `SKILL.md`. `DONE` can arrive before `status` reads `done`, so check `status` before you re-task.
+
+Each poll reads `<teammates>/drivers/copilot/status <team-dir>`, which prints one line per session: `<session-id> - <state> <last-activity>`.
 
 | State | Meaning |
 | --- | --- |
@@ -99,13 +134,13 @@ There's no dashboard and no attaching. To see who is live, run `<teammates>/driv
 
 ## Where sessions live
 
-Each session is `~/.copilot/session-state/<session-id>/`, with its `events.jsonl`. The driver's own files are in the team directory: `copilot-<session-id>` (name, workdir, model, ro, pid, pgid, started, resumed, stopped as `key=value` lines) and `copilot-<session-id>.out`, `.err` and `.rc` from the last run. Closing keeps all of them.
+Each session is `~/.copilot/session-state/<session-id>/`, with its `events.jsonl`. The driver's own files are in the team directory: `copilot-<session-id>` (name, workdir, model, effort, ro, pid, pgid, started, resumed, stopped as `key=value` lines) and `copilot-<session-id>.out`, `.err` and `.rc` from the last run. Closing keeps all of them, and so does stopping: `stop` ends the run's process group and never touches the session directory. Copilot CLI 1.0.95 has no command that deletes a session: `copilot sessions --help` lists only `import`.
 
 ## Closing
 
 Close teammates with `close-teammate.sh`. It sends `TERM`, then `KILL`, to the run's process group, and keeps the session directory. Never do these instead:
 
-- delete a session through `copilot sessions` or by removing its `session-state` directory;
+- delete a session by hand, by removing `~/.copilot/session-state/<session-id>` or anything in it: the driver reads the session's `events.jsonl` for status and `teammate-tail.sh`, and `retask.sh` resumes it;
 - kill copilot by hand: no `closed` row is written, so `retask.sh` still resumes the session;
 - relaunch a teammate with `--allow-all`, `--yolo`, `--allow-all-paths`, `--allow-all-tools` on a read-only role, or a wider allowlist to get past a denial: stop and ask instead;
 - open the session interactively with `copilot --resume=<session-id>`: the teammate's next turn would pick up your input.

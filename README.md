@@ -16,7 +16,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 | Skill | What it does |
 | --- | --- |
 | `commodore` | Entry point for team work: works out the mission from what you point it at, then runs it as chief of staff over teammates, each on the model its role calls for, in git worktrees. The build mission plans units, briefs, builds, reviews independently and evaluates on the real target, delivered as a PR, a gh stack or fixes to an existing PR. The review mission reviews someone else's PR and posts one GitHub review once you approve it. The PR-feedback mission triages the comments and failing checks on your own PR, fixes what you approve and posts the replies you approve. Type `/commodore`; it doesn't load on its own. |
-| `agent-teammates` | Launches, watches, re-tasks and closes teammates as background agent sessions on the harness the run starts in (Claude Code and Codex are supported; Copilot CLI is planned), with a report-and-marker contract, a watchdog and proof checks. |
+| `agent-teammates` | Launches, watches, re-tasks and closes teammates as background agent sessions on the harness the run starts in (Claude Code, Codex and Copilot CLI are supported), with a report-and-marker contract, a watchdog and proof checks. |
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
 
@@ -72,13 +72,16 @@ and approve every reply before you leave, and the fixes and replies land on the 
   `npx skills add jbuffin/skills --skill commodore` alone leaves it broken. The plugin route always
   installs all four.
 - **macOS with zsh.** The scripts are zsh, and secrets live in the macOS Keychain (`security`).
-- **Claude Code with background sessions, or Codex.** Claude Code and Codex are the supported harnesses. The
-  harness is detected from where the run starts, and Copilot CLI is planned
-  ([#9](https://github.com/jbuffin/skills/issues/9)). On Claude Code, teammates run as `claude --bg`
+- **Claude Code with background sessions, Codex, or Copilot CLI.** These are the supported harnesses. The
+  harness is detected from where the run starts. On Claude Code, teammates run as `claude --bg`
   sessions and are watched with `claude agents`. Run `claude` once in the target repo and accept the trust
   prompt, or launches fail with "Workspace not trusted". Without background sessions, teammates fall back to
   in-process subagents. On Codex, they run as background `codex exec` turns, one turn at a time, and need
-  prefix rules in `~/.codex/rules` (see `agent-teammates/references/harness-codex.md`).
+  prefix rules in `~/.codex/rules` (see `agent-teammates/references/harness-codex.md`). On Copilot CLI, they run as background `copilot -p`
+  turns, one turn at a time. Copilot CLI must be on `PATH` and signed in, and its permission flags are
+  guardrails, not a sandbox (see `agent-teammates/references/harness-copilot.md`). A Copilot CLI started from a
+  Claude Code shell inherits `CLAUDECODE=1`, so `team-init.sh` exits 7 with "more than one harness detected":
+  unset it, or start Copilot from a plain shell.
 - **CLI tools on `PATH`:** `git`, `gh` (logged in with `gh auth login`), `python3`, `jq`, `curl`.
 - **`gh-stack` 0.2.0 or later** for stack mode: `gh extension install github/gh-stack`. Also installable
   as a skill (`npx skills add github/gh-stack`), which the stack mode reads if it's there.

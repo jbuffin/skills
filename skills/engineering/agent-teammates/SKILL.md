@@ -22,6 +22,7 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
   | `HARNESS` | claude | the harness; selects `scripts/drivers/<HARNESS>` and `references/harness-<HARNESS>.md` |
   | `MODEL` | the harness reference | the model for a launch with neither `--model` nor `--role` |
   | `MODEL_<ROLE>` | none | the model for `--role <role>`; see "Set the model explicitly" |
+  | `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, on a harness that takes one; empty passes none. The reference says how the harness passes it |
   | `REQUIRE_ROLE` | unset | `1` makes every launch pass `--role` or `--model` |
   | `ADVISOR` | the harness reference | the advisor model every teammate launches with, where the harness has an advisor; `none` turns it off. The reference gives the pairing rules |
   | `PERMISSION_MODE` | the harness reference | the teammates' permission mode |
