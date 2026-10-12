@@ -7,7 +7,9 @@ source ${0:A:h}/lib.zsh
 F=$(cp_state $D $ID)
 [[ -f $F ]] || { echo "no copilot session state for $ID in $D"; exit 1; }
 command -v copilot >/dev/null || { echo "copilot is not on PATH"; exit 1; }
+# Give a turn that is just ending time to exit (COPILOT_SEND_WAIT seconds, default 60) before refusing.
+for i in {1..$(( ${COPILOT_SEND_WAIT:-60} * 2 ))}; do cp_alive $F || break; /bin/sleep 0.5; done
 cp_alive $F && { echo "session $ID is still running its turn; wait for it to end before re-tasking"; exit 1; }
 MSG=
 [[ $(cp_get $F ro) == 1 ]] && MSG=" Your final message is your report: write no files; the driver saves it."
-cp_start $D $ID "You are teammate $(cp_get $F name). Read $M and do exactly what it says.$MSG"
+cp_start $D $ID "You are teammate $(cp_get $F name). Read $M and do exactly what it says.$MSG" resume || exit 1

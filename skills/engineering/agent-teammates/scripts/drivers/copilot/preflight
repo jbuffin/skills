@@ -10,19 +10,24 @@ bad()  { echo "FAIL  $*"; fail=1; }
 command -v copilot >/dev/null && ok "copilot found" || { bad "copilot not on PATH"; exit 1; }
 # One cheap headless turn with the trimmed read-only tool set. Too many MCP tool definitions overflow the context
 # and `copilot -p` then exits 0 with no output.
-M=${MODEL_REVIEWER:-${MODEL_IMPLEMENTER:--}}
-cp_flags 1 $M - $(cp_uuid)
+M=${MODEL_REVIEWER:-${MODEL_IMPLEMENTER:-${MODEL:--}}}
+cp_flags 1 "$M" - $(cp_uuid)
 OUT=$(mktemp) || { bad "couldn't create a temp file for the headless turn"; exit 1; }
-trap 'rm -f $OUT' EXIT
-copilot $CP_FLAGS -p "Reply with the single word OK." < /dev/null > $OUT 2>&1 &
+ERR=$(mktemp) || { rm -f $OUT; bad "couldn't create a temp file for the headless turn"; exit 1; }
+trap 'rm -f $OUT $ERR' EXIT
+# Own process group, so a timeout kills copilot's children too.
+perl -e 'setpgrp(0, 0); exec @ARGV' copilot $CP_FLAGS -p "Reply with the single word OK." < /dev/null > $OUT 2> $ERR &
 pid=$!
 for i in {1..240}; do kill -0 $pid 2>/dev/null || break; /bin/sleep 0.5; done
 if kill -0 $pid 2>/dev/null; then
-  kill $pid 2>/dev/null
+  kill -KILL -- -$pid 2>/dev/null
+  wait $pid 2>/dev/null
   bad "copilot headless turn didn't finish within 120 s"
-elif [[ -s $OUT ]]; then
-  ok "copilot headless turn returned output"
 else
-  bad "copilot headless turn printed nothing: the tool definitions probably overflow the context; trim your MCP servers"
+  wait $pid; rc=$?
+  if (( rc )); then bad "copilot headless turn exited $rc: $(head -1 $ERR)"
+  elif [[ -s $OUT ]]; then ok "copilot headless turn returned output"
+  else bad "copilot headless turn printed nothing: the tool definitions probably overflow the context; trim your MCP servers"
+  fi
 fi
 exit $fail

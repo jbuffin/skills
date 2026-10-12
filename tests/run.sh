@@ -653,7 +653,7 @@ sorted() { print -r -- ${(j:,:)${(o)${(f)F[$1]}}}; }
 toolsig() { print -r -- "avail=$(sorted --available-tools) allow=$(sorted --allow-tool) deny=$(sorted --deny-tool) all=${F[--allow-all-tools]-} model=${F[--model]-} adddir=${F[--add-dir]-} s=${F[-s]-}${F[--silent]-}"; }
 UUID='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 READ_ALLOW=( 'shell(git log)' 'shell(git show)' 'shell(git diff)' 'shell(git status)' 'shell(gh pr view)' 'shell(gh pr diff)' 'shell(gh issue view)' )
-WRITE_DENY=( 'shell(git push)' 'shell(gh pr merge)' 'shell(gh pr create)' 'shell(gh api)' 'shell(gh issue)' )
+WRITE_DENY=( 'shell(git push:*)' 'shell(gh pr merge:*)' 'shell(gh pr create:*)' 'shell(gh api:*)' 'shell(gh issue:*)' )
 
 # ---- AC1, AC2, AC4, engineer decisions: the command lines ------------------------------------------------------------
 cpwant cp-argv && {
@@ -942,6 +942,90 @@ cpwant cp-preflight && {
   [[ $RC == 1 ]] || P+="exit $RC, want 1"
   grep -qiE '^FAIL.*(no output|empty|nothing|overflow|context)' $SC/out || P+="no FAIL line about the headless turn printing nothing"
   cpverdict "CP preflight FAILs when the headless turn prints nothing (the context-overflow symptom)"
+}
+
+# ---- Fix round 1: preflight failures, resume activity, send waits, a launch that dies, stale reports ----------------
+cpwant cp-round1 && {
+  cpmk cp-preflight-stderr
+  xrun FAKE_COPILOT_MODE=stderr $AT/drivers/copilot/preflight $D; cpnote "preflight, stderr-only copilot"
+  P=()
+  cp_calls 1 || P+="no copilot call logged: the preflight ran no headless turn"
+  [[ $RC == 1 ]] || P+="exit $RC, want 1 (stdout was empty; the message went to stderr)"
+  grep -qiE '^FAIL.*(no output|empty|nothing|overflow|context)' $SC/out || P+="no FAIL line about the headless turn printing nothing"
+  cpverdict "CP preflight FAILs when the turn's only output is on stderr"
+
+  cpmk cp-preflight-fail
+  xrun FAKE_COPILOT_MODE=fail $AT/drivers/copilot/preflight $D; cpnote "preflight, failing copilot"
+  P=()
+  cp_calls 1 || P+="no copilot call logged: the preflight ran no headless turn"
+  [[ $RC == 1 ]] || P+="exit $RC, want 1"
+  grep -q '^FAIL.*exited 1.*fake copilot failed' $SC/out || P+="no FAIL line with the exit code and the first stderr line"
+  grep -q '^OK.*returned output' $SC/out && P+="an OK line for a turn that exited 1"
+  cpverdict "CP preflight FAILs, quoting stderr, when the headless turn exits non-zero"
+
+  cpmk cp-launch-dies
+  txrun FAKE_COPILOT_MODE=fail $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (fails at once)"
+  P=()
+  [[ $RC == 124 ]] && P+="launch hung"
+  (( RC )) || P+="launch-teammate.sh exit 0 although copilot exited 1 at once"
+  grep -q 'exited at once' $SC/out || P+="no 'exited at once' message; stdout: $(head -c 200 $SC/out)"
+  [[ -z $(awk '$1=="w1"' $D/teammates.tsv) ]] || P+="a failed launch was registered"
+  cpverdict "CP launch exits non-zero, registering nothing, when copilot dies at once"
+
+  # a resume's fresh start is activity: stale events.jsonl must not read as a stall
+  cpmk cp-resume-activity
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1
+  txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_TS=$((NOW - 1800)) $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (stay, stale events)"
+  await 10 cp_lock w1
+  xrun $AT/drivers/copilot/status $D; cpnote "status"
+  P=()
+  [[ $(cpact w1) == $NOW ]] || P+="last activity is '$(cpact w1)', want $NOW (the resume's start; events.jsonl is 30 min old)"
+  xrun_watch 1 $AT/watch-teammates.sh $D
+  cp_alive || P+="the resumed fake copilot isn't running"
+  grep -q '^STALL' $SC/out && P+="STALL for a teammate that was just resumed: $(head -c 200 $SC/out)"
+  reap_fakes
+  cpverdict "CP a fresh resume counts as activity: status reports its start, no STALL"
+
+  # send refuses, after waiting, while the previous turn runs
+  cpmk cp-send-busy
+  txrun FAKE_COPILOT_MODE=stay $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stay)"
+  await 10 cp_lock w1
+  CPSTOP=0; txrun COPILOT_SEND_WAIT=1 $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (busy)"
+  P=()
+  (( RC )) || P+="retask.sh exit 0 while the previous turn is still running"
+  grep -q 'still running' $SC/out || P+="no 'still running' message; stdout: $(head -c 200 $SC/out)"
+  [[ $(awk '$1=="w1" {n++} END {print n}' $D/teammates.tsv) == 1 ]] || P+="a refused re-task was recorded"
+  pp=(${(f)"$(cp_pids)"}); (( $#pp == 1 )) || P+="a second copilot run started: $pp"
+  reap_fakes
+  cpverdict "CP send refuses, recording nothing, while the previous turn is still running"
+
+  cpmk cp-send-wait
+  txrun FAKE_COPILOT_MODE=stay FAKE_COPILOT_STAY_MAX=2 $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1 (stays 2 s)"
+  await 10 cp_lock w1
+  CPSTOP=0; txrun COPILOT_SEND_WAIT=20 $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (waits)"
+  await 10 cp_settled 2
+  P=()
+  [[ $RC == 0 ]] || P+="retask.sh exit $RC, want 0 after waiting for the previous turn to end"
+  cp_runs 2 || P+="no resumed run"
+  reap_fakes
+  cpverdict "CP send waits for a turn that is ending, then resumes"
+
+  # a read-only resume with no final message leaves the earlier report alone
+  cpmk cp-report-stale
+  txrun FAKE_COPILOT_SAY='first report' $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  await 10 cp_has $D/reports/t1.done; await 5 cp_settled 1
+  : > $SC/oldref; settime 1500000001 $SC/oldref; settime 1500000000 $D/reports/t1.md $D/reports/t1.done
+  txrun FAKE_COPILOT_MODE=silent $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1 (silent)"
+  await 10 cp_settled 2
+  /bin/sleep 1.5
+  P=()
+  cp_runs 2 || P+="no silent resume ran"
+  [[ -f $D/reports/t1.md && $(<$D/reports/t1.md) == 'first report' ]] || P+="reports/t1.md holds '$(head -c 100 $D/reports/t1.md 2>/dev/null)', want the first report"
+  [[ ! $D/reports/t1.md -nt $SC/oldref ]] || P+="reports/t1.md was rewritten by the silent resume"
+  [[ ! $D/reports/t1.done -nt $SC/oldref ]] || P+="reports/t1.done was touched by the silent resume"
+  reap_fakes
+  cpverdict "CP a silent read-only resume doesn't rewrite the report from the earlier turn's message"
 }
 
 # ---- AC7: ADVISOR n/a (copilot). detect-harness.sh knows only claude (#63), so a scratch tree whose detection says copilot.

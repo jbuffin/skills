@@ -12,6 +12,8 @@ for f in $D/copilot-*(N); do
   [[ -n $(cp_get $f stopped) ]] && state=stopped
   ev=$(cp_events $id); act=$(cp_get $f started)
   [[ -f $ev ]] && act=$(stat -f %m $ev)
+  # A resume's fresh start counts as activity until the new turn writes an event.
+  r=$(cp_get $f resumed); [[ -n $r && ( $act == - || $r -gt $act ) ]] && act=$r
   echo "$id - $state ${act:--}"
 done
 exit 0

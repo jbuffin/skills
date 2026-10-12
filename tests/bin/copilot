@@ -83,7 +83,7 @@ if [ "$mode" = stay ]; then
   done
 fi
 
-if [ "$mode" != silent ]; then
+if [ "$mode" = exit ] || [ "$mode" = stay ]; then
   event assistant.message "{\"content\":\"$say\",\"toolRequests\":[],\"turnId\":\"1\"}"
 fi
 event assistant.turn_end '{"turnId":"1"}'
@@ -94,5 +94,10 @@ if [ -n "$FAKE_COPILOT_DONE" ]; then
   TZ=UTC touch -t "$tstamp" "$FAKE_COPILOT_DONE"
 fi
 rm -f "$sd/inuse.$$.lock" "$sd/inuse.$$.hold"
-if [ "$mode" != silent ]; then echo "$say"; fi
+case "$mode" in
+  stderr) echo "$say" >&2 ;;
+  fail) echo "error: fake copilot failed" >&2; exit 1 ;;
+  silent) ;;
+  *) echo "$say" ;;
+esac
 exit 0
