@@ -41,7 +41,7 @@ Every test fails, and for the right reason. Prefer deterministic seams to sample
 
 Make the tests pass with code that reads like the code around it and follows the project's rules. Run the full suites, lint, and any UI or integration tests the brief names, and commit on the unit's branch. Then, after the last commit, run each declared proof (`<teammates>/evidence.sh <run> <name> <label>`) and put `commit: <sha>` in the report. Report where you departed from the source of truth, and why.
 
-Then wait for the coordinator's next job the way the teammate contract says. On a fix round, apply the findings, re-run everything, commit, run the proofs again, overwrite the report and touch `.done`. When you disagree with a finding, say why in the report.
+Then end your turn the way the teammate contract says. On a fix round, apply the findings, re-run everything, commit, run the proofs again, overwrite the report and touch `.done`. When you disagree with a finding, say why in the report.
 
 ## Reviewer
 
