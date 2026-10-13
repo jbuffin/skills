@@ -1464,7 +1464,7 @@ cpwant cp-ac7 && {
 # ======================================================================================================================
 # C1: nothing outside the drivers calls claude or copilot or reads their transcripts.
 # ======================================================================================================================
-shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineering/commodore/scripts $ROOT/incubator/setup-commodore/scripts )
+shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineering/commodore/scripts $ROOT/skills/engineering/setup-commodore/scripts )
 shared_code() {  # shared_code <egrep-pattern>: matching non-comment lines in shared scripts, as file:line:text
   local f
   find $shared \( -path '*/drivers/claude' -o -path '*/drivers/codex' -o -path '*/drivers/copilot' \) -prune -o -type f -print | LC_ALL=C sort | while read -r f; do
@@ -2827,9 +2827,8 @@ want setup && {
     $'unslop\t@SB@/w/setup-copilot-list/repo/.claude/skills/unslop/SKILL.md')"
   verdict "SETUP copilot list-skills: COPILOT_HOME, repo, built-in skills and the newest CLI's agents, each one has-skill accepts"
 
-  # roles-draft.sh runs from the incubator, next to the skills tree, as in the repo.
-  mkdir -p $SB/src/incubator; cp -R $ROOT/incubator/setup-commodore $SB/src/incubator/
-  RDS=$SB/src/incubator/setup-commodore/scripts/roles-draft.sh
+  # roles-draft.sh runs next to commodore and agent-teammates, as when installed.
+  RDS=$SKILLS/setup-commodore/scripts/roles-draft.sh
   rd_sc() {  # rd_sc <scenario>: rk_sc plus a git repo with one commit, and a clean place outside any repo
     rk_sc $1; rm -rf $SC/repo
     local g=(env -i PATH=/usr/bin:/bin HOME=$SC/home GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1)

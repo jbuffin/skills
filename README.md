@@ -19,6 +19,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 | `agent-teammates` | Launches, watches, re-tasks and closes teammates as background agent sessions on the harness the run starts in (Claude Code, Codex and Copilot CLI are supported), with a report-and-marker contract, a watchdog and proof checks. |
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
+| `setup-commodore` | Picks installed skills for each Commodore role with you, drafts how they combine, and saves the role-override file for just you or for the whole repo. |
 
 ## Layout
 
