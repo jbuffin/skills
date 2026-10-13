@@ -1,5 +1,23 @@
 # jasonbuffin-skills
 
+## 2.0.0
+
+### Major Changes
+
+- [#86](https://github.com/jbuffin/skills/pull/86) [`53f5a55`](https://github.com/jbuffin/skills/commit/53f5a5555d9a1c9e65b480fa92158715a7f6638f) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore resolves each role's skills from override files instead of the profile's free-text line: user-global `~/.config/commodore/roles.json`, the repo's committed `.commodore/roles.json`, and the run's own `roles.json`, set only from the engineer's prompt or what they say while the profile is written (ADR 0004). Each file maps a role to an ordered `skills` list and optional `instructions`. The new `commodore/scripts/role-skills.sh` resolves them and prints the profile's table, and drops a skill the harness can't load, using the new optional `has-skill` driver operation and the `SKILL_PREFIX` (`/` or `$`) declaration. Breaking: Commodore no longer defaults to `/code-review` or `/security-review`, and the profile's free-text skill line is gone. Each role section in `roles.md` is split into a contract that always applies and a minimal fallback. With no security role skill, no security reviewer is launched, the run's decision batch asks the engineer to approve that, and `team-preflight.sh` warns about it.
+
+### Minor Changes
+
+- [#87](https://github.com/jbuffin/skills/pull/87) [`9594a31`](https://github.com/jbuffin/skills/commit/9594a3170f88214ec74652eda82622000bdf43c0) Thanks [@jbuffin](https://github.com/jbuffin)! - agent-teammates drivers gain an optional `list-skills <team-dir>` operation. It prints one `<name><TAB><file>` line for each skill the harness can load for the run's repo. Each driver's `has-skill` and `list-skills` now share one search in `skills.zsh`, so the two always agree. A new incubator skill, `setup-commodore`, uses it to write Commodore role-override files interactively.
+
+- [#88](https://github.com/jbuffin/skills/pull/88) [`fb184b8`](https://github.com/jbuffin/skills/commit/fb184b84f04601757fa160e99e155ff6ead737ce) Thanks [@jbuffin](https://github.com/jbuffin)! - Promote `setup-commodore` out of the incubator into `skills/engineering`, so `npx skills add` and the Claude Code plugin install it next to `commodore`. It walks you through choosing the skills for each Commodore role and saves the role-override file for just you or for the whole repo.
+
+### Patch Changes
+
+- [#87](https://github.com/jbuffin/skills/pull/87) [`9594a31`](https://github.com/jbuffin/skills/commit/9594a3170f88214ec74652eda82622000bdf43c0) Thanks [@jbuffin](https://github.com/jbuffin)! - The Claude Code agent-teammates driver's `has-skill` and `list-skills` now find every installed plugin's skills: a project-scoped plugin no longer stops the search and drops the plugins listed after it. They also find the plugins and skills synced from claude.ai (`plugins/synced/`, `skills/synced/`), so Commodore role skills from those sources resolve instead of being dropped as missing.
+
+- [#82](https://github.com/jbuffin/skills/pull/82) [`9f27d4e`](https://github.com/jbuffin/skills/commit/9f27d4ee0b265eac93141de05c2405331a95986d) Thanks [@jbuffin](https://github.com/jbuffin)! - Copilot writer teammates can run the skill scripts again. Copilot's path guard refused `evidence.sh` (and `secret-run.sh` and `push-branch.sh`) because they live outside the writer's added directories, so `verify-report.sh` always said `unverified` for a Copilot writer. Writer launches and resumes now also get `--add-dir` for the agent-teammates scripts directory and for `PREFLIGHT_SCRIPTS` and `TEAM_SCRIPTS` from `team.env`. Read-only runs keep their flags. `drivers/copilot/preflight` runs a second, writer turn that calls `evidence.sh` and fails, naming the path guard, when it can't. The Copilot reference lists the directories (checked on Copilot CLI 1.0.96) and adds a security caveat: a writer can now edit those scripts.
+
 ## 1.3.0
 
 ### Minor Changes
