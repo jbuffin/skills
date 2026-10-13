@@ -2798,7 +2798,7 @@ want setup && {
   rk_skill $SC/cfg/plugins/cache/mkt/mp/0.9/skills/eng gone   # a stale cached version installed_plugins.json doesn't list
   rk_skill $SC/cfg/plugins/cache/mkt/other/1.0/skills notmine   # project-scoped to another repo
   rk_skill $SC/repo/.claude/skills tdd                          # the same name twice: the user's is listed
-  print -r -- '{"version": 2, "plugins": {"mp@mkt": [{"scope": "user", "installPath": "'$SC'/cfg/plugins/cache/mkt/mp/1.0"}], "other@mkt": [{"scope": "project", "projectPath": "'$SC'/elsewhere", "installPath": "'$SC'/cfg/plugins/cache/mkt/other/1.0"}]}}' > $SC/cfg/plugins/installed_plugins.json
+  print -r -- '{"version": 2, "plugins": {"other@mkt": [{"scope": "project", "projectPath": "'$SC'/elsewhere", "installPath": "'$SC'/cfg/plugins/cache/mkt/other/1.0"}], "mp@mkt": [{"scope": "user", "installPath": "'$SC'/cfg/plugins/cache/mkt/mp/1.0"}]}}' > $SC/cfg/plugins/installed_plugins.json   # project-scoped first: it must not stop the search
   ls_is claude "$(print -rl -- claude-api code-review fewer-permission-prompts init keybindings-help loop \
     $'pr\t@SB@/w/setup-claude-list/cfg/plugins/cache/mkt/mp/1.0/skills/eng/pr/SKILL.md' \
     $'repo-review\t@SB@/w/setup-claude-list/repo/.claude/skills/repo-review/SKILL.md' \
