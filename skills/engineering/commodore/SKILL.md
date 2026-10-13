@@ -34,7 +34,7 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 - The **mode** is how the work is split into worktrees and delivered. The shape and size of the work decide it.
 - **Proof** is the evidence logs a teammate's declared commands leave behind (agent-teammates' `evidence.sh`), checked by its `verify-report.sh`. A report without proof is a claim.
 - **Carry-forward checks** are checks a unit defers to a later one, such as "re-run the migration test once u3 lands". Each names the unit that owes it.
-- A **role skill** is a skill a teammate in a role runs within its role contract. A role can have several, run in order, or none, and then it follows its fallback; the security reviewer with none isn't launched.
+- A **role skill** is a skill a teammate in a role runs within its role contract. A role can have several, run in order, or none, and then it follows its fallback.
 - A **role contract** is the part of a role that always applies, whatever skill runs: its inputs, launch flags, scope, report, done signal, proofs and safety rules.
 - An **override layer** is one of the places a role skill is set: built-in (empty), user-global, repo, then the run.
 - `<run>` is the run directory. `<team>`, `<teammates>` and `<preflight>` are the script directories of this skill, agent-teammates and run-preflight. `team-init.sh` prints all four and writes the script directories to `team.env` as resolved literal paths. Briefs and allow rules use those literal paths.
@@ -131,7 +131,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
       - Force-pushes go only through `<team>/push-branch.sh`, which pushes the run's own branches with `--force-with-lease` and nothing else.
       - Review rounds cap at 3. After that, a PR comment hands what's left to a human.
       - Anything the engineer names stays untouched.
-      - When the security reviewer has no role skill: the run goes ahead without a security review. The run doesn't start until the engineer approves this.
+      - With no security role skill, the run has no security reviewer. It starts only once the engineer approves that.
 
       Record the answers in `state.md`. The rest of the run reads its ground rules from there.
    3. Run `<team>/team-preflight.sh <run>` in the background or with the maximum Bash timeout. It does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and, where the harness has an advisor, probes it with one real session per distinct teammate model, which can take about 5 minutes. Otherwise it prints `ADVISOR n/a`. On a `WARN  ADVISOR OFF` line, follow "When the advisor is off" in the harness reference before you launch anyone.
