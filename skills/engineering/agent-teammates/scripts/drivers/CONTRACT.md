@@ -68,6 +68,12 @@ Prints `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>` as its last line;
 
 Exits 0 when the harness can load the skill `<name>` (a bare name, no prefix) for the run's repo (`REPO` in `team.env`), and 1 when it can't. It looks wherever the harness finds skills: the repo, the user's own skills, installed plugins and the skills built into the CLI. It reads `team.env` and writes nothing. commodore's `role-skills.sh` drops a skill this rejects. A driver without `has-skill` makes every named skill count as available, with a warning.
 
+### list-skills
+
+`list-skills <team-dir>` (optional)
+
+Prints one `<name><TAB><file>` line for each skill the harness can load for the run's repo, sorted by name, each name once. The names are the ones `has-skill` accepts, by bare name, so build both from one search (each driver's `skills.zsh`). `<file>` is the skill's `SKILL.md`, or another file with a `description:` line such as a Copilot agent's `.agent.yaml`, and `-` when no file describes it, as for a skill built into the Claude Code CLI. It reads `team.env` and writes nothing. `setup-commodore` lists candidate role skills with it.
+
 ### preflight
 
 `preflight <run-dir>` (optional)

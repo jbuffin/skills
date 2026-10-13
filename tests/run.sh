@@ -1464,7 +1464,7 @@ cpwant cp-ac7 && {
 # ======================================================================================================================
 # C1: nothing outside the drivers calls claude or copilot or reads their transcripts.
 # ======================================================================================================================
-shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineering/commodore/scripts )
+shared=( $ROOT/skills/engineering/agent-teammates/scripts $ROOT/skills/engineering/commodore/scripts $ROOT/incubator/setup-commodore/scripts )
 shared_code() {  # shared_code <egrep-pattern>: matching non-comment lines in shared scripts, as file:line:text
   local f
   find $shared \( -path '*/drivers/claude' -o -path '*/drivers/codex' -o -path '*/drivers/copilot' \) -prune -o -type f -print | LC_ALL=C sort | while read -r f; do
@@ -1702,7 +1702,7 @@ want d2 && {
   [[ ! -e $DRV/send ]] && pass "D2 no send executable" || fail "D2 no send executable" "${DRV#$ROOT/}/send exists; send goes through the SendMessage tool"
   if [[ -f $DRV/driver.env ]] && grep -q '^LIVE_MESSAGING=1$' $DRV/driver.env && grep -q '^SEND=tool$' $DRV/driver.env; then pass "D2 driver.env declares LIVE_MESSAGING=1 and SEND=tool"
   else fail "D2 driver.env declares LIVE_MESSAGING=1 and SEND=tool" "${DRV#$ROOT/}/driver.env: $([[ -f $DRV/driver.env ]] && echo "lacks LIVE_MESSAGING=1 or SEND=tool" || echo missing)"; fi
-  undoc=(); for op in launch status tail stop send advisor-probe has-skill preflight; do grep -E '^### ' ${DRV:h}/CONTRACT.md 2>/dev/null | grep -q -- "$op" || undoc+=$op; done
+  undoc=(); for op in launch status tail stop send advisor-probe has-skill list-skills preflight; do grep -E '^### ' ${DRV:h}/CONTRACT.md 2>/dev/null | grep -q -- "$op" || undoc+=$op; done
   (( $#undoc )) && fail "D2 CONTRACT.md documents every operation" "no section heading mentions: ${undoc[*]}" || pass "D2 CONTRACT.md documents every operation"
 }
 
@@ -2779,6 +2779,156 @@ want roles && {
   xrun CLAUDECODE=1 $CM/team-preflight.sh $D; rc_is 1
   grep -q "^FAIL  role skills: .*$SC/repo/.commodore/roles.json" $SC/out || P+="no FAIL line naming the file: $(grep role $SC/out | head -3 | tr '\n' '|')"
   verdict "ROLES team-preflight fails on an override file that isn't valid JSON"
+}
+
+# ======================================================================================================================
+# SETUP: each driver's list-skills names the skills its has-skill accepts (issue #83), and setup-commodore's
+# roles-draft.sh drafts, checks and saves a role-override file. Assertion style. `tests/run.sh setup` runs just these.
+# ======================================================================================================================
+DRVS=$SKILLS/agent-teammates/scripts/drivers
+ls_is() {  # ls_is <harness> <expected output>: list-skills prints exactly this, and has-skill accepts every name in it
+  xrun $DRVS/$1/list-skills $D; rc_is 0
+  local got n; got=$(norm < $SC/out)
+  [[ $got == "$2" ]] || P+="list-skills printed:"$'\n'"$got"$'\n'"want:"$'\n'"$2"
+  for n in ${(f)"$(cut -f1 $SC/out)"}; do env -i $BASE $DRVS/$1/has-skill $D $n || P+="has-skill rejects listed $n"; done
+}
+want setup && {
+  rk_sc setup-claude-list
+  rk_skill $SC/cfg/skills tdd; rk_skill $SC/repo/.claude/skills repo-review; rk_skill $SC/cfg/plugins/cache/mkt/mp/1.0/skills/eng pr
+  rk_skill $SC/cfg/plugins/cache/mkt/mp/0.9/skills/eng gone   # a stale cached version installed_plugins.json doesn't list
+  rk_skill $SC/cfg/plugins/cache/mkt/other/1.0/skills notmine   # project-scoped to another repo
+  rk_skill $SC/repo/.claude/skills tdd                          # the same name twice: the user's is listed
+  print -r -- '{"version": 2, "plugins": {"other@mkt": [{"scope": "project", "projectPath": "'$SC'/elsewhere", "installPath": "'$SC'/cfg/plugins/cache/mkt/other/1.0"}], "mp@mkt": [{"scope": "user", "installPath": "'$SC'/cfg/plugins/cache/mkt/mp/1.0"}]}}' > $SC/cfg/plugins/installed_plugins.json   # project-scoped first: it must not stop the search
+  ls_is claude "$(print -rl -- claude-api code-review fewer-permission-prompts init keybindings-help loop \
+    $'pr\t@SB@/w/setup-claude-list/cfg/plugins/cache/mkt/mp/1.0/skills/eng/pr/SKILL.md' \
+    $'repo-review\t@SB@/w/setup-claude-list/repo/.claude/skills/repo-review/SKILL.md' \
+    run schedule security-review simplify \
+    $'tdd\t@SB@/w/setup-claude-list/cfg/skills/tdd/SKILL.md' update-config | sed $'/\t/!s/$/\t-/')"
+  verdict "SETUP claude list-skills: plugin, user, repo and built-in skills, sorted, each one has-skill accepts"
+
+  rk_sc setup-codex-list codex
+  rk_skill $SC/codex-home/skills/.system review-agent; rk_skill $SC/home/.agents/skills tdd; rk_skill $SC/repo/.agents/skills pr
+  rk_skill $SC/codex-home/plugins/cache/mkt/mp/1.0/skills/eng unslop
+  ls_is codex "$(print -rl -- \
+    $'pr\t@SB@/w/setup-codex-list/repo/.agents/skills/pr/SKILL.md' \
+    $'review-agent\t@SB@/w/setup-codex-list/codex-home/skills/.system/review-agent/SKILL.md' \
+    $'tdd\t@SB@/w/setup-codex-list/home/.agents/skills/tdd/SKILL.md' \
+    $'unslop\t@SB@/w/setup-codex-list/codex-home/plugins/cache/mkt/mp/1.0/skills/eng/unslop/SKILL.md')"
+  verdict "SETUP codex list-skills: ~/.agents, CODEX_HOME (.system too), plugin and repo skills, each one has-skill accepts"
+
+  rk_sc setup-copilot-list copilot
+  rk_skill $SC/copilot-home/skills tdd; rk_skill $SC/repo/.github/skills pr; rk_skill $SC/repo/.claude/skills unslop
+  mkdir -p $SC/copilot-home/pkg/darwin-arm64/{1.0.96,1.0.9}/definitions $SC/copilot-home/pkg/darwin-arm64/1.0.96/builtin-skills/pr-media
+  : > $SC/copilot-home/pkg/darwin-arm64/1.0.96/definitions/security-review.agent.yaml
+  : > $SC/copilot-home/pkg/darwin-arm64/1.0.9/definitions/code-review.agent.yaml   # only in an older CLI version
+  ls_is copilot "$(print -rl -- \
+    $'pr\t@SB@/w/setup-copilot-list/repo/.github/skills/pr/SKILL.md' 'pr-media	-' $'security-review\t@SB@/w/setup-copilot-list/copilot-home/pkg/darwin-arm64/1.0.96/definitions/security-review.agent.yaml' \
+    $'tdd\t@SB@/w/setup-copilot-list/copilot-home/skills/tdd/SKILL.md' \
+    $'unslop\t@SB@/w/setup-copilot-list/repo/.claude/skills/unslop/SKILL.md')"
+  verdict "SETUP copilot list-skills: COPILOT_HOME, repo, built-in skills and the newest CLI's agents, each one has-skill accepts"
+
+  # roles-draft.sh runs from the incubator, next to the skills tree, as in the repo.
+  mkdir -p $SB/src/incubator; cp -R $ROOT/incubator/setup-commodore $SB/src/incubator/
+  RDS=$SB/src/incubator/setup-commodore/scripts/roles-draft.sh
+  rd_sc() {  # rd_sc <scenario>: rk_sc plus a git repo with one commit, and a clean place outside any repo
+    rk_sc $1; rm -rf $SC/repo
+    local g=(env -i PATH=/usr/bin:/bin HOME=$SC/home GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1)
+    $g git init -q $SC/repo; $g git -C $SC/repo -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m init
+    mkdir -p $SC/outside
+  }
+  rd() {  # rd [VAR=val ...] <args...>: roles-draft.sh run from the repo (RDCWD overrides), CLAUDECODE=1 unless given
+    local v=(); while [[ $1 == *=* ]]; do v+=$1; shift; done
+    ( cd ${RDCWD:-$SC/repo} && exec env -i $BASE CLAUDECODE=1 $v $RDS "$@" ) > $SC/out 2> $SC/err
+    RC=$?
+  }
+  rd_run() { RUN=$(sed -n 1p $SC/out); [[ -d $RUN && -f $RUN/team.env ]] || P+="init's first line isn't a run dir: $(head -c 200 $SC/out | tr '\n' '|')"; }
+  out_line() { grep -qxF -- "$1" $SC/out || P+="no line '$1' in: $(head -c 400 $SC/out | tr '\n' '|')"; }
+  repo_clean() { [[ -z $(git -C $SC/repo status --porcelain 2>&1) ]] || P+="the repo changed: $(git -C $SC/repo status --porcelain | tr '\n' '|')"; }
+
+  rd_sc setup-init-new; rd init user; rc_is 0; rd_run
+  out_line "NEW $SC/xdg/commodore/roles.json"
+  out_line "ROLES $SB/src/skills/engineering/commodore/references/roles.md"
+  [[ $(<$RUN/draft.json) == '{}' ]] || P+="draft isn't {}: $(<$RUN/draft.json)"
+  grep -qx 'HARNESS=claude' $RUN/team.env || P+="team.env lacks HARNESS=claude"
+  grep -qx "REPO=$SC/repo" $RUN/team.env || P+="team.env lacks REPO=$SC/repo"
+  repo_clean
+  verdict "SETUP init: a scratch run dir with HARNESS and REPO, and an empty draft when the target file doesn't exist"
+
+  rd_sc setup-init-existing; rk_repo '{"scribe": {"skills": ["pr"], "instructions": "keep"}}'
+  rd init repo; rc_is 0; rd_run
+  out_line "FROM $SC/repo/.commodore/roles.json"
+  [[ $(jq -c . $RUN/draft.json) == '{"scribe":{"skills":["pr"],"instructions":"keep"}}' ]] || P+="draft isn't the repo file: $(<$RUN/draft.json)"
+  verdict "SETUP init: the draft starts from the target file's entries"
+
+  rd_sc setup-init-harness; rd CLAUDECODE= init user; rc_is 5; err_has 'harness'
+  rd CLAUDECODE= init user codex; rc_is 0; rd_run
+  grep -qx 'HARNESS=codex' $RUN/team.env || P+="team.env lacks HARNESS=codex"
+  RDCWD=$SC/outside rd init repo; rc_is 5; err_has 'git'
+  rd init team; rc_is 5
+  rd; rc_is 5; grep -q shift $SC/err && P+="no-argument call printed a shift error"
+  rd init user; RUN=$(sed -n 1p $SC/out)
+  grep -qx 'TARGET=user' $RUN/team.env || P+="team.env lacks TARGET=user"
+  verdict "SETUP init: refuses without one harness (unless named), a repo target outside a repo, and an unknown target"
+
+  rd_sc setup-skills
+  mkdir -p $SC/cfg/skills/tdd; print -rl -- '---' 'name: tdd' 'description: test skill' '---' > $SC/cfg/skills/tdd/SKILL.md
+  mkdir -p $SC/cfg/skills/pr; print -rl -- '---' 'name: pr' 'description: >-' '  Write a PR body.' '  Use when opening a PR.' 'other: x' '---' > $SC/cfg/skills/pr/SKILL.md
+  mkdir -p $SC/cfg/skills/quoted; print -rl -- '---' 'name: quoted' 'description: "Says: hi"' '---' > $SC/cfg/skills/quoted/SKILL.md
+  mkdir -p $SC/cfg/skills/nodesc; print -rl -- '---' 'name: nodesc' '---' 'description: body text' > $SC/cfg/skills/nodesc/SKILL.md
+  rd init user; RUN=$(sed -n 1p $SC/out); rd skills $RUN; rc_is 0
+  out_line "tdd"$'\t'"$SC/cfg/skills/tdd/SKILL.md"$'\t'"test skill"
+  out_line "pr"$'\t'"$SC/cfg/skills/pr/SKILL.md"$'\t'"Write a PR body. Use when opening a PR."
+  out_line "quoted"$'\t'"$SC/cfg/skills/quoted/SKILL.md"$'\t'"Says: hi"
+  out_line $'code-review\t-\t-'
+  out_line "nodesc"$'\t'"$SC/cfg/skills/nodesc/SKILL.md"$'\t'"-"
+  verdict "SETUP skills: each available skill with its description (folded and quoted ones too), - for a built-in"
+
+  rd_sc setup-check-user; for n in tdd pr; do rk_skill $SC/cfg/skills $n; done
+  rk_repo '{"implementer": {"skills": ["missing-in-repo"]}, "triager": {"skills": ["gone-from-repo"]}}'
+  rd init user; RUN=$(sed -n 1p $SC/out)
+  print -r -- '{"implementer": {"skills": ["pr"]}, "scribe": {"skills": ["pr", "missing"]}, "reviewer": {"skills": ["x"], "agent": "y"}}' > $RUN/draft.json
+  rd check $RUN; rc_is 0
+  row_is implementer '| implementer | `/pr` | - | draft |'
+  row_is scribe '| scribe | `/pr` | - | draft |'
+  grep -q '^| triager ' $SC/out && P+="showed a row the draft doesn't decide"
+  out_line 'WARN  scribe: skill /missing is not available on claude; dropped'
+  out_line 'WARN  reviewer: skill /x is not available on claude; dropped'
+  out_line 'WARN  draft: reviewer: unknown field "agent" skipped'
+  out_line "SHADOWED implementer: $SC/repo/.commodore/roles.json sets it, so this entry does nothing in this repo"
+  out_line "UNSET triager: the repo's file decides, else the fallback"
+  grep -qE 'gone-from-repo|missing-in-repo|security-reviewer has no' $SC/out && P+="showed a warning the draft doesn't cause"
+  out_line 'NOT CLEAN: 3 warnings'
+  [[ $(git -C $SC/repo status --porcelain --untracked-files=all) == '?? .commodore/roles.json' ]] || P+="check wrote to the repo"
+  verdict "SETUP check user: the draft's own rows and warnings, shadowing by the repo, UNSET roles, NOT CLEAN"
+
+  rd_sc setup-check-repo; rk_skill $SC/cfg/skills pr; rk_user '{"scribe": {"skills": ["missing-in-user"]}}'
+  rk_repo '{"reviewer": {"skills": ["nonexistent-x"], "instructions": "old"}, "scribe": {"skills": ["pr"]}}'
+  rd init repo; RUN=$(sed -n 1p $SC/out)
+  print -r -- '{"scribe": {"skills": ["/pr"]}, "security-reviewer": {"skills": []}}' > $RUN/draft.json
+  rd check $RUN; rc_is 0
+  row_is scribe '| scribe | `/pr` | - | draft |'
+  row_is security-reviewer '| security-reviewer | none: not launched | - | draft |'
+  grep -qE '^\| reviewer |nonexistent-x|old' $SC/out && P+="showed the entry the draft removed from the repo file"
+  out_line "UNSET reviewer: each engineer's user-global file decides, else the fallback"
+  out_line 'WARN  security-reviewer has no role skill: no security review this run'
+  out_line 'CLEAN'
+  grep -q SHADOWED $SC/out && P+="a repo entry can't be shadowed"
+  print -r -- '{"scribe": ' > $RUN/draft.json; rd check $RUN; rc_is 1; err_has 'draft'
+  verdict "SETUP check repo: rows only for the draft's roles, a removed entry shows as UNSET, CLEAN; invalid JSON exits 1"
+
+  rd_sc setup-save-user; rd init user; RUN=$(sed -n 1p $SC/out)
+  print -r -- '{"scribe": {"skills": "/pr", "instructions": "Draft with pr."}, "reviewer": {"skills": ["$code-review", "unslop"]}}' > $RUN/draft.json
+  rd save $RUN; rc_is 0
+  out_line "SAVED $SC/xdg/commodore/roles.json"
+  [[ $(jq -c . $SC/xdg/commodore/roles.json 2>&1) == '{"scribe":{"skills":["pr"],"instructions":"Draft with pr."},"reviewer":{"skills":["code-review","unslop"]}}' ]] || P+="saved: $(<$SC/xdg/commodore/roles.json)"
+  repo_clean
+  print -r -- '{"scribe": ' > $RUN/draft.json; rd save $RUN; rc_is 1
+  [[ $(jq -c .reviewer.skills $SC/xdg/commodore/roles.json) == '["code-review","unslop"]' ]] || P+="an invalid draft overwrote the saved file"
+  rd save $RUN repo; rc_is 5
+  rd init repo; RUN=$(sed -n 1p $SC/out); print -r -- '{"scribe": {"skills": ["pr"]}}' > $RUN/draft.json
+  rd save $RUN; rc_is 0
+  [[ $(git -C $SC/repo status --porcelain --untracked-files=all) == '?? .commodore/roles.json' ]] || P+="repo save wrote more than .commodore/roles.json"
+  verdict "SETUP save: writes only the init target's file, as ordered arrays of bare names; refuses an invalid draft or another target"
 }
 
 # ======================================================================================================================
