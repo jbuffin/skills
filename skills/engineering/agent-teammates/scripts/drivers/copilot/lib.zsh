@@ -15,8 +15,8 @@ cp_alive() {
 # The agent-teammates scripts directory, from this file's own location (drivers/copilot/lib.zsh), so it needs no commodore.
 CP_SCRIPTS=${${(%):-%x}:A:h:h:h}
 # cp_extra_dirs <team.env>: sets CP_EXTRA to the dirs a writer run adds beside its team dir: the scripts dir, then
-# PREFLIGHT_SCRIPTS and TEAM_SCRIPTS from the file. Those two are read as data (the KEY=value line, never sourced) and
-# count only when they are absolute paths to existing directories. A dir that is already in the list is not added again.
+# PREFLIGHT_SCRIPTS and TEAM_SCRIPTS from the file. Those two are read as data (the literal KEY=value line) and count
+# only when the value is an absolute path to an existing directory and a path string not already in the list.
 cp_extra_dirs() {
   local k v
   CP_EXTRA=($CP_SCRIPTS)
@@ -41,7 +41,7 @@ cp_flags() {
     CP_FLAGS+=(--available-tools bash view glob grep --deny-tool=write --allow-tool
       'shell(git log)' 'shell(git show)' 'shell(git diff)' 'shell(git status)' 'shell(gh pr view)' 'shell(gh pr diff)' 'shell(gh issue view)')
   else
-    for d in "${@:6}"; do [[ $d != $3 ]] && CP_FLAGS+=(--add-dir $d); done
+    for d in "${@:6}"; do [[ $d != "$3" ]] && CP_FLAGS+=(--add-dir $d); done
     CP_FLAGS+=(--available-tools bash view edit create glob grep --allow-all-tools --deny-tool
       'shell(git push:*)' 'shell(gh pr merge:*)' 'shell(gh pr create:*)' 'shell(gh api:*)' 'shell(gh issue:*)')
   fi
