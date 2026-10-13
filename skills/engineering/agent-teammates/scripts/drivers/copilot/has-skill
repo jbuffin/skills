@@ -1,0 +1,19 @@
+#!/bin/zsh
+# usage: has-skill <team-dir> <name>   (see ../CONTRACT.md)
+# Exits 0 when Copilot CLI can load skill <name> for the run's repo, 1 when it can't. Looks in the repo's .github/skills,
+# .agents/skills and .claude/skills, $COPILOT_HOME/skills and ~/.agents/skills, then the CLI's built-in skills and the
+# built-in agents behind its slash commands (`/security-review` runs the security-review agent).
+[[ $# -eq 2 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+[[ -f $D/team.env ]] && source $D/team.env   # REPO and the harness's config dirs; read only, so the run dir is untouched
+REPO=${REPO:-$WORKTREE}   # an old team.env has WORKTREE and no REPO
+CH=${COPILOT_HOME:-$HOME/.copilot}
+n=$2
+[[ $n =~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' ]] || exit 1
+# Only the newest installed CLI version counts: older versions stay under pkg/<platform>/<version> after an upgrade.
+pkg=$(for d in $CH/pkg/*/*/definitions(/N:h); do print -r -- "${d:t} $d"; done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+pkg=(${pkg#* })
+set -- $CH/skills/$n/SKILL.md(N) $HOME/.agents/skills/$n/SKILL.md(N)
+(( $#pkg )) && set -- "$@" $pkg/builtin-skills/$n(N) $pkg/definitions/$n.agent.yaml(N)
+[[ -n $REPO ]] && set -- "$@" $REPO/.github/skills/$n/SKILL.md(N) $REPO/.agents/skills/$n/SKILL.md(N) $REPO/.claude/skills/$n/SKILL.md(N)
+(( $# )) && exit 0 || exit 1

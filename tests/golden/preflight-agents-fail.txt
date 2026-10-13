@@ -5,6 +5,7 @@ OK    claude found
 FAIL  claude agents --json failed; background sessions unavailable; teammates would fall back to in-process subagents
 OK    repository is trusted for background sessions
 OK    advisor on for sonnet (default)
+WARN  security-reviewer has no role skill: no security review this run
 OK    git found
 OK    repository @SB@/w/preflight-agents-fail/repo
 OK    git identity set

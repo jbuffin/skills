@@ -47,7 +47,6 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 | --- | --- |
 | Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer |
 | Send searches to a subagent | There are no subagents. Search yourself, narrowly |
-| Run `/code-review` or `/security-review` | Those are Claude Code skills. Do the equivalent review the role's section in `references/roles.md` describes, by hand |
 | An allow rule is a `Bash(…)` line in settings | Teammates need only the two `git` rules in agent-teammates' "The `~/.codex/rules` lines". Your own calls (`gh`, the `<teammates>` and `<team>` scripts, file writes) stay out of `~/.codex/rules`, for the reason that section gives; the engineer approves them for your session through Codex's own approval |
 | A read-only role runs `gh` (`gh pr diff`, `gh pr view`, `gh issue view`) | Read-only Codex roles have no network. You fetch that data into files in the run directory and name them in the brief (see "Read-only roles have no network") |
 | An exact allow rule for each `evidence.sh` proof, or for each `gh api graphql` reply | Write neither. A prefix rule can't be exact, and `evidence.sh … -- <command>` would run anything. Writers run `evidence.sh` inside their sandbox. You post every GitHub reply, review and push yourself |

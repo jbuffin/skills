@@ -4,6 +4,7 @@ FAIL  claude not on PATH
 FAIL  claude agents --json failed; background sessions unavailable; teammates would fall back to in-process subagents
 OK    repository is trusted for background sessions
 OK    advisor on for sonnet (default)
+WARN  security-reviewer has no role skill: no security review this run
 OK    git found
 OK    repository @SB@/w/preflight-no-claude/repo
 OK    git identity set

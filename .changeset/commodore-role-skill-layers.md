@@ -1,0 +1,5 @@
+---
+"jasonbuffin-skills": major
+---
+
+Commodore resolves each role's skills from override files instead of the profile's free-text line: user-global `~/.config/commodore/roles.json`, the repo's committed `.commodore/roles.json`, and the run's own `roles.json`, set only from the engineer's prompt or what they say while the profile is written (ADR 0004). Each file maps a role to an ordered `skills` list and optional `instructions`. The new `commodore/scripts/role-skills.sh` resolves them and prints the profile's table, and drops a skill the harness can't load, using the new optional `has-skill` driver operation and the `SKILL_PREFIX` (`/` or `$`) declaration. Breaking: Commodore no longer defaults to `/code-review` or `/security-review`, and the profile's free-text skill line is gone. Each role section in `roles.md` is split into a contract that always applies and a minimal fallback. With no security role skill, no security reviewer is launched, the run's decision batch asks the engineer to approve that, and `team-preflight.sh` warns about it.

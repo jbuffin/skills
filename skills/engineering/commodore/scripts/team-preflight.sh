@@ -1,6 +1,6 @@
 #!/bin/zsh
 # usage: team-preflight.sh <run-dir>
-# The team-specific static checks (runtime, mode, gh-stack, worktrees, advisor), then the generic ones from the
+# The team-specific static checks (runtime, mode, gh-stack, advisor, worktrees, role skills), then the generic ones from the
 # run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
 # Run it in the background or with a long timeout: it starts one real session per distinct teammate model (in
 # parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
@@ -99,6 +99,14 @@ if [[ -d $REPO ]]; then
     [[ " ${WORKTREE_SETUP} " == *":$f "* ]] || unlisted+=$f
   done
   (( ${#unlisted} )) && warn "ignored in the checkout, so absent from new worktrees: ${(j:, :)unlisted}. Add each one the build or tests read to WORKTREE_SETUP (copy: or clone:)"
+fi
+# Role skills (docs/adr/0004): the resolver's warnings pass through (a dropped skill, a security reviewer without one);
+# an override file it can't read fails.
+if rs=$(${0:A:h}/role-skills.sh $1 2>&1 >/dev/null); then
+  [[ -n $rs ]] && print -r -- $rs
+else
+  [[ $rs == *$'\n'* ]] && print -r -- ${rs%$'\n'*}
+  bad "role skills: ${rs##*$'\n'}"
 fi
 ${SKILLS_DIR:-${0:A:h:h:h}}/run-preflight/scripts/preflight.sh $1 || fail=1
 exit $fail

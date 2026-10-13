@@ -32,7 +32,7 @@ Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktrees below in place of st
    - A changed file is named `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` or `.mcp.json` at any depth, sits under a `.claude/` directory at any depth, or is imported with `@`, directly or through another import, by any of those files at the base or the head.
 
    Show the engineer the commands and the matching files, with the changed-file list, and launch nobody until they explicitly say to go ahead. On a no, skip to phase 3 step 6 and end with `result: partial` and the reason.
-7. Write the profile (SKILL.md step 1). Fill what applies and set the rest to `n/a`. The stop rule is "one review posted on the PR, or the engineer declines to post". Set `MODEL_<ROLE>` only for the roles this run launches. Copy the profile's ignored files the build reads into `WORKTREE_SETUP` in `team.env`.
+7. Write the profile (SKILL.md step 1). Fill what applies and set the rest to `n/a`. The stop rule is "one review posted on the PR, or the engineer declines to post". Set `MODEL_<ROLE>` only for the roles this run launches. When the security reviewer has no role skill, tell the engineer the review will have no security lens, and launch it without one only once they say to go ahead. Copy the profile's ignored files the build reads into `WORKTREE_SETUP` in `team.env`.
 8. Decide on the target steward. Launch it only when the PR changes something a user would touch: UI, an API, a CLI's output, a skill's or tool's behaviour. Tests, CI config and internal refactors alone don't count. When the PR is from a fork (`isCrossRepository` is true), the steward would run code from outside the repo on this machine, with the `WORKTREE_SETUP` files copied in. Ask the engineer first, listing the `copy:` entries, and skip the steward if they say no. For a fork, leave out any entry that holds secrets (such as `.env`) unless the engineer says otherwise. Record the call and the reason in `state.md`.
 9. When the steward runs, choose the target (SKILL.md step 3) and give the steward its own worktree at the same head, so its build output never touches the reviewers' worktree or their `verify-report.sh` check:
 
@@ -50,7 +50,7 @@ Phase 1 is done when `state.md` holds the PR's two SHAs, the source of truth, th
 
 ## Phase 2: one review round
 
-Write each brief following [Briefs](../SKILL.md#briefs) in SKILL.md. The unit is the PR, the worktree is the review worktree, and done means a report on the full range. Give the reviewer and the security reviewer their [`roles.md`](roles.md) sections as written. These differ from a build unit:
+Write each brief following [Briefs](../SKILL.md#briefs) in SKILL.md. The unit is the PR, the worktree is the review worktree, and done means a report on the full range. Give the reviewer and the security reviewer their [`roles.md`](roles.md) contracts as written, with their role skills or the reviewer's fallback. Launch the security reviewer only when it has a role skill. These differ from a build unit:
 
 - The range is the PR's full range, `<baseRefOid>...<headRefOid>`.
 - The source of truth is the one recorded in phase 1.

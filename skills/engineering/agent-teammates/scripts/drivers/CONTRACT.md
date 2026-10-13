@@ -4,10 +4,11 @@ Every harness has a folder here (`claude/`, `codex/`, `copilot/`) holding a `dri
 
 ## Declarations
 
-Each `driver.env` sets two values and holds nothing else the contract cares about:
+Each `driver.env` sets three values and holds nothing else the contract cares about:
 
 - `LIVE_MESSAGING`: `1` when a live teammate can be sent new work, so the coordinator keeps its session open between rounds. `0` when a teammate works one turn at a time.
 - `SEND`: `tool` when sending is a harness tool call (the driver has no `send` executable), `script` when `retask.sh` calls the driver's `send`.
+- `SKILL_PREFIX`: what goes before a skill's name to invoke it: `/` (Claude Code, Copilot CLI) or `$` (Codex). commodore's `role-skills.sh` reads this line.
 
 ## Operations
 
@@ -60,6 +61,12 @@ Reserved for drivers that declare `SEND=script` (read by `retask.sh`). Gives the
 `advisor-probe <team-dir> <model>`
 
 Prints `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>` as its last line; exits 0 either way. A driver with no `advisor-probe` makes `team-preflight` print `ADVISOR n/a (<harness>)`.
+
+### has-skill
+
+`has-skill <team-dir> <name>` (optional)
+
+Exits 0 when the harness can load the skill `<name>` (a bare name, no prefix) for the run's repo (`REPO` in `team.env`), and 1 when it can't. It looks wherever the harness finds skills: the repo, the user's own skills, installed plugins and the skills built into the CLI. It reads `team.env` and writes nothing. commodore's `role-skills.sh` drops a skill this rejects. A driver without `has-skill` makes every named skill count as available, with a warning.
 
 ### preflight
 

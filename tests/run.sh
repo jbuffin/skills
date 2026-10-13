@@ -26,6 +26,9 @@
 #       REPO over WORKTREE. The RESEND and D2 checks read drivers/CONTRACT.md. The tail-* and init-* goldens were
 #       edited by hand to match; `--record` would revert them.
 #   U5  Copilot passes any well-formed effort through to the CLI (which validates it), and claude launch without its CLI.
+#   ROLES role-skills.sh resolves the role-skill override layers (issue #71, ADR 0004), each driver's has-skill finds
+#       installed skills, and team-preflight passes the warnings through. The preflight-* goldens were edited by hand
+#       to add the security reviewer's warning; `--record` would revert them. `tests/run.sh roles` runs just these.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -1699,7 +1702,7 @@ want d2 && {
   [[ ! -e $DRV/send ]] && pass "D2 no send executable" || fail "D2 no send executable" "${DRV#$ROOT/}/send exists; send goes through the SendMessage tool"
   if [[ -f $DRV/driver.env ]] && grep -q '^LIVE_MESSAGING=1$' $DRV/driver.env && grep -q '^SEND=tool$' $DRV/driver.env; then pass "D2 driver.env declares LIVE_MESSAGING=1 and SEND=tool"
   else fail "D2 driver.env declares LIVE_MESSAGING=1 and SEND=tool" "${DRV#$ROOT/}/driver.env: $([[ -f $DRV/driver.env ]] && echo "lacks LIVE_MESSAGING=1 or SEND=tool" || echo missing)"; fi
-  undoc=(); for op in launch status tail stop send advisor-probe preflight; do grep -E '^### ' ${DRV:h}/CONTRACT.md 2>/dev/null | grep -q -- "$op" || undoc+=$op; done
+  undoc=(); for op in launch status tail stop send advisor-probe has-skill preflight; do grep -E '^### ' ${DRV:h}/CONTRACT.md 2>/dev/null | grep -q -- "$op" || undoc+=$op; done
   (( $#undoc )) && fail "D2 CONTRACT.md documents every operation" "no section heading mentions: ${undoc[*]}" || pass "D2 CONTRACT.md documents every operation"
 }
 
@@ -2626,6 +2629,156 @@ want u4-watch-ci && {
   grep -q '^WORKTREE=' $D/team.env && ! grep -q '^REPO=' $D/team.env || P+="fixture: want a team.env with WORKTREE only"
   xrun PATH=$SC/ghbin:$SANDBOX_PATH $CM/watch-ci.sh $D feat ci.yml; u4_ci_check
   verdict "U4 guard: watch-ci.sh still works from an old team.env that has WORKTREE and no REPO"
+}
+
+# ======================================================================================================================
+# ROLES: role-skills.sh resolves a run's role skills from the override layers (issue #71, ADR 0004): built-in (empty),
+# user-global $XDG_CONFIG_HOME/commodore/roles.json, repo .commodore/roles.json, then the run's own roles.json.
+# Assertion style: each check compares whole table rows with literals. `tests/run.sh roles` runs just these.
+# ======================================================================================================================
+rk_sc() {  # rk_sc <scenario> [harness]: a run with its own XDG config, harness homes and repo, and no override files
+  HL=HARNESS=${2:-claude}; mk $1; HL=
+  mkdir -p $SC/xdg $SC/codex-home $SC/copilot-home
+  BASE+=( XDG_CONFIG_HOME=$SC/xdg CODEX_HOME=$SC/codex-home COPILOT_HOME=$SC/copilot-home )
+}
+rk_user() { mkdir -p $SC/xdg/commodore; print -r -- "$1" > $SC/xdg/commodore/roles.json; }
+rk_repo() { mkdir -p $SC/repo/.commodore; print -r -- "$1" > $SC/repo/.commodore/roles.json; }
+rk_run()  { print -r -- "$1" > $D/roles.json; }
+rk_skill() { mkdir -p $1/$2; print -r -- "---\nname: $2\ndescription: test skill\n---" > $1/$2/SKILL.md; }  # rk_skill <skills-dir> <name>
+rk() { xrun $CM/role-skills.sh $D; }
+row_is() {  # row_is <role> <expected row>: the table has exactly this row for the role
+  local got; got=$(grep -E "^[|] $1 [|]" $SC/out)
+  [[ $got == "$2" ]] || P+="row for $1: got '${got:-(none)}', want '$2'"
+}
+rc_is() { [[ $RC == $1 ]] || P+="exit $RC, want $1; stderr: $(head -c 300 $SC/err | tr '\n' '|')"; }
+err_has() { grep -qF -- "$1" $SC/err || P+="stderr lacks '$1': $(head -c 300 $SC/err | tr '\n' '|')"; }
+want roles && {
+  rk_sc roles-none; rk
+  rc_is 0
+  [[ $(sed -n 1,2p $SC/out) == $'| Role | Skills | Instructions | Source |\n| --- | --- | --- | --- |' ]] || P+="header: $(sed -n 1,2p $SC/out | tr '\n' '|')"
+  row_is implementer '| implementer | none (fallback procedure) | - | built-in |'
+  row_is scribe '| scribe | none (fallback procedure) | - | built-in |'
+  row_is security-reviewer '| security-reviewer | none: not launched | - | built-in |'
+  (( $(grep -c '^| [a-z]' $SC/out) == 8 )) || P+="want 8 role rows, got $(grep -c '^| [a-z]' $SC/out) lines"
+  err_has 'WARN  security-reviewer has no role skill: no security review this run'
+  verdict "ROLES no override files: every role has no skills, and the security reviewer isn't launched"
+
+  rk_sc roles-order; for n in tdd repo-tdd pr unslop code-review; do rk_skill $SC/cfg/skills $n; done
+  rk_user '{"implementer": {"skills": ["tdd"], "instructions": "user note"}, "scribe": {"skills": ["pr", "unslop"], "instructions": "Draft with pr, then run unslop."}, "reviewer": {"skills": ["code-review"]}}'
+  rk; rc_is 0
+  row_is scribe '| scribe | `/pr`, `/unslop` | Draft with pr, then run unslop. | user |'
+  row_is reviewer '| reviewer | `/code-review` | - | user |'
+  verdict "ROLES user-global layer: skills keep their order, with instructions and source"
+
+  rk_repo '{"implementer": {"skills": ["repo-tdd"]}, "reviewer": {"skills": []}}'
+  rk_run '{"scribe": {"skills": ["pr"]}}'
+  rk; rc_is 0
+  row_is implementer '| implementer | `/repo-tdd` | - | repo |'
+  row_is reviewer '| reviewer | none (fallback procedure) | - | repo |'
+  row_is scribe '| scribe | `/pr` | - | run |'
+  row_is test-writer '| test-writer | none (fallback procedure) | - | built-in |'
+  verdict "ROLES repo beats user and run beats repo, each replacing the whole role entry; [] clears"
+
+  rk_sc roles-tolerant; for n in tdd pr unslop; do rk_skill $SC/cfg/skills $n; done
+  rk_repo '{"implementer": {"skills": "/tdd"}, "scribe": {"skills": ["/pr", "$unslop"], "instructions": "a | b\nc"}}'
+  rk; rc_is 0
+  row_is implementer '| implementer | `/tdd` | - | repo |'
+  row_is scribe '| scribe | `/pr`, `/unslop` | a \| b<br>c | repo |'
+  [[ -s $SC/err ]] && grep -v 'security-reviewer has no role skill' $SC/err | grep -q . && P+="unexpected warnings: $(head -c 300 $SC/err | tr '\n' '|')"
+  verdict "ROLES a string counts as one skill, a leading / or \$ is stripped quietly, and instructions fit a table cell"
+
+  rk_sc roles-unknown; rk_skill $SC/cfg/skills tdd
+  rk_repo '{"writer": {"skills": ["pr"]}, "implementer": {"skills": ["tdd", 42, "bad name"], "agent": "x"}, "reviewer": "code-review"}'
+  rk; rc_is 0
+  row_is implementer '| implementer | `/tdd` | - | repo |'
+  row_is reviewer '| reviewer | none (fallback procedure) | - | built-in |'
+  grep -q '^| writer ' $SC/out && P+="the unknown role reached the table"
+  err_has "$SC/repo/.commodore/roles.json: unknown role \"writer\" skipped"
+  err_has 'implementer: unknown field "agent" skipped'
+  err_has 'implementer: skill 42 is not a skill name; dropped'
+  err_has 'implementer: skill "bad name" is not a skill name; dropped'
+  err_has 'reviewer: its entry is not an object; skipped'
+  verdict "ROLES unknown roles, fields and bad names are warned about and skipped, and the rest resolves"
+
+  rk_sc roles-badjson; rk_user '{"implementer": {"skills": ["tdd"]}}'; rk_repo '{"implementer": '
+  rk; rc_is 1
+  out_has "$SC/repo/.commodore/roles.json"
+  grep -q '^| ' $SC/out && P+="printed a table despite the invalid file"
+  verdict "ROLES invalid JSON stops resolution, naming the file"
+
+  rk_sc roles-notobject; rk_run '["implementer"]'
+  rk; rc_is 1
+  out_has "$D/roles.json"
+  verdict "ROLES a layer that isn't a JSON object stops resolution, naming the file"
+
+  rk_sc roles-empty; print -r -- "  " > $SC/xdg/roles.tmp; mkdir -p $SC/xdg/commodore; mv $SC/xdg/roles.tmp $SC/xdg/commodore/roles.json
+  rk; rc_is 1
+  err_has "$SC/xdg/commodore/roles.json isn't a valid override file"
+  verdict "ROLES an empty override file stops resolution, naming the file"
+
+  # Availability: each harness's driver answers `has-skill`; a skill it can't find is dropped with a warning.
+  rk_sc roles-claude-avail
+  rk_skill $SC/cfg/skills tdd; rk_skill $SC/repo/.claude/skills repo-review; rk_skill $SC/cfg/plugins/cache/mkt/mp/1.0/skills/eng pr
+  rk_skill $SC/cfg/plugins/cache/mkt/mp/0.9/skills/eng gone   # a stale cached version installed_plugins.json doesn't list
+  print -r -- '{"version": 2, "plugins": {"mp@mkt": [{"scope": "user", "installPath": "'$SC'/cfg/plugins/cache/mkt/mp/1.0"}]}}' > $SC/cfg/plugins/installed_plugins.json
+  rk_repo '{"implementer": {"skills": ["tdd", "nope"]}, "reviewer": {"skills": ["repo-review"]}, "security-reviewer": {"skills": ["security-review"]}, "scribe": {"skills": ["mp:pr", "mp:gone"]}, "triager": {"skills": ["missing"]}}'
+  rk; rc_is 0
+  row_is implementer '| implementer | `/tdd` | - | repo |'
+  row_is reviewer '| reviewer | `/repo-review` | - | repo |'
+  row_is security-reviewer '| security-reviewer | `/security-review` | - | repo |'
+  row_is scribe '| scribe | `/mp:pr` | - | repo |'
+  row_is triager '| triager | none (fallback procedure) | - | repo |'
+  err_has 'implementer: skill /nope is not available on claude; dropped'
+  err_has 'scribe: skill /mp:gone is not available on claude; dropped'
+  err_has 'triager: skill /missing is not available on claude; dropped'
+  grep -q 'no security review' $SC/err && P+="warned about the security reviewer, which has a built-in skill"
+  verdict "ROLES claude: user, repo, plugin and built-in skills are available; others are dropped, keeping the rest"
+
+  rk_sc roles-codex-avail codex
+  rk_skill $SC/codex-home/skills/.system review-agent; rk_skill $SC/home/.agents/skills tdd; rk_skill $SC/repo/.agents/skills pr
+  rk_user '{"implementer": {"skills": ["/tdd"]}, "reviewer": {"skills": ["review-agent"]}, "scribe": {"skills": ["pr"]}, "security-reviewer": {"skills": ["security-review"]}}'
+  rk; rc_is 0
+  row_is implementer '| implementer | `$tdd` | - | user |'
+  row_is reviewer '| reviewer | `$review-agent` | - | user |'
+  row_is scribe '| scribe | `$pr` | - | user |'
+  row_is security-reviewer '| security-reviewer | none: not launched | - | user |'
+  err_has 'security-reviewer: skill $security-review is not available on codex; dropped'
+  err_has 'security-reviewer has no role skill: no security review this run'
+  verdict "ROLES codex: \$ prefix, CODEX_HOME, ~/.agents and repo skills; a security reviewer whose skills all drop isn't launched"
+
+  rk_sc roles-copilot-avail copilot
+  rk_skill $SC/copilot-home/skills tdd; rk_skill $SC/repo/.github/skills pr
+  mkdir -p $SC/copilot-home/pkg/darwin-arm64/{1.0.96,1.0.9}/definitions; : > $SC/copilot-home/pkg/darwin-arm64/1.0.96/definitions/security-review.agent.yaml
+  : > $SC/copilot-home/pkg/darwin-arm64/1.0.9/definitions/code-review.agent.yaml   # only in an older CLI version
+  rk_run '{"implementer": {"skills": ["tdd"]}, "scribe": {"skills": ["pr"]}, "security-reviewer": {"skills": ["security-review"]}, "reviewer": {"skills": ["code-review"]}}'
+  rk; rc_is 0
+  row_is implementer '| implementer | `/tdd` | - | run |'
+  row_is scribe '| scribe | `/pr` | - | run |'
+  row_is security-reviewer '| security-reviewer | `/security-review` | - | run |'
+  row_is reviewer '| reviewer | none (fallback procedure) | - | run |'
+  err_has 'reviewer: skill /code-review is not available on copilot; dropped'
+  verdict "ROLES copilot: COPILOT_HOME, repo and built-in agent skills are available; others are dropped"
+
+  rk_sc roles-nocheck; [[ -d $RT ]] || cp -R $SKILLS $RT; rdrv ok 'LIVE_MESSAGING=0' 'SEND=script'
+  print -r -- "HARNESS=other" >> $D/team.env
+  rk_repo '{"implementer": {"skills": ["tdd"]}}'
+  xrun $RT/commodore/scripts/role-skills.sh $D; rc_is 0
+  row_is implementer '| implementer | `/tdd` | - | repo |'
+  err_has "can't check which skills are installed on other"
+  verdict "ROLES a driver without has-skill keeps every named skill and says it couldn't check"
+
+  # Preflight passes the resolver's warnings through, and fails on an override file it can't read.
+  pf_sc roles-preflight; rk_repo '{"implementer": {"skills": ["nope"]}}'
+  xrun CLAUDECODE=1 $CM/team-preflight.sh $D; rc_is 0
+  out_has 'WARN  implementer: skill /nope is not available on claude; dropped'
+  out_has 'WARN  security-reviewer has no role skill: no security review this run'
+  [[ -e $D/teammates.tsv || -d $D/reports ]] && P+="checking skills wrote to the run directory"
+  verdict "ROLES team-preflight warns about each dropped skill and a security reviewer without one"
+
+  pf_sc roles-preflight-bad; rk_repo '{"implementer": '
+  xrun CLAUDECODE=1 $CM/team-preflight.sh $D; rc_is 1
+  grep -q "^FAIL  role skills: .*$SC/repo/.commodore/roles.json" $SC/out || P+="no FAIL line naming the file: $(grep role $SC/out | head -3 | tr '\n' '|')"
+  verdict "ROLES team-preflight fails on an override file that isn't valid JSON"
 }
 
 # ======================================================================================================================

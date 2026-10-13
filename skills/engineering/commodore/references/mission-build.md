@@ -25,7 +25,7 @@ The workflow is fixed, but the task force changes with the work. Pick each unit'
 | Test writer | writes the unit's failing tests (or checks, for non-code work) from the source of truth | the behaviour can be pinned by tests or scripted checks |
 | Implementer | builds the unit, then stays alive to fix its own findings | always |
 | Reviewer | reviews the diff against the source of truth, fresh each round | always |
-| Security reviewer | reviews the same diff for security vulnerabilities only | always |
+| Security reviewer | reviews the same diff for security vulnerabilities only | the run has a security role skill (without one, the engineer approved skipping it in the decision batch) |
 | Target steward | owns the target for the whole run, does a light check each unit and full evaluations on target-evaluation's cadence | the work runs somewhere a user would touch it |
 | Scribe | PR bodies, round-cap PR comments, notes | unless the run is tiny |
 
@@ -37,12 +37,12 @@ For each unit:
 2. The test writer goes red. Its tests all fail, and for the right reason.
 3. The implementer goes green. Its suites and lint pass, the work is committed in the unit's worktree, and its proof verifies. Once it commits, start the next unit's test writer, as long as the next unit's source doesn't depend on this unit's review.
 4. Review and evaluation run in parallel.
-   - A fresh reviewer, launched `--read-only --role reviewer`, runs the review skill on the diff.
-   - A fresh security reviewer, launched `--read-only --role security-reviewer`, runs the profile's security review skill. Its brief gives the profile's security settings and the exact range to review: `<unit base>...HEAD` in round 1, where the unit base is the previous unit's branch, or the base branch for the first unit and in other modes, and `<last reviewed SHA>..HEAD` after. Record the last reviewed SHA in `state.md` each round.
+   - A fresh reviewer, launched `--read-only --role reviewer`, reviews the diff with its role skills, or its fallback when it has none.
+   - A fresh security reviewer, launched `--read-only --role security-reviewer`, runs its role skills. Its brief gives the profile's security settings and the exact range to review: `<unit base>...HEAD` in round 1, where the unit base is the previous unit's branch, or the base branch for the first unit and in other modes, and `<last reviewed SHA>..HEAD` after. Record the last reviewed SHA in `state.md` each round.
    - The steward does the light check, and a full evaluation when target-evaluation's cadence calls for one (each unit counts as one change).
    - Keep a running list of unfixed non-blocking findings in `state.md` across rounds: add each round's, and drop the ones a fix round resolves.
 
-   Done when all three reports are in: the reviewer's, the security reviewer's and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6.
+   Done when every report is in: the reviewer's, the security reviewer's when the run has one, and the light check's. If neither reviewer reported a blocking finding and the light check passed, go to step 6.
 5. Run fix rounds. Merge both reviewers' findings into one numbered list, label each with its source (reviewer / security), and write it to the [job file](../SKILL.md#re-task-job-files) the Phase 2 rule points to. Re-task the unit's implementer with that file, the way the re-tasking paragraph in agent-teammates' `SKILL.md` says (`retask.sh` or `retasked.sh`).
    - When fixes conflict, the security fix wins, and you record the decision in `state.md`.
    - The implementer may also fix trivial non-blocking findings, but only in a round that already has blocking fixes, so they never cause an extra round. Trivial means a few lines inside the unit's own files with no other change in behaviour. Its report lists which non-blocking findings it fixed.
@@ -59,7 +59,7 @@ Unit N: <unit> (<PR or branch>, <state>)
 Built: <one line>   Tests: <counts>   Target (<option used>): <light check passed/failed; full eval yes/no>
 Advisor: <on | off for <roles>: <reason> | n/a (<harness>)>
 Review: round k of cap, <fixed / left for human>
-Security: <fixed / left for human / none>   Non-blocking: <n recorded>
+Security: <fixed / left for human / none / not reviewed: no security role skill>   Non-blocking: <n recorded>
 Proof: <verify-report verdict>   Criteria closed: <ids from the trace>
 CI: <green / red / running>
 Not checked: <what nobody ran or looked at, and why | nothing>
@@ -85,5 +85,5 @@ The run ends when the stop rule is observed on the target it names. Opening the 
    If any check fails, the run is partial. Say exactly which checks failed.
 3. Close every teammate, stop the watchdog and the CI watchers, and leave the target in the agreed state. List every worktree from `worktrees.tsv` with its branch and whether it's clean. Remove them only when the engineer says so.
 4. Leave the delivery the way the ground rules say. Every PR at the round cap has its human-review comment.
-5. Write the final report: units and PRs, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why. Write the same `result:` line into `state.md`, under `## Mode, phase, current unit`.
+5. Write the final report: units and PRs, "no security review: no security role skill" when the run had no security reviewer, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why. Write the same `result:` line into `state.md`, under `## Mode, phase, current unit`.
 6. Lessons go to the repo's own docs, as a proposed edit for the engineer to accept, whenever the run tripped over a missing or wrong instruction there.

@@ -88,10 +88,11 @@ and approve every reply before you leave, and the fixes and replies land on the 
 - **`gh-stack` 0.2.0 or later** for stack mode: `gh extension install github/gh-stack`. Also installable
   as a skill (`npx skills add github/gh-stack`), which the stack mode reads if it's there.
 - **Optional:** `cmux` or `tmux` for viewer panes on each teammate (`VIEWER` in `team.env`, Claude-only).
-- **Optional role skills.** The profile can name a skill per role. The examples (`/tdd`, `/code-review`,
-  `/pr`) come from [mattpocock/skills](https://github.com/mattpocock/skills):
-  `npx skills add mattpocock/skills`. A role with no skill named follows its section in
-  `commodore/references/roles.md`.
+- **Role skills.** Commodore names no skills for its roles: each role runs a minimal fallback, and the
+  security reviewer runs only with a skill. Set skills per role in `~/.config/commodore/roles.json` (just you)
+  or `.commodore/roles.json` (everyone on the repo), for example
+  `{"scribe": {"skills": ["pr", "unslop"], "instructions": "Draft with pr, then run unslop."}}`. The format and
+  the layers are in `commodore/SKILL.md` (Role skills) and `docs/adr/0004-role-skills-resolve-from-layered-json.md`.
 
 `commodore/scripts/team-preflight.sh` checks most of this at the start of a run.
 
