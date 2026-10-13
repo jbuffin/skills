@@ -37,30 +37,41 @@ For each role, compare each description with the role's contract and fallback. R
 
 Done when every role has a ranked list, possibly empty.
 
-## 3. Settle each role
+## 3. Pick skills from a checklist
 
-Go through the roles in this order: `implementer`, `test-writer`, `reviewer`, `security-reviewer`, `brief-checker`, `triager`, `target-steward`, `scribe`. For each role:
+Ask for the picks as checklists, four roles per prompt, in this order: `implementer`, `test-writer`, `reviewer`, `security-reviewer`, then `brief-checker`, `triager`, `target-steward`, `scribe`.
 
-1. Show its entry in the draft, if any, and its ranked candidates. The engineer picks zero, one or several skills and puts them in order, or keeps the entry as it is.
-2. For picked skills, read each one's `<file>`, then draft `instructions`:
+- **On Claude Code:** one `AskUserQuestion` call per four roles, one multi-select question per role. The options are three skills, each described by its one-line reason, then `None`. The skills in the role's current entry come first, marked `(current)`, and its best candidates fill the rest. The tool's own "Other" line takes skill names the checklist missed.
+- **On a harness without a multiple-choice tool:** one message listing every role with its numbered candidates, answered in one reply, e.g. `implementer: 2,1  reviewer: none  scribe: 1, unslop`.
+
+Done when every role has its picks, even if that's none.
+
+## 4. Approve the entries
+
+Draft every role's entry, then get them approved in one batch.
+
+1. Order each role's picks, and for a role with skills, read each one's `<file>` and draft `instructions`:
    - the order the skills run in and what each one's output feeds into, e.g. "Draft the PR body with `pr`, then run `unslop` over it.";
    - every step that clashes with the role's contract, resolved in the contract's favour. The contract wins over any skill or instruction, so the instructions bend each skill to the contract and keep every contract item: read-only, the report, proofs, the triager's data rule. Example: `tdd`'s confirm-the-seams step and its vertical slices clash with a separate red test writer and green implementer. The test writer takes the seams from the brief and writes the failing tests without asking, and the implementer makes them pass.
-3. Show the entry as JSON. Write it into `<run>/draft.json` only once the engineer approves it, edited or as drafted. Go to the next role only after approval.
-4. For a role with no skills, tell the engineer what that means, then record their choice:
-   - Leave the role out of the file, and a lower layer decides. Below the repo file, that's each engineer's user-global file. Below the user-global file there's only the fallback.
-   - Write `"skills": []`, and the role gets the fallback even where a lower layer sets skills.
+
+   When the picks match the current entry's skills, start from its instructions.
+2. Show every drafted entry together as JSON.
+3. Ask for approval as checklists too, four roles per prompt. A role with skills gets `Approve` and `Edit…`, where "Other" carries the edit. A role with none gets two choices, each described by what it means:
+   - `Leave out`: a lower layer decides. Below the repo file, that's each engineer's user-global file. Below the user-global file there's only the fallback.
+   - `Clear with []`: the fallback, even where a lower layer sets skills.
 
    The fallback is the role's fallback procedure, with two exceptions. A security reviewer with no skills isn't launched at all. Every run puts that in its phase 1 decision batch and won't start without approval. In the review mission, the review waits for approval. The target steward always runs `target-evaluation`, which no layer replaces, and any role skills run within that skill's rules.
+4. Write each approved entry into `<run>/draft.json`. Redraft each edited one and ask about those roles again.
 
-Done when every role has an approved entry or a deliberate choice to leave it out or clear it.
+Done when every role has an approved entry, or an approved choice to leave it out or clear it, in `<run>/draft.json`.
 
-## 4. Check the draft
+## 5. Check the draft
 
 Run `scripts/roles-draft.sh check <run>` and show the engineer the table and each `UNSET` line. Settle each `WARN` line with them: fix the entry, or keep a skill this harness lacks because they use it on another harness. Exit 1 means the draft isn't valid JSON. Fix it and run the check again.
 
 Done when it prints `CLEAN`, or the engineer has accepted each remaining warning.
 
-## 5. Save
+## 6. Save
 
 Show the whole draft and the file it replaces, and get the engineer's go-ahead. To save to the other target instead, start again from step 1 with that target, so its file's entries load first. Before saving, tell the engineer:
 
