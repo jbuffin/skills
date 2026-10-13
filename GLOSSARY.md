@@ -15,3 +15,9 @@
 **Harness**: the agent CLI a run is started from (Claude Code, Codex or Copilot CLI). The coordinator and every teammate in the run use it, and it decides how teammates are launched, messaged, watched and stopped. _Avoid_: runtime, backend, agent CLI.
 
 **Advisor**: a stronger model built into the harness and paired with a teammate's session, which sees the teammate's own transcript when the teammate consults it. A sub-agent the teammate has to brief or fork through its prompt is not an advisor, so a harness without one reports the advisor as not available. _Avoid_: second opinion, rubber duck, consultant.
+
+**Role skill**: a skill a teammate in a role runs within its role contract. A role can have several, run in order, or none. With none, the role follows its fallback procedure, except the security reviewer, which isn't launched. _Avoid_: role tool, persona skill.
+
+**Role contract**: the part of a role that always applies, whatever role skill runs: its inputs, launch flags, scope, report, done signal, proofs and safety rules. A role skill or its instructions can't override it. _Avoid_: role rules, base prompt.
+
+**Override layer**: one of the places a role skill is set, in precedence order: built-in (empty), user-global, repo, then the run, which only the engineer's prompt or the profile can set. _Avoid_: config level, scope, tier.
