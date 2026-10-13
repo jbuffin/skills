@@ -2,8 +2,6 @@
 name: setup-commodore
 description: Writes a Commodore role-override file with you, one role at a time. It picks installed skills for each role, drafts how they combine, and saves the file for just you or for everyone on the repo. Use when setting up which skills Commodore's roles run, or rerun it to update the file when skills change.
 disable-model-invocation: true
-metadata:
-  internal: true
 ---
 
 # Setup Commodore
