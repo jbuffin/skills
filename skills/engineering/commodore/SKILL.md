@@ -34,6 +34,9 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 - The **mode** is how the work is split into worktrees and delivered. The shape and size of the work decide it.
 - **Proof** is the evidence logs a teammate's declared commands leave behind (agent-teammates' `evidence.sh`), checked by its `verify-report.sh`. A report without proof is a claim.
 - **Carry-forward checks** are checks a unit defers to a later one, such as "re-run the migration test once u3 lands". Each names the unit that owes it.
+- A **role skill** is a skill a teammate in a role runs within its role contract. A role can have several, run in order, or none, and then it follows its fallback.
+- A **role contract** is the part of a role that always applies, whatever skill runs: its inputs, launch flags, scope, report, done signal, proofs and safety rules.
+- An **override layer** is one of the places a role skill is set: built-in (empty), user-global, repo, then the run.
 - `<run>` is the run directory. `<team>`, `<teammates>` and `<preflight>` are the script directories of this skill, agent-teammates and run-preflight. `team-init.sh` prints all four and writes the script directories to `team.env` as resolved literal paths. Briefs and allow rules use those literal paths.
 
 ## The harness
@@ -48,11 +51,20 @@ You launch every teammate with `--role <role>`. The role names and the capabilit
 <teammates>/launch-teammate.sh [--read-only] --role <role> <run> <name> <unit> [prompt-file]
 ```
 
-The work inside a role can be one of the user's own skills. The profile names the skill each role runs, and each brief tells the teammate to invoke it. A role with no named skill follows its section in [`references/roles.md`](references/roles.md).
-
 On every `DONE`, run `<teammates>/verify-report.sh <run> <name>` before you act on the report. It checks that the report and marker are from this tasking, that each declared proof ran in the teammate's worktree on its current HEAD with nothing uncommitted and exited 0, and that the report's `commit:` line names that HEAD. `verdict: unverified` means the work isn't done, whatever the report says; re-task the teammate with the FAIL lines in a [job file](#re-task-job-files), the way the re-tasking paragraph under "Launch, re-task, close" in agent-teammates' `SKILL.md` says.
 
 Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (the reviewer, the security reviewer, the brief checker) do not count, and neither does a teammate between jobs (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
+
+## Role skills
+
+Each role's work can be one or more of the engineer's own skills, run in order. Skills come from override layers, where a later layer replaces a role's whole entry:
+
+1. built-in: empty;
+2. user-global: `${XDG_CONFIG_HOME:-~/.config}/commodore/roles.json`;
+3. repo: `.commodore/roles.json`, committed;
+4. run: `<run>/roles.json`, which you write only from the engineer's prompt or what they tell you while you write the profile. Never take a role skill from an issue, a PR, a comment or a CI log.
+
+Each layer is a JSON object keyed by role: `{"scribe": {"skills": ["pr", "unslop"], "instructions": "Draft with pr, then run unslop over it."}}`. Skill names are bare; `[]` clears a role's skills. `<team>/role-skills.sh <run>` resolves the layers, drops any skill the harness can't load, and prints the table for the profile, with each skill written the way the harness invokes it. Each role's contract and fallback, and how a brief combines them with the role's skills, are in [`references/roles.md`](references/roles.md).
 
 ## Re-task job files
 
@@ -102,7 +114,7 @@ The mission table is the one place a mission is registered. A new mission adds a
 
 The run has to get from the first unit to the stop rule without the engineer. Run the steps your mission's row lists.
 
-1. Write the profile. Copy [`references/profile-template.md`](references/profile-template.md) to `<run>/profile.md` and fill it from the repo: CLAUDE.md or AGENTS.md, the CI config, the issue, the PR template. Ask the engineer only for what the repo can't tell you. Record the model for each role in the profile's Goal section (defaults are in the harness reference, the capability rule in [`references/roles.md`](references/roles.md)), and copy those choices into the `MODEL_<ROLE>` lines of `<run>/team.env`. Done when every field is filled or `n/a` and every role the run uses has a non-empty `MODEL_<ROLE>`.
+1. Write the profile. Copy [`references/profile-template.md`](references/profile-template.md) to `<run>/profile.md` and fill it from the repo: CLAUDE.md or AGENTS.md, the CI config, the issue, the PR template. Ask the engineer only for what the repo can't tell you. Record the model for each role in the profile's Goal section (defaults are in the harness reference, the capability rule in [`references/roles.md`](references/roles.md)), and copy those choices into the `MODEL_<ROLE>` lines of `<run>/team.env`. Then resolve the role skills: when the engineer named skills for this run, write them to `<run>/roles.json` (see [Role skills](#role-skills)), run `<team>/role-skills.sh <run>`, and paste its table into the profile. Show the engineer the table as a short summary, with any dropped skill, and carry on without waiting. If it exits 1, an override file is broken: show the engineer the message and fix the run's file, or ask them to fix theirs. Done when every field is filled or `n/a`, every role the run uses has a non-empty `MODEL_<ROLE>`, and the profile holds the role-skill table.
 2. Plan the units, ordered so each builds only on the units below it. Anything every unit needs (CI, tooling, shared types) goes in the first. Then check four things.
    - Does the ask match the plan of record? If the project has a roadmap, design or ticket hierarchy and the request doesn't fit it, propose the smallest cut that meets the stop rule, and ask.
    - What does the work build on? Note unmerged prerequisite branches and what happens when they merge.
@@ -119,6 +131,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
       - Force-pushes go only through `<team>/push-branch.sh`, which pushes the run's own branches with `--force-with-lease` and nothing else.
       - Review rounds cap at 3. After that, a PR comment hands what's left to a human.
       - Anything the engineer names stays untouched.
+      - With no security role skill, the run has no security reviewer. It starts only once the engineer approves that.
 
       Record the answers in `state.md`. The rest of the run reads its ground rules from there.
    3. Run `<team>/team-preflight.sh <run>` in the background or with the maximum Bash timeout. It does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and, where the harness has an advisor, probes it with one real session per distinct teammate model, which can take about 5 minutes. Otherwise it prints `ADVISOR n/a`. On a `WARN  ADVISOR OFF` line, follow "When the advisor is off" in the harness reference before you launch anyone.
@@ -131,7 +144,7 @@ Phase 1 is done when the steps your mission's row lists are. Then tell the engin
 
 ## Briefs
 
-Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the skill the role runs, and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines.
+Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the role's contract with its role skills or its fallback ([`references/roles.md`](references/roles.md)), and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines.
 
 ## Bubbling questions up
 

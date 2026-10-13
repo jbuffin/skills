@@ -8,6 +8,7 @@ OK    claude found
 OK    claude background sessions available (claude agents)
 OK    repository is trusted for background sessions
 OK    advisor on for sonnet (default)
+WARN  security-reviewer has no role skill: no security review this run
 OK    git found
 OK    repository @SB@/w/preflight-real-probe/repo
 OK    git identity set

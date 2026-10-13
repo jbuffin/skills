@@ -5,6 +5,7 @@ OK    claude found
 OK    claude background sessions available (claude agents)
 OK    repository is trusted for background sessions
 WARN  ADVISOR OFF: sonnet (default): advisor unavailable (feature_disabled)
+WARN  security-reviewer has no role skill: no security review this run
 OK    git found
 OK    repository @SB@/w/preflight-probe-off/repo
 OK    git identity set

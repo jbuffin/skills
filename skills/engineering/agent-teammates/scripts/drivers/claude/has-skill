@@ -1,0 +1,29 @@
+#!/bin/zsh
+# usage: has-skill <team-dir> <name>   (see ../CONTRACT.md)
+# Exits 0 when Claude Code can load skill <name> for the run's repo, 1 when it can't. Looks in the repo's .claude/skills,
+# the user's skills, and the installed plugins that installed_plugins.json lists for this repo (a `plugin:skill` name
+# names the plugin), then the skills built into the CLI.
+[[ $# -eq 2 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+[[ -f $D/team.env ]] && source $D/team.env   # REPO and the harness's config dirs; read only, so the run dir is untouched
+REPO=${REPO:-$WORKTREE}   # an old team.env has WORKTREE and no REPO
+# Built into Claude Code, so there's no SKILL.md to find. From the CLI's own skill list (Claude Code 2.x, October 2026);
+# a name missing here is dropped with a warning, which says which name to check.
+BUILTIN=(code-review security-review simplify init loop schedule run claude-api update-config keybindings-help fewer-permission-prompts)
+CFG=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+n=$2
+[[ $n =~ '^[A-Za-z0-9][A-Za-z0-9._:-]*$' ]] || exit 1
+p=; s=$n
+[[ $n == *:* ]] && { p=${n%%:*}; s=${n#*:}; }
+# Plugin install paths in effect for this repo: user-scoped ones, and project-scoped ones for the repo or a parent of it.
+plugins=(${(f)"$(jq -r --arg p "$p" --arg repo "$REPO" '.plugins // {} | to_entries[]
+  | select($p == "" or (.key | split("@")[0]) == $p) | .value[]
+  | select(.scope != "project" or ($repo != "" and ($repo + "/" | startswith(.projectPath + "/")))) | .installPath' \
+  $CFG/plugins/installed_plugins.json 2>/dev/null)"})
+for i in $plugins; do set -- $i/skills/**/$s/SKILL.md(N); (( $# )) && exit 0; done
+[[ -n $p ]] && exit 1
+set -- $CFG/skills/$n/SKILL.md(N)
+[[ -n $REPO ]] && set -- "$@" $REPO/.claude/skills/$n/SKILL.md(N)
+(( $# )) && exit 0
+(( ${BUILTIN[(Ie)$n]} )) && exit 0
+exit 1
