@@ -12,11 +12,27 @@ cp_alive() {
   local pid=$(cp_num $1 pid) pg=$(cp_num $1 pgid)
   [[ -n $pid ]] && kill -0 $pid 2>/dev/null && [[ $(ps -o pgid= -p $pid 2>/dev/null | tr -d ' ') == $pg ]]
 }
-# cp_flags <read-only: 0|1> <model|-> <add-dir|-> <session-id> [effort]: sets CP_FLAGS, the flags shared by every run.
+# The agent-teammates scripts directory, from this file's own location (drivers/copilot/lib.zsh), so it needs no commodore.
+CP_SCRIPTS=${${(%):-%x}:A:h:h:h}
+# cp_extra_dirs <team.env>: sets CP_EXTRA to the dirs a writer run adds beside its team dir: the scripts dir, then
+# PREFLIGHT_SCRIPTS and TEAM_SCRIPTS from the file. Those two are read as data (the KEY=value line, never sourced) and
+# count only when they are absolute paths to existing directories. A dir that is already in the list is not added again.
+cp_extra_dirs() {
+  local k v
+  CP_EXTRA=($CP_SCRIPTS)
+  for k in PREFLIGHT_SCRIPTS TEAM_SCRIPTS; do
+    v=$(cp_get $1 $k)
+    [[ $v == /* && -d $v && ${CP_EXTRA[(Ie)$v]} == 0 ]] && CP_EXTRA+=($v)
+  done
+  return 0
+}
+# cp_flags <read-only: 0|1> <model|-> <add-dir|-> <session-id> [effort [extra-dir...]]: sets CP_FLAGS, the flags shared by every run.
 # An empty or missing effort passes no --reasoning-effort; a set one is a single argv element, never evaluated.
-# Only a read-only value of exactly 0 gets the writer flags; anything else fails closed to read-only.
+# Only a read-only value of exactly 0 gets the writer flags; anything else fails closed to read-only. A writer also gets
+# --add-dir for each extra dir (from cp_extra_dirs) that isn't the add-dir already given; a read-only run ignores them.
 # The variadic flags (--available-tools, --allow-tool, --deny-tool) come last; -p follows them, so it ends the list.
 cp_flags() {
+  local d
   CP_FLAGS=(--no-ask-user -s --session-id $4)
   [[ -n $2 && $2 != - ]] && CP_FLAGS+=(--model $2)
   [[ -n $5 ]] && CP_FLAGS+=(--reasoning-effort $5)
@@ -25,6 +41,7 @@ cp_flags() {
     CP_FLAGS+=(--available-tools bash view glob grep --deny-tool=write --allow-tool
       'shell(git log)' 'shell(git show)' 'shell(git diff)' 'shell(git status)' 'shell(gh pr view)' 'shell(gh pr diff)' 'shell(gh issue view)')
   else
+    for d in "${@:6}"; do [[ $d != $3 ]] && CP_FLAGS+=(--add-dir $d); done
     CP_FLAGS+=(--available-tools bash view edit create glob grep --allow-all-tools --deny-tool
       'shell(git push:*)' 'shell(gh pr merge:*)' 'shell(gh pr create:*)' 'shell(gh api:*)' 'shell(gh issue:*)')
   fi
@@ -44,7 +61,8 @@ cp_report() {
 cp_supervise() {
   local D=$1 id=$2 prompt=$3 f=$(cp_state $1 $2) rc msg
   local name=$(cp_get $f name) w=$(cp_get $f workdir) ro=$(cp_get $f ro)
-  cp_flags "$ro" "$(cp_get $f model)" $D $id "$(cp_get $f effort)"
+  cp_extra_dirs $D/team.env
+  cp_flags "$ro" "$(cp_get $f model)" $D $id "$(cp_get $f effort)" $CP_EXTRA
   cd $w || exit 1
   copilot $CP_FLAGS -p $prompt < /dev/null > $f.out 2> $f.err
   rc=$?

@@ -8,26 +8,51 @@ ok()   { echo "OK    $*"; }
 bad()  { echo "FAIL  $*"; fail=1; }
 
 command -v copilot >/dev/null && ok "copilot found" || { bad "copilot not on PATH"; exit 1; }
+# turn <cwd> <prompt>: one headless turn with $CP_FLAGS in <cwd>. Sets TURN to ok, or to why not (timeout or exit code),
+# and leaves stdout in $OUT and stderr in $ERR. Own process group, so a timeout kills copilot's children too.
+turn() {
+  perl -e 'chdir(shift) or die; setpgrp(0, 0); exec @ARGV' $1 copilot $CP_FLAGS -p $2 < /dev/null > $OUT 2> $ERR &
+  local pid=$! i
+  for i in {1..240}; do kill -0 $pid 2>/dev/null || break; /bin/sleep 0.5; done
+  if kill -0 $pid 2>/dev/null; then
+    kill -KILL -- -$pid 2>/dev/null
+    wait $pid 2>/dev/null
+    TURN=timeout
+  else
+    wait $pid; TURN=$?
+    (( TURN )) || TURN=ok
+  fi
+}
+OUT=$(mktemp) || { bad "couldn't create a temp file for the headless turn"; exit 1; }
+ERR=$(mktemp) || { rm -f $OUT; bad "couldn't create a temp file for the headless turn"; exit 1; }
+WT=; TT=
+trap 'rm -rf $OUT $ERR $WT $TT' EXIT
 # One cheap headless turn with the trimmed read-only tool set. Too many MCP tool definitions overflow the context
 # and `copilot -p` then exits 0 with no output.
 M=${MODEL_REVIEWER:-${MODEL_IMPLEMENTER:-${MODEL:--}}}
 cp_flags 1 "$M" - $(cp_uuid)
-OUT=$(mktemp) || { bad "couldn't create a temp file for the headless turn"; exit 1; }
-ERR=$(mktemp) || { rm -f $OUT; bad "couldn't create a temp file for the headless turn"; exit 1; }
-trap 'rm -f $OUT $ERR' EXIT
-# Own process group, so a timeout kills copilot's children too.
-perl -e 'setpgrp(0, 0); exec @ARGV' copilot $CP_FLAGS -p "Reply with the single word OK." < /dev/null > $OUT 2> $ERR &
-pid=$!
-for i in {1..240}; do kill -0 $pid 2>/dev/null || break; /bin/sleep 0.5; done
-if kill -0 $pid 2>/dev/null; then
-  kill -KILL -- -$pid 2>/dev/null
-  wait $pid 2>/dev/null
-  bad "copilot headless turn didn't finish within 120 s"
-else
-  wait $pid; rc=$?
-  if (( rc )); then bad "copilot headless turn exited $rc: $(head -1 $ERR)"
-  elif [[ -s $OUT ]]; then ok "copilot headless turn returned output"
-  else bad "copilot headless turn printed nothing: the tool definitions probably overflow the context; trim your MCP servers"
-  fi
+turn . "Reply with the single word OK."
+if [[ $TURN == timeout ]]; then bad "copilot headless turn didn't finish within 120 s"
+elif [[ $TURN != ok ]]; then bad "copilot headless turn exited $TURN: $(head -1 $ERR)"
+elif [[ -s $OUT ]]; then ok "copilot headless turn returned output"
+else bad "copilot headless turn printed nothing: the tool definitions probably overflow the context; trim your MCP servers"
+fi
+(( fail )) && exit 1
+# One headless turn with the writer flags, as a real writer from this run dir gets them, in a throwaway git dir with a
+# throwaway team dir declaring a trivial proof. It runs evidence.sh from this driver's scripts dir, which is the
+# --add-dir under test: Copilot's path guard refuses a shell command that touches a path outside the working directory
+# and the added dirs, even with --allow-all-tools.
+WT=$(mktemp -d) && TT=$(mktemp -d) || { bad "couldn't create temp dirs for the writer turn"; exit 1; }
+git -C $WT init -q 2>/dev/null
+mkdir -p $TT/prompts
+print -r -- "clean true" > $TT/prompts/pf.proof
+cp_extra_dirs $1/team.env
+cp_flags 0 "${MODEL_IMPLEMENTER:-$M}" $TT $(cp_uuid) "" $CP_EXTRA
+turn $WT "Run exactly this command and then reply with the single word DONE: $CP_SCRIPTS/evidence.sh $TT pf clean"
+LOG=$TT/reports/pf-evidence/clean.log
+if [[ $TURN == timeout ]]; then bad "copilot writer turn didn't finish within 120 s"
+elif [[ $TURN != ok ]]; then bad "copilot writer turn exited $TURN: $(head -1 $ERR)"
+elif [[ -f $LOG && $(tail -n 1 $LOG) == "exit: 0" ]]; then ok "copilot writer turn ran evidence.sh from the scripts dir"
+else bad "copilot writer turn didn't run evidence.sh: Copilot's path guard probably refused the script; a dir is missing from --add-dir"
 fi
 exit $fail

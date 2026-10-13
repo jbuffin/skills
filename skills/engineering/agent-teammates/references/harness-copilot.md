@@ -17,7 +17,7 @@ A teammate is a background `copilot -p` run in its own process group, with a fix
 
 1. Create the run from inside Copilot CLI: `<team>/team-init.sh <run-name> <repo>`. Detection sees `COPILOT_CLI=1` and writes the settings in [Settings in `team.env`](#settings-in-teamenv). A shell that also sets `CLAUDECODE=1` (Copilot passes its parent's environment through) makes detection print both harnesses, and `team-init.sh` stops with "more than one harness detected". Start Copilot from a shell with `CLAUDECODE` unset.
 2. Change a model only when the engineer names one `copilot --model` accepts.
-3. Run `<teammates>/drivers/copilot/preflight <team-dir>`. It fails when `copilot` isn't on `PATH`, or when one headless read-only turn on `MODEL_REVIEWER` (else `MODEL_IMPLEMENTER`, else `MODEL`) exits non-zero or prints nothing. A bad model name fails here with copilot's own message. It doesn't check `jq`, which `teammate-tail.sh` needs.
+3. Run `<teammates>/drivers/copilot/preflight <team-dir>`. It fails when `copilot` isn't on `PATH`, when one headless read-only turn on `MODEL_REVIEWER` (else `MODEL_IMPLEMENTER`, else `MODEL`) exits non-zero or prints nothing, or when one headless writer turn, with the flags a writer gets, can't run `evidence.sh` from the scripts directory in a throwaway git dir (the `FAIL` line names Copilot's path guard and `--add-dir`). A bad model name fails here with copilot's own message. It doesn't check `jq`, which `teammate-tail.sh` needs.
 4. Copilot uses the engineer's existing sign-in. Have them sign in before the run.
 
 ## Settings in `team.env`
@@ -37,16 +37,21 @@ Keep `MODEL` set: without it `team-env.zsh` falls back to the Claude alias `sonn
 
 ## Permissions per role
 
-The flag set is chosen from `--read-only`, not from `--role`. Every run, launch and resume alike, gets `--no-ask-user`, `-s`, `--session-id <id>` and `--add-dir <team-dir>`, plus `--model <model>` and `--reasoning-effort <effort>` when set.
+The flag set is chosen from `--read-only`, not from `--role`. Every run, launch and resume alike, gets `--no-ask-user`, `-s`, `--session-id <id>` and `--add-dir <team-dir>`, plus `--model <model>` and `--reasoning-effort <effort>` when set. A writer also gets `--add-dir` for the skill script directories listed under "What these flags need".
 
 | Teammate | Flags | What it can do |
 | --- | --- | --- |
 | launched with `--read-only` (reviewer, security reviewer, brief checker, triager) | `--available-tools bash view glob grep`, `--deny-tool=write`, and `--allow-tool` for `shell(git log)`, `shell(git show)`, `shell(git diff)`, `shell(git status)`, `shell(gh pr view)`, `shell(gh pr diff)`, `shell(gh issue view)` | reads files and runs the allowed commands. Copilot's write tool is gone and other shell commands are refused, but see [Security caveats](#security-caveats) |
-| any other (implementer, test writer, target steward, scribe) | `--available-tools bash view edit create glob grep`, `--allow-all-tools`, and `--deny-tool` for `shell(git push:*)`, `shell(gh pr merge:*)`, `shell(gh pr create:*)`, `shell(gh api:*)`, `shell(gh issue:*)` | runs any command as the engineer, except the five denied prefixes |
+| any other (implementer, test writer, target steward, scribe) | `--add-dir` for each script directory below, `--available-tools bash view edit create glob grep`, `--allow-all-tools`, and `--deny-tool` for `shell(git push:*)`, `shell(gh pr merge:*)`, `shell(gh pr create:*)`, `shell(gh api:*)`, `shell(gh issue:*)` | runs any command as the engineer, except the five denied prefixes. Also writes the added script directories |
 
-What these flags need in order to work, on Copilot 1.0.95:
+What these flags need in order to work, checked on Copilot CLI 1.0.96:
 
 - `--add-dir <team-dir>` on every run. Under `--no-ask-user`, Copilot refuses reads and writes outside the working directory unless the directory is added, even with `--allow-all-tools`. Without it, no teammate can read its brief or write its report.
+- `--add-dir` for the skill script directories, on every writer run (launch and resume) and never on a read-only run. The scripts a writer is told to call (`evidence.sh`, `secret-run.sh`, `push-branch.sh`) live outside its working directory and the team directory, and the path guard refuses them even with `--allow-all-tools` and even with an `--allow-tool 'shell(<script>:*)'`. Without them, every `evidence.sh` call is denied and `verify-report.sh` reports `verdict: unverified`. The directories are:
+  - the agent-teammates `scripts` directory, found from the driver's own location;
+  - `PREFLIGHT_SCRIPTS` and `TEAM_SCRIPTS` from the run's `team.env`, when each is set to an absolute path of an existing directory. Anything else adds nothing and doesn't fail the launch. The driver reads these two lines as data and never sources `team.env` in the run.
+
+  A directory the run already has isn't added twice. Copilot takes several `--add-dir` flags in one run.
 - The `:*` suffix on the writer denies. Without it, three-token denies such as `shell(gh pr merge)` never match, and `gh pr merge` and `gh pr create` reach GitHub. The read-only allows match with arguments as written.
 - `-s`, so stdout is the final message only.
 
@@ -65,6 +70,7 @@ The Copilot permission flags are guardrails against mistakes, not a sandbox. Cop
 - **Writers run as the engineer.** `--allow-all-tools` lets a writer run any command. The five denies stop only those exact command prefixes: other spellings (`git -C . push`, `git -c k=v push`, `env git push`, a script that calls git), `curl` with `gh auth token`, and `gh` commands nobody listed (`gh pr review`, `gh pr comment`, `gh release create`) all get through. Keep any credential a writer must not use out of its environment.
 - **A read-only teammate can write any path.** `git log`, `git show` and `git diff` accept `--output=<file>`, and the read-only allowlist allows them with any arguments. Copilot's path guard doesn't constrain an allowed shell command's arguments, so it can write any path the engineer can write. In effect it can run code as the engineer, for example through `team.env`, `<workdir>/.git/config` (which `verify-report.sh` runs git against) or shell startup files. `--deny-tool=write` removes only Copilot's own write tool. Verified on Copilot CLI 1.0.95 (#78).
 - **Run read-only Copilot teammates only on trusted input**, not on another person's PR or outside issue text, until Copilot's OS sandbox lands (#49). Hostile text in the teammate's context can make it write anywhere.
+- **A writer can write the skill script directories.** They are added so it can run `evidence.sh`, so it can also edit `evidence.sh` and `verify-report.sh` (a forged log verifies), `secret-run.sh` and `push-branch.sh`, next to its existing write access to the team directory and its evidence logs. It can edit `team.env` to point `PREFLIGHT_SCRIPTS` or `TEAM_SCRIPTS` at any directory, even `/`, and its next resume gets that `--add-dir`. It can edit the driver itself. None of this goes beyond what `--allow-all-tools` already allows. Making the scripts read-only to a writer is for later: see the options in [#81](https://github.com/jbuffin/skills/issues/81) and [#49](https://github.com/jbuffin/skills/issues/49).
 - **Every teammate can write the team directory**, a writer through `--add-dir <team-dir>` and a read-only teammate through `--output`. A forged state file (`<team-dir>/copilot-<session-id>`, which `send` re-reads on every re-task) with `ro=0` resumes a read-only teammate with the writer flags, and a forged `pid` or `pgid` redirects `close-teammate.sh`. Code written to `team.env` runs in every coordinator script.
 
 A report that's surprising stays unverified until `teammate-tail.sh` shows the turn that produced it.
