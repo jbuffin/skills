@@ -16,6 +16,14 @@
 #   FAKE_COPILOT_TS        epoch of every event and of events.jsonl's mtime (default $FAKE_NOW, else the real clock)
 #   FAKE_COPILOT_DONE      a path: the run creates that file (a teammate's .done marker) before it ends
 #   FAKE_COPILOT_CHILD     1: the run starts a child process that outlives it unless the process group is killed
+#   FAKE_COPILOT_EVIDENCE  1: the path-guard model, off by default (the fake runs no commands). A `-p` run looks in its
+#                          prompt for `<dir>/evidence.sh <team> <name> <label>` (backticks and quotes count as spaces; a
+#                          trailing . , ; : or ) on the label is dropped; the first such call wins) and runs that script
+#                          in its cwd, before the final message, only when <dir> is exactly one of the --add-dir values
+#                          (`--add-dir v` or `--add-dir=v`). Any other run, or a <dir> that isn't added, runs nothing
+#                          and leaves no log. The run's output and exit code go to $FAKE_DIR/copilot.evidence.<n>.
+#   FAKE_COPILOT_REFUSE    a dir the guard refuses even when it is among the --add-dir values (with
+#                          FAKE_COPILOT_EVIDENCE=1): the way to see a driver whose --add-dir list lacks the scripts dir
 {
   printf 'copilot cwd=%s' "$(pwd -P)"
   for a in "$@"; do printf ' [%s]' "$a"; done
@@ -28,12 +36,16 @@ while ! mkdir "${FAKE_DIR:?}/copilot.claim.$n" 2>/dev/null; do n=$((n + 1)); don
   for a in "$@"; do printf '%s\000' "$a"; done
 } > "$FAKE_DIR/copilot.call.$n"
 
-sid=; has_p=
+sid=; has_p=; prompt=; adds=
+nl='
+'
 while [ $# -gt 0 ]; do
   case "$1" in
     --session-id=*) sid=${1#--session-id=} ;;
     --session-id) sid=$2; shift ;;
-    -p) has_p=1; shift ;;
+    --add-dir=*) adds=$adds${1#--add-dir=}$nl ;;
+    --add-dir) adds=$adds$2$nl; shift ;;
+    -p) has_p=1; prompt=$2; shift ;;
   esac
   shift
 done
@@ -75,6 +87,24 @@ settime
 if [ -n "$FAKE_COPILOT_CHILD" ]; then
   /bin/sleep 120 > /dev/null 2>&1 &
   echo "$!" >> "$FAKE_DIR/copilot.children"
+fi
+
+if [ "${FAKE_COPILOT_EVIDENCE:-}" = 1 ]; then
+  ev_call=$(printf '%s' "$prompt" | tr '`"' '  ' | tr "'" ' ' | grep -o '/[^ ]*/evidence\.sh [^ ]* [^ ]* [^ ]*' | head -n 1)
+  if [ -n "$ev_call" ]; then
+    read -r ev_script ev_team ev_name ev_label <<EOF
+$ev_call
+EOF
+    ev_label=${ev_label%[.,;:)]}
+    ev_dir=${ev_script%/evidence.sh}
+    case "$nl$adds" in
+      *"$nl$ev_dir$nl"*)
+        if [ "$ev_dir" != "${FAKE_COPILOT_REFUSE:-}" ]; then
+          "$ev_script" "$ev_team" "$ev_name" "$ev_label" > "$FAKE_DIR/copilot.evidence.$n" 2>&1
+          echo "rc: $?" >> "$FAKE_DIR/copilot.evidence.$n"
+        fi ;;
+    esac
+  fi
 fi
 
 if [ "$mode" = stay ]; then

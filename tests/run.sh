@@ -677,15 +677,15 @@ cpwant cp-argv && {
   txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1"
   await 10 cp_settled 4
   xrun $AT/drivers/copilot/preflight $D; cpnote "driver preflight"
-  CPSTOP=0; await 5 cp_calls 5
+  CPSTOP=0; await 5 cp_calls 6
   reap_fakes; cp_load
   id1=$(cp_id t1); id2=$(cp_id w1)
   typeset -A by; for c in $RUNS; do cparse $c; by[${F[--session-id]}]+="$c "; done
   l1=(${=by[$id1]}); l2=(${=by[$id2]})
-  want5="want 5 copilot -p calls (a launch and a resume for each of t1 and w1, and the driver preflight's turn), got $#RUNS"
+  want5="want 6 copilot -p calls (a launch and a resume for each of t1 and w1, and the driver preflight's read-only and writer turns), got $#RUNS"
 
   P=()
-  (( $#RUNS >= 5 )) || P+=$want5
+  (( $#RUNS >= 6 )) || P+=$want5
   for c in $RUNS; do cparse $c
     hasf --available-tools && [[ -n ${F[--available-tools]} ]] || P+="${c:t}: no --available-tools list"
     [[ ${F[--session-id]} =~ $UUID ]] || P+="${c:t}: no --session-id <lowercase uuid> (got '${F[--session-id]}')"
@@ -931,13 +931,13 @@ cpwant cp-report && {
 # ---- Preflight (AC1 for the headless turn, and the two FAILs) -------------------------------------------------------
 cpwant cp-preflight && {
   cpmk cp-preflight-ok
-  xrun $AT/drivers/copilot/preflight $D; cpnote "preflight"
+  xrun FAKE_COPILOT_EVIDENCE=1 $AT/drivers/copilot/preflight $D; cpnote "preflight"
   P=()
   [[ $RC == 0 ]] || P+="driver preflight exit $RC with the fake copilot on PATH, want 0"
   grep -q '^FAIL' $SC/out && P+="FAIL line: $(grep '^FAIL' $SC/out | head -2 | tr '\n' '|')"
   grep -q '^OK' $SC/out || P+="no OK line"
-  cp_calls 1 || P+="no copilot call logged: the preflight ran no headless turn"
-  cpverdict "CP preflight passes with the fake copilot and runs one headless turn"
+  cp_calls 2 || P+="want 2 copilot calls logged (a read-only and a writer headless turn)"
+  cpverdict "CP preflight passes with the fake copilot (running evidence.sh when its dir is added) and runs two headless turns"
 
   cpmk cp-preflight-nopath
   xrun PATH=/usr/bin:/bin:/usr/sbin:/sbin $AT/drivers/copilot/preflight $D; cpnote "preflight, no copilot"
@@ -953,6 +953,293 @@ cpwant cp-preflight && {
   [[ $RC == 1 ]] || P+="exit $RC, want 1"
   grep -qiE '^FAIL.*(no output|empty|nothing|overflow|context)' $SC/out || P+="no FAIL line about the headless turn printing nothing"
   cpverdict "CP preflight FAILs when the headless turn prints nothing (the context-overflow symptom)"
+}
+
+# ---- #81: writers get --add-dir for the skill script dirs (the path guard refuses the rest) -------------------------
+# The writer's --add-dir set is <team-dir>, the driver's own scripts dir ($AT: the driver lives in $AT/drivers/copilot),
+# and PREFLIGHT_SCRIPTS and TEAM_SCRIPTS from team.env when each is an absolute path to an existing directory. Every
+# check compares the whole sorted set, so a missing, extra or duplicated dir all show.
+cpenv() {  # cpenv KEY[=value]...: drop each KEY's lines from team.env, then append KEY=value (no value: just drop)
+  local a k
+  for a in "$@"; do
+    k=${a%%=*}
+    grep -v "^$k=" $D/team.env > $D/team.env.tmp; mv $D/team.env.tmp $D/team.env
+    [[ $a == *=* ]] && print -r -- $a >> $D/team.env
+  done
+  return 0
+}
+cp_adds_str() { print -r -- "${(j:, :)${(o)${(f)F[--add-dir]}}}"; }
+cp_adds_is() { local -a g=(${(o)${(f)F[--add-dir]}}) w=(${(o)@}); [[ "${(pj:\n:)g}" == "${(pj:\n:)w}" ]]; }   # the set of --add-dir values (with repeats) is exactly the arguments
+cp_order() {  # after cparse: every --add-dir sits before --available-tools, the driver's scripts dir is among them, and -p ends the list
+  local i ai=0 av=0
+  for (( i = 1; i <= $#CARGS; i++ )); do
+    [[ $CARGS[i] == --add-dir || $CARGS[i] == --add-dir=* ]] && ai=$i
+    [[ $CARGS[i] == --available-tools && $av == 0 ]] && av=$i
+  done
+  hasv --add-dir $AT && (( ai && av && ai < av )) && [[ $CARGS[-2] == -p ]]
+}
+ro_pin() {  # ro_pin <session-id> <model> <add-dir|->: P+= unless CARGS is exactly today's read-only list, up to its -p prompt
+  local -a w=(--no-ask-user -s --session-id $1 --model $2); local s=$'\001'
+  [[ $3 != - ]] && w+=(--add-dir $3)
+  w+=(--available-tools bash view glob grep --deny-tool=write --allow-tool $READ_ALLOW -p)
+  [[ ${(pj:$s:)CARGS[1,-2]} == "${(pj:$s:)w}" ]] || P+="read-only argv isn't today's list: got [${(j: :)CARGS[1,-2]}], want [${(j: :)w}]"
+  return 0
+}
+ax_sub() { local x=$1; x=${x//@SC@/$SC}; x=${x//@D@/$D}; print -r -- ${x//@AT@/$AT}; }
+# ax_case <label> <resume 0|1>: a writer launch (and, with 1, a resume) with team.env edited by AX_ENV (KEY=value or KEY to
+# drop it), AX_PRE (shell, run first) and expecting the extra dirs AX_WANT (or, when set, AX_ALT). @SC@ @D@ @AT@ expand.
+ax_case() {
+  local label=$1 rs=$2 c n=1 lrc a wstr astr; local -a envl=() want=() alt=()
+  cpmk cp-adddir-$label
+  eval "$(ax_sub $AX_PRE)"
+  for a in $AX_ENV; do envl+=("$(ax_sub $a)"); done
+  for a in $AX_WANT; do want+=("$(ax_sub $a)"); done
+  for a in $AX_ALT; do alt+=("$(ax_sub $a)"); done
+  cpenv PREFLIGHT_SCRIPTS TEAM_SCRIPTS "${envl[@]}"
+  (( $#alt )) && astr=" (or, with the whole value as one dir: ${(j:, :)alt})"
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"; lrc=$RC
+  await 10 cp_settled 1
+  if (( rs )); then txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1"; await 10 cp_settled 2; n=2; fi
+  cp_load
+  P=()
+  (( lrc == 0 )) || P+="the launch exited $lrc: a team.env value that adds nothing must never fail the launch"
+  (( $#RUNS == n )) || P+="want $n copilot -p runs, got $#RUNS"
+  for c in $RUNS; do cparse $c
+    if cp_adds_is $D $AT "${want[@]}"; then :
+    elif (( $#alt )) && cp_adds_is $D $AT "${alt[@]}"; then :
+    else P+="${c:t}: --add-dir values are [$(cp_adds_str)], want [${(j:, :)${(o)${:-$D $AT $want}}}]${astr}"; fi
+    cp_order || P+="${c:t}: the --add-dir pairs must precede --available-tools, include $AT, and -p must be the last flag (argv: ${(j: :)CARGS})"
+    (( ${CARGS[(I)--allow-all-paths]} )) && P+="${c:t}: a team.env value became an --allow-all-paths argument"
+  done
+  cpverdict "CP add-dir: writer launch${${rs:#0}:+ and resume}, $label"
+  reap_fakes
+}
+
+cpwant cp-adddir && {
+  # launch and resume, writer and read-only, with real PREFLIGHT_SCRIPTS and TEAM_SCRIPTS dirs
+  cpmk cp-adddir-main
+  mkdir -p $SC/ps $SC/ts
+  cpenv PREFLIGHT_SCRIPTS=$SC/ps TEAM_SCRIPTS=$SC/ts
+  txrun $AT/launch-teammate.sh --read-only --role reviewer $D t1 $SC/wt; cpnote "launch t1"
+  await 10 cp_settled 1
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 2
+  txrun $AT/retask.sh $D t1 $SC/job.md; cpnote "retask t1"
+  await 10 cp_settled 3
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1"
+  await 10 cp_settled 4
+  reap_fakes; cp_load
+  id1=$(cp_id t1); id2=$(cp_id w1)
+  typeset -A by; by=(); for c in $RUNS; do cparse $c; by[${F[--session-id]}]+="$c "; done
+  l1=(${=by[$id1]}); l2=(${=by[$id2]})
+
+  P=()
+  (( $#l2 == 2 )) || P+="w1 (session '$id2'): $#l2 copilot calls, want 2 (launch, resume)"
+  for c in $l2; do cparse $c
+    cp_adds_is $D $AT $SC/ps $SC/ts || P+="${c:t}: writer --add-dir values are [$(cp_adds_str)], want [${(j:, :)${(o)${:-$D $AT $SC/ps $SC/ts}}}]"
+  done
+  cpverdict "CP add-dir: a writer launch and resume carry the team dir, the driver's scripts dir, PREFLIGHT_SCRIPTS and TEAM_SCRIPTS"
+
+  P=()
+  for c in $l2; do cparse $c
+    cp_order || P+="${c:t}: the --add-dir pairs must precede --available-tools, include $AT, and -p must be the last flag (argv: ${(j: :)CARGS})"
+    hasf --allow-all-tools && hasv --available-tools edit && hasv --available-tools create || P+="${c:t}: not the writer flags"
+  done
+  cpverdict "CP add-dir: the new --add-dir pairs come before the variadic flags, and -p still ends the list"
+
+  P=()
+  (( $#l1 == 2 )) || P+="t1 (session '$id1'): $#l1 copilot calls, want 2 (launch, resume)"
+  for c in $l1; do cparse $c; ro_pin $id1 claude-opus-5.5 $D; done
+  cpverdict "CP add-dir: a read-only launch and resume keep today's argv element for element, with PREFLIGHT_SCRIPTS and TEAM_SCRIPTS set"
+}
+
+cpwant cp-adddir-values && {
+  AX_PRE=; AX_ALT=()
+  AX_ENV=(PREFLIGHT_SCRIPTS TEAM_SCRIPTS); AX_WANT=()
+  ax_case unset 0
+  AX_ENV=(PREFLIGHT_SCRIPTS= TEAM_SCRIPTS=); AX_WANT=()
+  ax_case empty 0
+  AX_PRE='mkdir -p @SC@/cwd/ps @SC@/cwd/ts @SC@/wt/ps @SC@/wt/ts @D@/ps @D@/ts'
+  AX_ENV=(PREFLIGHT_SCRIPTS=ps TEAM_SCRIPTS=./ts); AX_WANT=()
+  ax_case relative 0
+  AX_PRE=
+  AX_ENV=(PREFLIGHT_SCRIPTS=@SC@/missing-ps TEAM_SCRIPTS=@SC@/missing-ts); AX_WANT=()
+  ax_case missing 0
+  AX_PRE=': > @SC@/afile; mkdir -p @SC@/ts'
+  AX_ENV=(PREFLIGHT_SCRIPTS=@SC@/afile TEAM_SCRIPTS=@SC@/ts); AX_WANT=(@SC@/ts)
+  ax_case not-a-dir 0
+  AX_PRE=
+  AX_ENV=(PREFLIGHT_SCRIPTS=--allow-all-paths TEAM_SCRIPTS=-x); AX_WANT=()
+  ax_case dash-led 0
+  AX_PRE='mkdir -p "@SC@/sp --allow-all-paths"'
+  AX_ENV=("PREFLIGHT_SCRIPTS='@SC@/sp --allow-all-paths'"); AX_WANT=(); AX_ALT=("@SC@/sp --allow-all-paths")
+  ax_case spaces 0
+  AX_ALT=()
+  AX_PRE='mkdir -p @SC@/gad "@SC@/g*d"'
+  AX_ENV=(PREFLIGHT_SCRIPTS 'TEAM_SCRIPTS=@SC@/g*d'); AX_WANT=('@SC@/g*d')
+  ax_case glob 0
+  AX_PRE='mkdir -p @SC@/ts @SC@/tm @SC@/cwd/ps'
+  AX_ENV=(PREFLIGHT_SCRIPTS=ps TEAM_SCRIPTS=@SC@/ts TEAMMATES_SCRIPTS=@SC@/tm); AX_WANT=(@SC@/ts)
+  ax_case mixed 1
+  AX_PRE='mkdir -p @SC@/ps @SC@/ts'
+  AX_ENV=(TEAMMATES_SCRIPTS=@SC@/nope PREFLIGHT_SCRIPTS=@SC@/ps TEAM_SCRIPTS=@SC@/ts); AX_WANT=(@SC@/ps @SC@/ts)
+  ax_case scripts-dir-from-driver 0
+}
+
+cpwant cp-adddir-dups && {
+  AX_PRE='mkdir -p @SC@/ps @SC@/ts'; AX_ALT=()
+  AX_ENV=(PREFLIGHT_SCRIPTS=@SC@/ps TEAM_SCRIPTS=@SC@/ps); AX_WANT=(@SC@/ps)
+  ax_case same-twice 1
+  AX_ENV=(PREFLIGHT_SCRIPTS=@AT@ TEAM_SCRIPTS=@SC@/ts); AX_WANT=(@SC@/ts)
+  ax_case is-the-scripts-dir 0
+  AX_ENV=(PREFLIGHT_SCRIPTS=@SC@/ps TEAM_SCRIPTS=@D@); AX_WANT=(@SC@/ps)
+  ax_case is-the-team-dir 0
+  AX_ENV=(PREFLIGHT_SCRIPTS=@AT@ TEAM_SCRIPTS=@AT@); AX_WANT=()
+  ax_case both-the-scripts-dir 0
+}
+
+cpwant cp-adddir-ro && {
+  # a blank ro fails closed: no extra dirs and today's read-only list
+  cpmk cp-adddir-ro-closed
+  mkdir -p $SC/ps $SC/ts
+  cpenv PREFLIGHT_SCRIPTS=$SC/ps TEAM_SCRIPTS=$SC/ts
+  txrun $AT/launch-teammate.sh --role implementer $D w1 $SC/wt; cpnote "launch w1"
+  await 10 cp_settled 1
+  sed -i.bak 's/^ro=.*/ro=/' $D/copilot-$(cp_id w1)
+  txrun $AT/retask.sh $D w1 $SC/job.md; cpnote "retask w1 (blank ro)"
+  await 10 cp_settled 2
+  cp_load
+  P=()
+  (( $#RUNS == 2 )) || P+="want 2 runs, got $#RUNS"
+  if (( $#RUNS == 2 )); then cparse $RUNS[2]; ro_pin $(cp_id w1) claude-sonnet-5.5 $D; fi
+  cpverdict "CP add-dir: a resume with a blank ro gets today's read-only argv, no extra dirs"
+  reap_fakes
+}
+
+cpwant cp-adddir-data && {
+  # cp_supervise reads team.env as data: it runs nothing from it, and nothing but the two keys can add a dir. The state
+  # file can't add one either.
+  cpmk cp-adddir-data
+  mkdir -p $SC/ps $SC/ts
+  cpenv PREFLIGHT_SCRIPTS=$SC/ps TEAM_SCRIPTS=$SC/ts
+  { print -r -- "touch $SC/pwned1"; print -r -- "UNRELATED=\$(touch $SC/pwned2)"; print -r -- "OTHER_SCRIPTS=/etc"; print -r -- "TEAMMATES_SCRIPTS=/etc"; } >> $D/team.env
+  id=11111111-2222-4333-8444-555555555555
+  printf '%s\n' name=w1 workdir=$SC/wt model=- ro=0 add-dir=/etc adddir=/etc dirs=/etc extra=/etc > $D/copilot-$id
+  xrun /bin/zsh -f -c 'source "$1" && shift && cp_supervise "$@"' zsh $AT/drivers/copilot/lib.zsh $D $id "do it"; cpnote "cp_supervise"
+  cp_load
+  P=()
+  (( $#RUNS == 1 )) || P+="want 1 copilot run, got $#RUNS"
+  [[ -e $SC/pwned1 || -e $SC/pwned2 ]] && P+="cp_supervise ran a command from team.env"
+  if (( $#RUNS == 1 )); then cparse $RUNS[1]
+    cp_adds_is $D $AT $SC/ps $SC/ts || P+="--add-dir values are [$(cp_adds_str)], want [${(j:, :)${(o)${:-$D $AT $SC/ps $SC/ts}}}]"
+    cp_order || P+="the --add-dir pairs must precede --available-tools, include $AT, and -p must be the last flag"
+  fi
+  cpverdict "CP add-dir: cp_supervise reads PREFLIGHT_SCRIPTS and TEAM_SCRIPTS from team.env as data and adds nothing else"
+}
+
+# ---- the fake's evidence mode (FAKE_COPILOT_EVIDENCE): it must run the script only for an added dir --------------------
+cpwant cp-fake-evidence && {
+  fe() {  # fe <label> <expect log: yes|no> [VAR=val ...] -- <copilot add-dir args...>: one fake `-p` run asking for evidence.sh
+    local label=$1 want=$2 T=$SC/team l; shift 2
+    local -a ev=(); while [[ $1 != -- ]]; do ev+=$1; shift; done; shift
+    rm -rf $T $SC/fake; mkdir -p $T/prompts $SC/fake; print -r -- "$label true" > $T/prompts/u1.proof; : > $SC/claude.log
+    xrun $ev copilot --session-id fake-$label "$@" -p "Run \`$AT/evidence.sh $T u1 $label.\` and say OK"; cpnote "fake $label"
+    l=$T/reports/u1-evidence/$label.log
+    P=()
+    if [[ $want == yes ]]; then
+      [[ -f $l ]] || P+="no log at $l"
+      [[ -f $l && $(tail -n 1 $l) == 'exit: 0' ]] || P+="the log doesn't end 'exit: 0'"
+    else
+      [[ -e $T/reports/u1-evidence ]] && P+="the fake ran evidence.sh anyway: $(ls $T/reports/u1-evidence | tr '\n' ' ')"
+    fi
+    cpverdict "CP fake copilot, FAKE_COPILOT_EVIDENCE: $label"
+  }
+  cpmk cp-fake-evidence
+  fe added-dir yes FAKE_COPILOT_EVIDENCE=1 -- --add-dir $SC --add-dir $AT
+  fe added-dir-equals yes FAKE_COPILOT_EVIDENCE=1 -- --add-dir=$AT
+  fe dir-not-added no FAKE_COPILOT_EVIDENCE=1 -- --add-dir $SC
+  fe parent-dir-only no FAKE_COPILOT_EVIDENCE=1 -- --add-dir ${AT:h}
+  fe subdir-slash-only no FAKE_COPILOT_EVIDENCE=1 -- --add-dir $AT/
+  fe not-opted-in no -- --add-dir $AT
+  fe refused-dir no FAKE_COPILOT_EVIDENCE=1 FAKE_COPILOT_REFUSE=$AT -- --add-dir $AT
+}
+
+# ---- the driver's preflight writer turn ---------------------------------------------------------------------------------
+pf_split() {  # PFR and PFW: the preflight's read-only call and its writer call (the one with --allow-all-tools)
+  local c; PFR=; PFW=; cp_load
+  for c in $RUNS; do cparse $c; hasf --allow-all-tools && PFW=$c || PFR=$c; done
+}
+pf_writer_checks() {  # the writer turn's argv: the scripts dir, the run dir's extras, one throwaway team dir, a throwaway cwd
+  local c=$1 x; local -a rest
+  cparse $c; PFT=
+  cp_order || P+="writer turn: the --add-dir pairs must precede --available-tools, include $AT, and -p must be the last flag (argv: ${(j: :)CARGS})"
+  hasv --available-tools edit && hasv --available-tools create || P+="writer turn: not the writer tool list"
+  rest=(${(f)F[--add-dir]}); rest=(${rest:#$AT})
+  for x in $@[2,-1]; do rest=(${rest:#$x}); done
+  (( $#rest == 1 )) || P+="writer turn: want one throwaway team dir besides $AT and the run dir's extras, --add-dir values are [$(cp_adds_str)]"
+  PFT=$rest[1]; PFC=$CCWD
+  [[ $PFT == $D ]] && P+="writer turn: --add-dir is the real run dir, not a throwaway team dir"
+  [[ $PFC == $D || $PFC == $SC/cwd ]] && P+="writer turn runs in $PFC, want a throwaway dir"
+  return 0
+}
+cpwant cp-adddir-preflight && {
+  cpmk cp-adddir-preflight-ok
+  mkdir -p $SC/ps $SC/ts
+  cpenv PREFLIGHT_SCRIPTS=$SC/ps TEAM_SCRIPTS=$SC/ts
+  xrun FAKE_COPILOT_EVIDENCE=1 $AT/drivers/copilot/preflight $D; cpnote "preflight"
+  pf_split
+  P=()
+  [[ $RC == 0 ]] || P+="driver preflight exit $RC, want 0 (the fake runs evidence.sh for an added scripts dir)"
+  grep -q '^FAIL' $SC/out && P+="FAIL line: $(grep '^FAIL' $SC/out | head -2 | tr '\n' '|')"
+  grep -qi '^OK.*\(evidence\|writer\)' $SC/out || P+="no OK line about the writer turn / evidence.sh; stdout: $(head -c 300 $SC/out | tr '\n' '|')"
+  grep -q '^OK.*returned output' $SC/out || P+="the read-only turn's OK line is gone"
+  (( $#RUNS == 2 )) || P+="want 2 copilot -p calls (read-only, writer), got $#RUNS"
+  cpverdict "CP preflight: the writer turn runs evidence.sh through --add-dir and prints OK"
+
+  P=()
+  if [[ -n $PFW ]]; then
+    pf_writer_checks $PFW $SC/ps $SC/ts
+    cp_adds_is $AT $SC/ps $SC/ts $PFT || P+="writer turn --add-dir values are [$(cp_adds_str)], want the scripts dir, the run dir's PREFLIGHT_SCRIPTS and TEAM_SCRIPTS, and the throwaway team dir"
+    ev=($SC/fake/copilot.evidence.*(N))
+    (( $#ev == 1 )) || P+="want one evidence.sh run by the fake, got $#ev"
+    (( $#ev == 1 )) && { grep -q '^exit: 0$' $ev[1] && grep -q '^rc: 0$' $ev[1] || P+="the fake's evidence.sh run didn't end exit: 0: $(tail -n 3 $ev[1] | tr '\n' '|')"; }
+    [[ -e $PFT || -e $PFC ]] && P+="a throwaway dir is still there after the preflight: ${${PFT:+$PFT}:-} $PFC"
+    ls $D/reports | grep -q -- '-evidence' && P+="the run's own reports dir got evidence: $(ls $D/reports | tr '\n' ' ')"
+  else P+="no writer turn (a copilot -p call with --allow-all-tools)"; fi
+  cpverdict "CP preflight: the writer turn's flags are the writer set, with the scripts dir, the run dir's extras and a throwaway team dir, all removed on exit"
+
+  P=()
+  if [[ -n $PFR ]]; then cparse $PFR; [[ ${F[--session-id]} =~ $UUID ]] || P+="read-only turn: no uuid --session-id"; ro_pin ${F[--session-id]} claude-opus-5.5 -; else P+="no read-only turn"; fi
+  cpverdict "CP preflight: the read-only turn's argv is today's, element for element"
+
+  cpmk cp-adddir-preflight-extras
+  mkdir -p $SC/cwd/ps
+  cpenv PREFLIGHT_SCRIPTS=ps TEAM_SCRIPTS=$SC/missing
+  xrun FAKE_COPILOT_EVIDENCE=1 $AT/drivers/copilot/preflight $D; cpnote "preflight, relative and missing extras"
+  pf_split
+  P=()
+  [[ $RC == 0 ]] || P+="driver preflight exit $RC, want 0"
+  if [[ -n $PFW ]]; then pf_writer_checks $PFW; else P+="no writer turn"; fi
+  cpverdict "CP preflight: a relative or missing PREFLIGHT_SCRIPTS/TEAM_SCRIPTS adds nothing to the writer turn and doesn't fail the preflight"
+
+  cpmk cp-adddir-preflight-noguard
+  xrun $AT/drivers/copilot/preflight $D; cpnote "preflight, fake guard on nothing"
+  P=()
+  cp_calls 2 || P+="want 2 copilot calls (read-only, writer)"
+  [[ $RC == 0 ]] && P+="exit 0 although the writer's evidence.sh never ran"
+  grep -qiE '^FAIL.*(path.guard|--add-dir)' $SC/out || P+="no FAIL line naming the path guard or --add-dir; stdout: $(head -c 300 $SC/out | tr '\n' '|')"
+  grep -q '^OK.*returned output' $SC/out || P+="the read-only turn's OK line is gone"
+  grep -qi '^OK.*\(evidence\|writer\)' $SC/out && P+="an OK line about the writer turn although it ran nothing"
+  [[ $RC == 1 ]] || P+="exit $RC, want 1"
+  cpverdict "CP preflight FAILs naming the path guard when the writer turn can't run evidence.sh (the fake runs no commands)"
+
+  cpmk cp-adddir-preflight-refused
+  xrun FAKE_COPILOT_EVIDENCE=1 FAKE_COPILOT_REFUSE=$AT $AT/drivers/copilot/preflight $D; cpnote "preflight, guard refuses the scripts dir"
+  P=()
+  [[ $RC == 1 ]] || P+="exit $RC, want 1"
+  grep -qiE '^FAIL.*(path.guard|--add-dir)' $SC/out || P+="no FAIL line naming the path guard or --add-dir; stdout: $(head -c 300 $SC/out | tr '\n' '|')"
+  [[ -z $(echo $SC/fake/copilot.evidence.*(N)) ]] || P+="the fake ran evidence.sh although its dir was refused"
+  cpverdict "CP preflight FAILs naming the path guard when the guard refuses the scripts dir"
 }
 
 # ---- Fix round 1: preflight failures, resume activity, send waits, a launch that dies, stale reports ----------------
@@ -1162,7 +1449,7 @@ cpwant cp-effort-hostile && {
 cpwant cp-ac7 && {
   cp -R $SKILLS $SB/src-cop; printf '#!/bin/sh\necho copilot\n' > $SB/src-cop/agent-teammates/scripts/detect-harness.sh
   TREE=$SB/src-cop; cpmk cp-ac7; TREE=$SKILLS; mk_repo
-  xrun $SB/src-cop/commodore/scripts/team-preflight.sh $D; cpnote "team-preflight"
+  xrun FAKE_COPILOT_EVIDENCE=1 $SB/src-cop/commodore/scripts/team-preflight.sh $D; cpnote "team-preflight"
   na=$(grep -c '^OK    ADVISOR n/a (copilot)$' $SC/out)
   P=()
   [[ $na == 1 ]] || P+="want one 'OK    ADVISOR n/a (copilot)' line, got $na; advisor lines: $(grep -i advisor $SC/out | head -3 | tr '\n' '|')"
