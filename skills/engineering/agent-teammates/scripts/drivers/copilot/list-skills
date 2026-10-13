@@ -1,0 +1,11 @@
+#!/bin/zsh
+# usage: list-skills <team-dir>   (see ../CONTRACT.md)
+# Prints one `<name><TAB><file>` line for each skill Copilot CLI can load for the run's repo, sorted by name, each name once
+# (the first found wins): the names has-skill accepts, from the same search (skills.zsh). <file> describes the skill, or
+# is `-` when nothing does.
+[[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+[[ -f $D/team.env ]] && source $D/team.env   # REPO and the harness's config dirs; read only, so the run dir is untouched
+REPO=${REPO:-$WORKTREE}   # an old team.env has WORKTREE and no REPO
+source ${0:A:h}/skills.zsh
+skill_list | awk -F'\t' '$1 ~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ && !seen[$1]++' | LC_ALL=C sort -t$'\t' -k1,1
