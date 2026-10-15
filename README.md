@@ -46,12 +46,17 @@ docs/                        Agent docs (docs/agents) and ADRs (docs/adr).
 npx skills add jbuffin/skills --list
 npx skills add jbuffin/skills --skill <name>
 npx skills add jbuffin/skills            # all promoted skills
-
-# Claude Code plugin route
-/plugin marketplace add jbuffin/skills
-/plugin install jasonbuffin@jbuffinskills
 ```
 
+As a Claude Code plugin, from a shell:
+
+```bash
+claude plugin marketplace add jbuffin/skills
+claude plugin install jasonbuffin@jbuffinskills
+```
+
+Or inside a Claude Code session, type `/plugin marketplace add jbuffin/skills`, then
+`/plugin install jasonbuffin@jbuffinskills`, then restart Claude Code to load the skills.
 To try an incubator skill without promoting it, point the CLI at its folder:
 
 ```bash
