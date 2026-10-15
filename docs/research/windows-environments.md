@@ -185,7 +185,8 @@ Implications:
 
 ## What each harness needs, per environment
 
-**Claude Code**
+### Claude Code
+
 - WSL2: install in the distro. Everything works as on Linux, including the sandbox ([cc-setup]).
 - Native + Git for Windows: the Bash tool runs our bash, and Monitor (the watchdog) is available only in this setup
   ([cc-tools]). The PowerShell tool is also on, as the primary shell. Expect Claude to reach for PowerShell unless the
@@ -195,13 +196,15 @@ Implications:
 - Skill frontmatter `shell: powershell` runs a skill's `` !`cmd` `` blocks in PowerShell ([cc-tools]). This is the
   only harness-level per-skill shell switch we found.
 
-**Codex**
+### Codex
+
 - WSL2: Linux sandbox, so bubblewrap or user namespaces are needed (harnesses research).
 - Native: the shell is PowerShell, never Git Bash ([cx-src]). The sandbox is MXC, then `elevated`, then `unelevated`, and
   under MXC leftover child processes are killed ([cx-winsandbox]). Codex's own Windows docs don't mention bash or `.sh` at
   all ([cx-winsandbox]). Whether Git Bash's `bash.exe` runs inside the restricted-token sandbox is **unverified**.
 
-**Copilot CLI**
+### Copilot CLI
+
 - WSL2: the `bash` tool and `shell(...)` rules, as on Linux.
 - Native: the tool names are `powershell`, `read_powershell`, `write_powershell`, `stop_powershell` and
   `list_powershell` ([cp-cmdref]). So the driver's read-only `--available-tools bash view glob grep` must name
