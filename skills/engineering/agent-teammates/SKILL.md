@@ -56,6 +56,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 - Clean up only what you started, whether that's processes or files outside your directory.
 - Make every call bare: one command, by its literal absolute path, with no `;`, `&&`, pipes, `source` or shell variables, so the allow rules match it. The wait loop above is the one exception.
 - No proof, no done. A read-only teammate on Codex or Copilot has no proof and nothing to run. Otherwise, if `<team-dir>/prompts/<name>.proof` exists, run each proof in it as `<teammates>/evidence.sh <team-dir> <name> <label>`, after your last commit and again in every round. It runs the declared command and logs its output, head SHA and exit code, and the coordinator checks those logs against your HEAD. Your own summary of a run isn't evidence.
+- Run full test suites, type checks and builds only through `<teammates>/evidence.sh`: a declared proof, or an extra command as `<teammates>/evidence.sh <team-dir> <name> <label> -- <command>`. It runs one command at a time across the whole team, so two suites never share the machine's memory. Outside it, run only the test files you're changing.
 - Keep the report short. Say what you did, the files you touched, one `commit: <sha>` line if you committed, each proof label with its result, what you didn't check and why, where you departed from the brief and why, and your start and end times (`date -u`).
 
 ## Launch, re-task, close
@@ -112,3 +113,5 @@ If `launch-teammate.sh` exits 2 (`NO_BG`: the harness can't run a background ses
 ## Parallelism
 
 Keep at most two teammates that write (edit files or commit) working at once, plus one long-lived owner of a shared target such as a device or a stage environment. Read-only teammates do not count toward the limit. The limit protects your context from too many reports and keeps writers from contending, and read-only reviewers produce the same reports whether they run in parallel or one after another. Give each exclusive resource (a device, a worktree, a test account) one long-lived owner that takes requests from you as new jobs, rather than sharing it between teammates.
+
+The machine's memory is a shared resource too. A full test suite or type check can take several GB, so `evidence.sh` holds a team-wide lock (`<team-dir>/reports/run.lock`) while its command runs, and the contract sends every full suite, type check and build through it. A teammate waiting on the lock is still working; its log's `waited:` line says for how long. Write proof commands that cap their own workers (Jest's `--maxWorkers`, for example) so one run leaves room for the engineer's other apps.
