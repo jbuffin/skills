@@ -7,7 +7,9 @@
 # start time), the output, and a last line "exit: <code>". The log is written to a temp file and moved into place
 # only once the command has finished, so a killed run leaves no log. Prints the last 40 lines and exits with the
 # command's code. verify-report.sh checks these logs, not the report's prose.
-[[ -z $1 || -z $2 || -z $3 || ( -n $4 && ( $4 != -- || -z $5 ) ) ]] && { sed -n 2,9p $0; exit 5; }
+# Commands from every teammate on the team run one at a time: each takes <team-dir>/reports/run.lock first, so two
+# test suites or builds never share the machine's memory. The log header records how long it waited.
+[[ -z $1 || -z $2 || -z $3 || ( -n $4 && ( $4 != -- || -z $5 ) ) ]] && { sed -n 2,11p $0; exit 5; }
 D=${1:A}; NAME=$2; LABEL=$3
 source ${0:A:h}/team-env.zsh
 valid_name $NAME; valid_name $LABEL
@@ -21,12 +23,19 @@ else
   CMD=(zsh -c $SHOWN)
 fi
 E=$D/reports/$NAME-evidence; mkdir -p $E; L=$E/$LABEL.log; T=$L.partial
+K=$D/reports/run.lock; : >> $K || { echo "can't create $K"; exit 5; }
+zmodload zsh/system; W0=$SECONDS
+if ! zsystem flock -t 0 $K 2>/dev/null; then
+  echo "waiting for another teammate's command to finish (lock $K)"
+  zsystem flock $K || { echo "can't lock $K"; exit 5; }
+fi
 {
   print -r -- "\$ $SHOWN"
   print -r -- "dir: $PWD"
   print -r -- "head: $(git rev-parse HEAD 2>/dev/null)"
   print -r -- "dirty: $(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   print -r -- "start: $(date -u +%FT%TZ)"
+  print -r -- "waited: $(( SECONDS - W0 ))s"
   print -r -- "---"
 } > $T
 "${CMD[@]}" >> $T 2>&1

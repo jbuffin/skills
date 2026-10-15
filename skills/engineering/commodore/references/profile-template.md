@@ -25,7 +25,7 @@ Copy this to `<run>/profile.md`. Fill in every field, or write `n/a`. The profil
 - The repository checkout (`REPO` in `team.env`; nobody works in it), the base branch, and the branch prefix for the run's branches.
 - `WORKTREE_SETUP`: the ignored files each worktree needs from the checkout (`copy:.env`, `clone:node_modules`), and why.
 - Paths this work touches, reference paths if there are any, and protected paths nobody touches.
-- Commands for unit tests, lint, instrumented or UI tests, and the release build. These become the proof lines in each teammate's `<run>/prompts/<name>.proof`.
+- Commands for unit tests, lint, instrumented or UI tests, and the release build. These become the proof lines in each teammate's `<run>/prompts/<name>.proof`. Cap each command's workers so one run fits in the memory the engineer's other apps leave free (Jest `--maxWorkers=2`, Gradle `--max-workers=2`, and so on), and give the command that runs a single test file.
 - Toolchain pins and the reason for each.
 - Project rules teammates have to follow, from CLAUDE.md or similar.
 - The PR template, any required PR sections, and the title format (a work-item prefix, say).

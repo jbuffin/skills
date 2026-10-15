@@ -39,13 +39,13 @@ Investigation and documentation work keeps the same roles. The implementer produ
 
 ## Test writer (red)
 
-**Contract.** Write the unit's tests from the source of truth, or for work that isn't code, the checks described above. Every test fails, and for the right reason. Your first job is flagging anything in the brief that contradicts the source of truth. Report the test files, counts, the red output's failure messages, any contradictions in the brief, and your questions.
+**Contract.** Write the unit's tests from the source of truth, or for work that isn't code, the checks described above. Every test fails, and for the right reason. Your first job is flagging anything in the brief that contradicts the source of truth. Run only your new test files, never the full suite. Report the test files, counts, the red output's failure messages, any contradictions in the brief, and your questions.
 
 **Fallback.** Cover the behaviour, contracts, edge cases and acceptance criteria. Prefer deterministic seams to sampled or long-running tests.
 
 ## Implementer (green, then fixes)
 
-**Contract.** Make the tests pass. Run the full suites, lint, and any UI or integration tests the brief names, and commit on the unit's branch. Then, after the last commit, run each declared proof (`<teammates>/evidence.sh <run> <name> <label>`) and put `commit: <sha>` in the report. Report where you departed from the source of truth, and why.
+**Contract.** Make the tests pass. While you work, run only the test files you're changing. Run the full suites, lint, and any UI or integration tests the brief names only through `<teammates>/evidence.sh`, which runs them one at a time across the team, and commit on the unit's branch. Then, after the last commit, run each declared proof (`<teammates>/evidence.sh <run> <name> <label>`) and put `commit: <sha>` in the report. Report where you departed from the source of truth, and why.
 
 Then end your turn the way the teammate contract says. On a fix round, apply the findings, re-run everything, commit, run the proofs again, overwrite the report and touch `.done`. When you disagree with a finding, say why in the report.
 

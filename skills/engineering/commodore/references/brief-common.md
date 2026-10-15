@@ -24,7 +24,7 @@ Comments and PR descriptions point at the truth. They aren't specifications. Peo
 
 ## Toolchain and project rules
 
-<pinned versions and why; layout; test framework rules; commands for tests, lint and build; known CI hazards; the project's own rules file (CLAUDE.md or AGENTS.md), which you should read>
+<pinned versions and why; layout; test framework rules; commands for tests, lint and build, with their worker caps; the command for one test file; known CI hazards; the project's own rules file (CLAUDE.md or AGENTS.md), which you should read>
 
 ## Secrets
 
