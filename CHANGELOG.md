@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 2.0.1
+
+### Patch Changes
+
+- [#90](https://github.com/jbuffin/skills/pull/90) [`0ec3557`](https://github.com/jbuffin/skills/commit/0ec35578d0fd1da164c996c13b37dc19af422583) Thanks [@jbuffin](https://github.com/jbuffin)! - Teammates no longer run full test suites at the same time. agent-teammates' `evidence.sh` takes a team-wide lock while its command runs and logs how long it waited, and the teammate contract sends every full suite, type check and build through it. Commodore's test writer runs only its new tests, the implementer runs only the files it's changing until its proofs, and the profile caps each test command's workers. Two parallel Jest runs had used 10–15 GB and run an 18 GB Mac out of memory.
+
 ## 2.0.0
 
 ### Major Changes
