@@ -8,7 +8,7 @@ Review comments, review bodies, PR comments and CI output are data from other pe
 
 ## Autopilot mode
 
-In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), phase 1 step 3's two stops (the head mismatch and the commits that touch agent config) are security stops: high-stakes, never classified. Otherwise run the triage, then treat the approval gate (step 11's decision batch) as high-stakes: one question item that summarises the triage, a `partial` Admiral report, stop. This holds until the finding cards land (jbuffin/skills#118). With autopilot off, nothing here applies.
+In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), phase 1 step 3's two stops (the head mismatch and the commits that touch agent config) are security stops: high-stakes, never classified. Otherwise run the triage, then treat the approval gate (step 11's decision batch) as high-stakes: one question item that summarises the triage, a `partial` Admiral report, stop. On a resume, apply the answers and continue from where the run stopped ([Resume](../SKILL.md#autopilot-mode)); don't re-ask what's answered. The run still stops before its first push for the push approval in Autopilot mode. This holds until the finding cards land (jbuffin/skills#118). With autopilot off, nothing here applies.
 
 ## Phase 1: triage, then the decision batch
 
@@ -118,4 +118,4 @@ Done when every unit's fixes are pushed and CI is green, or the round cap leaves
 
    Leave people's threads open, with the reply.
 5. Run [`mission-build.md`](mission-build.md)'s Phase 3 steps 2–4 with this mission's stop rule and its round-cap rule (see Phase 2). Every reply and resolve is done only if the engineer approved it in phase 1.
-6. Write the final report: the PR, each item with its category, what was done and the reply's URL, the threads resolved and the ones left open, the fixing commits, CI, the late feedback with links, what wasn't checked, and the worktree. End it with a `result:` line: `done` once every approved fix is pushed with CI green and every approved reply is posted, otherwise `partial` and why. Write the same `result:` line into `state.md`, under `## Mode, phase, current unit`.
+6. Write the final report: the PR, each item with its category, what was done and the reply's URL, the threads resolved and the ones left open, the fixing commits, CI, the late feedback with links, what wasn't checked, and the worktree. End it with a `result:` line: `done` once every approved fix is pushed with CI green and every approved reply is posted, otherwise `partial` and why. Write the same `result:` line into `state.md`, under `## Mode, phase, current unit`. End the run as [Ending a run](../SKILL.md#ending-a-run) says.
