@@ -29,6 +29,9 @@
 #   ROLES role-skills.sh resolves the role-skill override layers (issue #71, ADR 0004), each driver's has-skill finds
 #       installed skills, and team-preflight passes the warnings through. The preflight-* goldens were edited by hand
 #       to add the security reviewer's warning; `--record` would revert them. `tests/run.sh roles` runs just these.
+#   ADMIRAL  admiral-io.sh (publish an Admiral report or inbox item, read an answer) and schema-check.py, with the
+#       two JSON Schemas in commodore/references that encode the Admiral contract (issue #116, admiral#112). Assertion
+#       style; `tests/run.sh admiral` runs just these.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -2928,6 +2931,486 @@ want setup && {
   rd save $RUN; rc_is 0
   [[ $(git -C $SC/repo status --porcelain --untracked-files=all) == '?? .commodore/roles.json' ]] || P+="repo save wrote more than .commodore/roles.json"
   verdict "SETUP save: writes only the init target's file, as ordered arrays of bare names; refuses an invalid draft or another target"
+}
+
+# ======================================================================================================================
+# ADMIRAL: admiral-io.sh publishes Commodore's Admiral report and inbox items, and reads answers (issue #116, parent
+# jbuffin/admiral#112 "Interfaces between Admiral and the skills"). schema-check.py validates a JSON file against a draft
+# 2020-12 schema; the two schemas in references/ encode the parent's report and inbox item. Fixtures are concrete
+# instances built from the contract's templates. `tests/run.sh admiral` runs just these.
+#   schema-check.py <schema> <instance>   exit 0 valid; 1 invalid (reasons on stderr); 2 can't check (unsupported keyword)
+#   admiral-io.sh item|report <draft>     exit 0 published or no-op; 2 invalid or item exists; 5 usage
+#   admiral-io.sh answer <dir> <id>       exit 0 printed; 3 not answered yet; 2 bad id; 5 usage
+# ======================================================================================================================
+AD_SCH=$SB/src/skills/engineering/commodore/references
+AD_ITEM_SCH=$AD_SCH/admiral-inbox-item.schema.json
+AD_REP_SCH=$AD_SCH/admiral-report.schema.json
+AD_IO=$CM/admiral-io.sh
+AD_SC=$CM/schema-check.py
+
+AD_Q='{"version": 1, "id": "q-1", "kind": "question", "created": "2026-09-21T13:33:20Z", "title": "Two calls need you",
+ "question": {"questions": [
+   {"id": "1", "text": "Push the fix to the PR branch?", "options": [{"label": "Push", "description": "Force-push with lease."},
+    {"label": "Hold", "description": "Leave the branch alone."}], "recommended": "Hold", "multi": false},
+   {"id": "2", "text": "Which checks to run?", "options": [{"label": "unit", "description": "Fast."}, {"label": "e2e", "description": "Slow."}],
+    "recommended": "unit", "multi": true}]}}'
+AD_R='{"version": 1, "id": "rv-7", "kind": "review", "created": "2026-09-21T13:33:20+02:00", "title": "Review of PR 12",
+ "order_url": "https://example.com/orders/9",
+ "review": {"pr_url": "https://github.com/o/r/pull/12", "review_id": 123, "summary": "Two nits, one real bug."}}'
+AD_F='{"version": 1, "id": "f-3", "kind": "findings", "created": "2026-09-21T13:33:20.5Z", "title": "Feedback on PR 12",
+ "findings": {"pr_url": "https://github.com/o/r/pull/12", "cards": [
+   {"id": "r1", "source": "octocat", "quote": "This leaks a handle.", "verdict": "agree", "reason": "The handle is never closed.",
+    "proposal": {"kind": "diff", "content": "--- a/x\n+++ b/x\n"}, "evidence": ["x.sh:12", "tests/run.sh x: FAIL"]},
+   {"id": "r2", "source": "lint", "quote": "Rename it.", "verdict": "unclear", "reason": "Both names are in use.",
+    "proposal": {"kind": "reply", "content": "Keeping the name."}, "evidence": []}]}}'
+AD_DONE='{"version": 1, "result": "done", "why": "Reviewed PR 12 and left it PENDING.", "prs": ["https://github.com/o/r/pull/12"],
+ "assumptions": ["took the recommended default on the allow rules"], "inbox": ["rv-7"]}'
+AD_PART='{"version": 1, "result": "partial", "why": "Two questions need the engineer.", "prs": [],
+ "assumptions": [], "inbox": ["q-1"], "resume": "/commodore resume run-9"}'
+AD_FAIL='{"version": 1, "result": "failed", "why": "The build never went green."}'
+
+jqm() { print -r -- "$1" | jq -c "$2"; }   # jqm <json> <filter>: the mutated instance
+# sck <schema> <want-rc> <json>: validate through schema-check.py; failures land in P
+sck() {
+  print -r -- "$3" > $SC/inst.json
+  xrun $AD_SC $1 $SC/inst.json
+  [[ $RC == $2 ]] || P+="schema-check exit $RC, want $2 for $(print -r -- $3 | head -c 90 | tr '\n' ' '); stderr: $(head -c 200 $SC/err | tr '\n' '|')"
+  [[ $2 == 1 && ! -s $SC/err ]] && P+="no reason on stderr for $(print -r -- $3 | head -c 90 | tr '\n' ' ')"
+  [[ -s $SC/out ]] && P+="schema-check wrote to stdout"
+  return 0
+}
+nfiles() { [[ -d $1 ]] && find $1 -type f 2>/dev/null | wc -l | tr -d ' ' || echo 0; }
+# aio <env VAR=val...> -- args: run admiral-io.sh with only BASE plus the variables
+aio() {
+  local -a e=(); while [[ $1 != -- ]]; do e+=$1; shift; done; shift
+  xrun $e $AD_IO "$@"
+}
+same_json() { [[ -f $1 && $(jq -S . $1 2>/dev/null) == $(print -r -- "$2" | jq -S .) ]] || P+="$1 doesn't hold the draft: $(head -c 150 $1 2>&1 | tr '\n' ' ')"; }
+
+want admiral-static && {
+  sc admiral-static
+  [[ -x $AD_IO ]] || P+="admiral-io.sh missing or not executable"
+  [[ $(head -1 $AD_IO 2>/dev/null) == '#!/bin/zsh' ]] || P+="admiral-io.sh shebang: '$(head -1 $AD_IO 2>&1)'"
+  grep -q $'\r' $AD_IO 2>/dev/null && P+="admiral-io.sh has CRLF"
+  [[ -f $AD_IO ]] && { zsh -n $AD_IO 2>/dev/null || P+="zsh -n admiral-io.sh fails" ; }
+  [[ $(sed -n 2p $AD_IO 2>/dev/null) == '# usage: admiral-io.sh item <draft.json>'* ]] || P+="line 2 isn't the usage block"
+  for s in admiral-report admiral-inbox-item; do
+    grep -q "^#.*$s.schema.json" $AD_IO 2>/dev/null || P+="no pointer comment to $s.schema.json"
+  done
+  verdict "ADMIRAL admiral-io.sh: executable zsh, LF, zsh -n, a usage block at the top, then pointers to both schemas"
+
+  [[ -x $AD_SC ]] || P+="schema-check.py missing or not executable"
+  [[ $(head -1 $AD_SC 2>/dev/null) == '#!'*python3* ]] || P+="schema-check.py shebang: '$(head -1 $AD_SC 2>&1)'"
+  grep -q $'\r' $AD_SC 2>/dev/null && P+="schema-check.py has CRLF"
+  grep -qE '^\s*(import|from) (jsonschema|referencing|fastjsonschema)' $AD_SC 2>/dev/null && P+="schema-check.py imports a third-party validator"
+  if command -v ruff >/dev/null; then
+    ruff check --config $ROOT/ruff.toml --no-cache $ROOT/skills/engineering/commodore/scripts/schema-check.py >$SC/ruff.out 2>&1 || P+="ruff check: $(head -c 200 $SC/ruff.out | tr '\n' '|')"
+    ruff format --config $ROOT/ruff.toml --no-cache --check $ROOT/skills/engineering/commodore/scripts/schema-check.py >$SC/ruff.out 2>&1 || P+="ruff format: $(head -c 200 $SC/ruff.out | tr '\n' '|')"
+  else echo "skip  ADMIRAL ruff (not installed)"; fi
+  verdict "ADMIRAL schema-check.py: executable stdlib-only python3, LF, ruff-clean"
+}
+
+want admiral-schema && {
+  sc admiral-schema
+  for f in $AD_ITEM_SCH $AD_REP_SCH; do
+    jq -e '."$schema" == "https://json-schema.org/draft/2020-12/schema"' $f >/dev/null 2>&1 || P+="${f:t}: missing or not a 2020-12 JSON file"
+  done
+  jq -e '[.. | objects | select(.pattern? == "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$") | .description? // ""] | any(test("Commodore"))' $AD_ITEM_SCH >/dev/null 2>&1 \
+    || P+="item schema: no id pattern ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\$ with a description saying it's Commodore's addition"
+  jq -e '[.. | objects | .description? // empty | strings] | any(test("skills#118"))' $AD_ITEM_SCH >/dev/null 2>&1 \
+    || P+="item schema: no description pointing at jbuffin/skills#118"
+  verdict "ADMIRAL schema files: 2020-12, the id rule documented as Commodore's addition, the findings note on #118"
+
+  for p in "question $AD_Q" "review $AD_R" "findings $AD_F"; do
+    sck $AD_ITEM_SCH 0 "${p#* }"; [[ $RC == 0 ]] || P+="${p%% *} item rejected"
+  done
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_Q 'del(.order_url)')"
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_Q '.order_url="https://x"')"
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_Q '.future_field={"a":1}')"
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_Q '.question.questions[0].id="a.b"')"
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_F '.findings.cards[0].id="r.1"')"
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_Q '.created="2026-09-21T13:33:20.123456+05:30"')"
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_Q ".id=\"${(l:64::a:)}\"")"
+  sck $AD_ITEM_SCH 0 "$(jqm $AD_Q '.id="Q_1-a"')"
+  verdict "ADMIRAL item schema accepts one concrete item per kind, an omitted order_url, extra top-level fields, dotted card and question ids, offsets"
+
+  for d f in \
+    'version missing' 'del(.version)' 'version 2' '.version=2' 'version true' '.version=true' 'version "1"' '.version="1"' \
+    'id missing' 'del(.id)' 'kind missing' 'del(.kind)' 'created missing' 'del(.created)' 'title missing' 'del(.title)' \
+    'kind bogus' '.kind="note"' 'title a number' '.title=3' \
+    'question object missing' 'del(.question)' \
+    'review object beside question' '.review={"pr_url":"u","review_id":1,"summary":"s"}' \
+    'findings object beside question' '.findings={"pr_url":"u","cards":[]}' \
+    'object for another kind only' '.kind="review"' \
+    'question without questions' '.question={}' \
+    'question text missing' 'del(.question.questions[0].text)' \
+    'question id missing' 'del(.question.questions[0].id)' \
+    'options missing' 'del(.question.questions[0].options)' \
+    'option label missing' 'del(.question.questions[0].options[0].label)' \
+    'option description missing' 'del(.question.questions[0].options[1].description)' \
+    'recommended missing' 'del(.question.questions[1].recommended)' \
+    'multi missing' 'del(.question.questions[0].multi)' \
+    'multi a string' '.question.questions[0].multi="false"' \
+    'created a date only' '.created="2026-09-21"' 'created without a zone' '.created="2026-09-21T13:33:20"' \
+    'created in words' '.created="yesterday"' 'created with a space' '.created="2026-09-21 13:33:20Z"' \
+    'created a number' '.created=1790000000' 'created empty' '.created=""' \
+    'id empty' '.id=""' 'id leading dot' '.id=".q-1"' 'id with a dot' '.id="q-1.answer"' 'id parent dir' '.id="../q-1"' \
+    'id with a slash' '.id="a/b"' 'id leading dash' '.id="-q"' 'id with a space' '.id="q 1"' 'id a number' '.id=1' \
+    "id 65 long" ".id=\"${(l:65::a:)}\"" 'id with a newline' '.id="q-1\n"'; do
+    sck $AD_ITEM_SCH 1 "$(jqm $AD_Q "$f")"
+    [[ $RC == 1 ]] || P+="^ for '$d'"
+  done
+  for d f in \
+    'review object missing' 'del(.review)' 'pr_url missing' 'del(.review.pr_url)' 'review_id missing' 'del(.review.review_id)' \
+    'summary missing' 'del(.review.summary)' 'review_id a string' '.review.review_id="123"' 'review_id a boolean' '.review.review_id=true' \
+    'review_id fractional' '.review.review_id=1.5' 'question beside review' '.question={"questions":[]}' \
+    'findings beside review' '.findings={"pr_url":"u","cards":[]}' 'summary a number' '.review.summary=3'; do
+    sck $AD_ITEM_SCH 1 "$(jqm $AD_R "$f")"
+    [[ $RC == 1 ]] || P+="^ for review: '$d'"
+  done
+  for d f in \
+    'findings object missing' 'del(.findings)' 'pr_url missing' 'del(.findings.pr_url)' 'cards missing' 'del(.findings.cards)' \
+    'cards not an array' '.findings.cards={}' 'card id missing' 'del(.findings.cards[0].id)' 'source missing' 'del(.findings.cards[0].source)' \
+    'quote missing' 'del(.findings.cards[0].quote)' 'verdict missing' 'del(.findings.cards[0].verdict)' \
+    'verdict maybe' '.findings.cards[1].verdict="maybe"' 'reason missing' 'del(.findings.cards[0].reason)' \
+    'proposal missing' 'del(.findings.cards[0].proposal)' 'proposal kind patch' '.findings.cards[0].proposal.kind="patch"' \
+    'proposal kind missing' 'del(.findings.cards[0].proposal.kind)' 'proposal content missing' 'del(.findings.cards[1].proposal.content)' \
+    'evidence missing' 'del(.findings.cards[0].evidence)' 'evidence not strings' '.findings.cards[0].evidence=[1]' \
+    'evidence a string' '.findings.cards[0].evidence="x.sh:1"' 'review beside findings' '.review={"pr_url":"u","review_id":1,"summary":"s"}'; do
+    sck $AD_ITEM_SCH 1 "$(jqm $AD_F "$f")"
+    [[ $RC == 1 ]] || P+="^ for findings: '$d'"
+  done
+  verdict "ADMIRAL item schema rejects each missing field, wrong type, wrong enum, two kind objects, bad created and bad id (exit 1, reason on stderr)"
+
+  sck $AD_REP_SCH 0 "$AD_DONE"; sck $AD_REP_SCH 0 "$AD_PART"; sck $AD_REP_SCH 0 "$AD_FAIL"
+  sck $AD_REP_SCH 0 "$(jqm $AD_DONE '.future={"x":[1]}')"
+  sck $AD_REP_SCH 0 "$(jqm $AD_FAIL '.resume="/commodore resume r"')"
+  sck $AD_REP_SCH 0 "$(jqm $AD_DONE '.resume="/commodore resume r"')"
+  sck $AD_REP_SCH 0 '{"version": 1, "result": "done", "why": "ok"}'
+  verdict "ADMIRAL report schema accepts a done, a partial and a failed report, a minimal one, extra fields, and a resume on any result"
+
+  for d f in \
+    'version missing' 'del(.version)' 'version 2' '.version=2' 'version true' '.version=true' 'result missing' 'del(.result)' \
+    'result ok' '.result="ok"' 'result capitalised' '.result="Done"' 'why missing' 'del(.why)' 'why a number' '.why=1' \
+    'prs a string' '.prs="u"' 'prs holds a number' '.prs=[1]' 'prs an object' '.prs={}' \
+    'assumptions a string' '.assumptions="x"' 'assumptions holds an object' '.assumptions=[{}]' \
+    'inbox a string' '.inbox="q-1"' 'inbox holds a number' '.inbox=[1]' 'resume a number' '.resume=1'; do
+    sck $AD_REP_SCH 1 "$(jqm $AD_PART "$f")"
+    [[ $RC == 1 ]] || P+="^ for report: '$d'"
+  done
+  sck $AD_REP_SCH 1 "$(jqm $AD_PART 'del(.resume)')"
+  sck $AD_REP_SCH 1 "$(jqm $AD_PART '.resume=null')"
+  sck $AD_REP_SCH 1 '[]'
+  sck $AD_REP_SCH 1 '"done"'
+  verdict "ADMIRAL report schema rejects each missing field, wrong type and enum, and a partial without a resume (exit 1, reason on stderr)"
+
+  sck $AD_ITEM_SCH 1 "$AD_DONE"; sck $AD_REP_SCH 1 "$AD_Q"
+  verdict "ADMIRAL a report isn't an item and an item isn't a report"
+}
+
+want admiral-check && {
+  sc admiral-check
+  S='{"type": "object", "required": ["a"], "properties": {"a": {"const": 1}, "b": {"enum": [true, "x"]}, "n": {"type": "integer"}, "s": {"type": "string", "pattern": "^x"}}, "additionalProperties": false}'
+  print -r -- $S > $SC/s.json
+  sck $SC/s.json 0 '{"a": 1, "b": "x", "n": 3, "s": "xy"}'
+  sck $SC/s.json 1 '{"a": true}'
+  sck $SC/s.json 1 '{"a": 1.0, "b": 1}'
+  sck $SC/s.json 1 '{"a": 1, "n": true}'
+  sck $SC/s.json 1 '{"a": 1, "n": 1.5}'
+  sck $SC/s.json 1 '{"a": 1, "extra": 0}'
+  sck $SC/s.json 1 '{"a": 1, "s": "yx"}'
+  verdict "ADMIRAL schema-check: const, enum, type and pattern don't mistake a boolean for a number; additionalProperties:false; pattern isn't anchored for you"
+
+  print -r -- '{"type": "array", "items": {"type": "object", "required": ["k"]}}' > $SC/i.json
+  sck $SC/i.json 0 '[{"k": 1}, {"k": 2}]'; sck $SC/i.json 0 '[]'; sck $SC/i.json 1 '[{"k": 1}, {}]'; sck $SC/i.json 1 '{"k": 1}'
+  print -r -- '{"allOf": [{"if": {"properties": {"r": {"const": "p"}}, "required": ["r"]}, "then": {"required": ["z"]}}, {"not": {"required": ["x", "y"]}}]}' > $SC/c.json
+  sck $SC/c.json 0 '{"r": "d"}'; sck $SC/c.json 0 '{"r": "p", "z": 1}'; sck $SC/c.json 1 '{"r": "p"}'; sck $SC/c.json 1 '{"x": 1, "y": 1}'; sck $SC/c.json 0 '{"x": 1}'
+  verdict "ADMIRAL schema-check: items, allOf, if/then and not"
+
+  print -r -- '{"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:x", "$comment": "c", "title": "t", "description": "d", "default": 1, "examples": [1], "type": "object"}' > $SC/a.json
+  sck $SC/a.json 0 '{}'
+  for k in '"unevaluatedProperties": false' '"dependentRequired": {"a": ["b"]}' '"propertyNames": {"maxLength": 2}' '"contains": {"type": "string"}'; do
+    print -r -- "{\"type\": \"object\", $k}" > $SC/u.json
+    sck $SC/u.json 2 '{}'; grep -q "${${k#\"}%%\"*}" $SC/err || P+="stderr doesn't name ${${k#\"}%%\"*}: $(head -c 150 $SC/err)"
+  done
+  print -r -- '{"properties": {"deep": {"allOf": [{"unevaluatedItems": false}]}}}' > $SC/u.json
+  sck $SC/u.json 2 '{}'
+  sck $SC/u.json 2 '{"deep": 1}'
+  verdict "ADMIRAL schema-check: annotations are fine; any other keyword fails loudly (exit 2), naming it, even nested and even when the instance wouldn't reach it"
+
+  print -r -- '{not json' > $SC/inst.json
+  xrun $AD_SC $AD_REP_SCH $SC/inst.json; [[ $RC == 1 || $RC == 2 ]] && [[ -s $SC/err ]] || P+="instance that isn't JSON: exit $RC, stderr '$(head -c 100 $SC/err)'"
+  [[ $RC == 0 ]] && P+="bad instance passed"
+  xrun $AD_SC $SC/missing.json $SC/inst.json; [[ $RC == 2 ]] || P+="missing schema file: exit $RC, want 2"
+  verdict "ADMIRAL schema-check: an instance that isn't JSON fails, and a missing schema exits 2"
+
+  sck $AD_REP_SCH 1 "$(jqm $AD_DONE 'del(.why)')"; grep -q why $SC/err || P+="the reason doesn't name the missing field: $(head -c 150 $SC/err)"
+  sck $AD_ITEM_SCH 1 "$(jqm $AD_Q '.created="soon"')"; grep -q created $SC/err || P+="the reason doesn't name created: $(head -c 150 $SC/err)"
+  sck $AD_ITEM_SCH 1 "$(jqm $AD_Q '.kind="x"')"; grep -q kind $SC/err || P+="the reason doesn't name kind: $(head -c 150 $SC/err)"
+  verdict "ADMIRAL schema-check: the reasons on stderr name the offending field"
+
+  AD_QD='{"version":1,"id":"../../evil","id":"ok-2","kind":"question","kind":"review","created":"2026-09-21T13:33:20Z","title":"t","question":{"questions":[]}}'
+  sck $AD_ITEM_SCH 1 "$AD_QD"; grep -q 'duplicate key' $SC/err || P+="duplicate id and kind: the reason doesn't say so: $(head -c 150 $SC/err)"
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "a", "why": "b"}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "assumptions": [], "assumptions": []}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": NaN}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": Infinity}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": [-Infinity]}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": 1e999}'
+  sck $AD_REP_SCH 0 '{"version": 1, "result": "done", "why": "x", "n": 1e300}'
+  print -r -- '{"a": 1, "a": 2}' > $SC/inst.json; xrun $AD_SC --json $SC/inst.json; [[ $RC == 1 && -s $SC/err ]] || P+="--json with a duplicate key: exit $RC"
+  print -r -- '[NaN]' > $SC/inst.json; xrun $AD_SC --json $SC/inst.json; [[ $RC == 1 ]] || P+="--json with NaN: exit $RC"
+  print -r -- '{"a": [1, 2.5, "x"]}' > $SC/inst.json; xrun $AD_SC --json $SC/inst.json; [[ $RC == 0 ]] || P+="--json with plain JSON: exit $RC"
+  print -r -- '{"required": "abc"}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"properties": [1]}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"type": 3}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"enum": "x"}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"allOf": {}}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"pattern": 1}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"properties": {"a": 5}}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '[]' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"pattern": "^a\\\\$"}' > $SC/s.json; sck $SC/s.json 0 '"a\\"'; sck $SC/s.json 1 '"a\\\n"'
+  print -r -- '{"pattern": "^[$]x$"}' > $SC/s.json; sck $SC/s.json 0 '"$x"'; sck $SC/s.json 1 '"$x\n"'
+  verdict "ADMIRAL schema-check: duplicate keys, NaN, Infinity and 1e999 are refused; a keyword with the wrong kind of argument exits 2; \$ in a pattern means end of string"
+}
+
+# ad_sc <name>: a scenario with draft path $SC/draft.json and the inbox/report locations Admiral would set
+ad_sc() { sc $1; INB=$SC/ship/inbox/s1/; REP=$SC/ship/reports/s1.json; DR=$SC/draft.json }
+ad_draft() { print -r -- "$1" > $DR; }
+
+want admiral-item && {
+  ad_sc admiral-item-publish
+  ad_draft "$AD_Q"
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 0 ]] || P+="exit $RC; stderr: $(head -c 200 $SC/err)"
+  same_json $SC/ship/inbox/s1/q-1.json "$AD_Q"
+  [[ $(nfiles $SC/ship/inbox) == 1 ]] || P+="files left in the inbox: $(find $SC/ship/inbox -type f 2>/dev/null | tr '\n' ' ')"
+  [[ -s $SC/out ]] && P+="stdout: $(head -c 100 $SC/out)"
+  ad_draft "$AD_R"; aio ADMIRAL_INBOX=$SC/inbox2 ADMIRAL_REPORT=$REP -- item $DR
+  [[ $RC == 0 ]] || P+="review item: exit $RC; stderr: $(head -c 200 $SC/err)"
+  same_json $SC/inbox2/rv-7.json "$AD_R"
+  ad_draft "$AD_F"; aio ADMIRAL_INBOX=$SC/inbox2 -- item $DR
+  [[ $RC == 0 ]] || P+="findings item: exit $RC; stderr: $(head -c 200 $SC/err)"
+  same_json $SC/inbox2/f-3.json "$AD_F"
+  [[ $(nfiles $SC/inbox2) == 2 && ! -e $REP ]] || P+="inbox2 holds: $(find $SC/inbox2 -type f 2>/dev/null | tr '\n' ' '); report exists: $([[ -e $REP ]] && echo yes)"
+  verdict "ADMIRAL item: publishes a valid item of each kind to <inbox>/<id>.json (creating the directory), leaving no temp file"
+
+  ad_sc admiral-item-unset
+  ad_draft "$AD_Q"
+  aio -- item $DR
+  [[ $RC == 0 ]] || P+="unset: exit $RC"
+  [[ $(wc -l < $SC/err | tr -d ' ') == 1 ]] || P+="unset: stderr should be exactly one line: '$(head -c 200 $SC/err)'"
+  aio ADMIRAL_INBOX= -- item $DR
+  [[ $RC == 0 && $(wc -l < $SC/err | tr -d ' ') == 1 ]] || P+="empty: exit $RC, stderr '$(head -c 200 $SC/err)'"
+  aio ADMIRAL_REPORT=$REP -- item $DR
+  [[ $RC == 0 && $(wc -l < $SC/err | tr -d ' ') == 1 ]] || P+="only ADMIRAL_REPORT set: exit $RC, stderr '$(head -c 200 $SC/err)'"
+  print -r -- '{not json' > $DR
+  aio -- item $DR
+  [[ $RC == 0 ]] || P+="unset with a broken draft: exit $RC (the draft isn't read)"
+  rm -f $DR; aio -- item $DR
+  [[ $RC == 0 ]] || P+="unset with no draft file: exit $RC (the draft isn't read)"
+  [[ $(nfiles $SC/ship) == 0 && ! -e $SC/ship ]] || P+="created $SC/ship"
+  verdict "ADMIRAL item: with ADMIRAL_INBOX unset or empty it reads nothing, writes nothing and exits 0 with one stderr line"
+
+  ad_sc admiral-item-invalid
+  for d f in \
+    'no title' 'del(.title)' 'no kind' 'del(.kind)' 'two kind objects' '.review={"pr_url":"u","review_id":1,"summary":"s"}' \
+    'bad created' '.created="soon"' 'id with a dot' '.id="q-1.answer"' 'id traversal' '.id="../q-1"' 'hidden id' '.id=".q"' \
+    'no version' 'del(.version)' 'version 2' '.version=2' 'no id' 'del(.id)' 'no created' 'del(.created)' 'bogus kind' '.kind="note"'; do
+    ad_draft "$(jqm $AD_Q "$f")"; rm -rf $SC/ship
+    aio ADMIRAL_INBOX=$INB -- item $DR
+    [[ $RC == 2 ]] || P+="'$d': exit $RC, want 2"
+    [[ -s $SC/err ]] || P+="'$d': no reason on stderr"
+    [[ $(nfiles $SC/ship) == 0 ]] || P+="'$d' wrote: $(find $SC/ship -type f 2>/dev/null | tr '\n' ' ')"
+  done
+  print -r -- '{"version": 1, "id": "q-1"' > $DR; aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 && -s $SC/err && $(nfiles $SC/ship) == 0 ]] || P+="truncated draft: exit $RC, files $(nfiles $SC/ship)"
+  ad_draft '[]'; aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 && $(nfiles $SC/ship) == 0 ]] || P+="array draft: exit $RC"
+  for d t in \
+    'duplicate id and kind' '{"version":1,"id":"../../evil","id":"ok-2","kind":"question","kind":"review","created":"2026-09-21T13:33:20Z","title":"t","question":{"questions":[]}}' \
+    'duplicate title' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","title":"b","review":{"pr_url":"u","review_id":1,"summary":"s"}}' \
+    'NaN' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","x":NaN,"review":{"pr_url":"u","review_id":1,"summary":"s"}}' \
+    'Infinity' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","x":[Infinity],"review":{"pr_url":"u","review_id":1,"summary":"s"}}' \
+    '1e999' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","x":1e999,"review":{"pr_url":"u","review_id":1,"summary":"s"}}'; do
+    rm -rf $SC/ship; ad_draft "$t"; aio ADMIRAL_INBOX=$INB -- item $DR
+    [[ $RC == 2 && -s $SC/err && $(nfiles $SC/ship) == 0 ]] || P+="$d: exit $RC, files $(nfiles $SC/ship)"
+  done
+  ad_draft "$AD_Q"; aio ADMIRAL_INBOX=$INB -- item $SC/no-such-draft.json
+  [[ $RC == 2 || $RC == 5 ]] && [[ $(nfiles $SC/ship) == 0 ]] || P+="missing draft file: exit $RC"
+  ad_draft "$(jqm $AD_Q '.id="../../escape"')"; aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ ! -e $SC/ship/escape.json && ! -e $SC/escape.json && ! -e $SC/ship/inbox/escape.json ]] || P+="an id with .. escaped the inbox"
+  verdict "ADMIRAL item: an invalid draft (missing field, two kind objects, bad created, bad id, not JSON) exits 2 with reasons and writes nothing"
+
+  ad_sc admiral-item-exists
+  ad_draft "$AD_Q"
+  aio ADMIRAL_INBOX=$INB -- item $DR; [[ $RC == 0 ]] || P+="first publish: exit $RC"
+  ad_draft "$(jqm $AD_Q '.title="a different question"')"
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 ]] || P+="second publish of q-1: exit $RC, want 2"
+  [[ -s $SC/err ]] || P+="no reason on stderr"
+  [[ $(jq -r .title $SC/ship/inbox/s1/q-1.json 2>/dev/null) == 'Two calls need you' ]] || P+="the item was overwritten"
+  [[ $(nfiles $INB) == 1 ]] || P+="temp file left: $(find $INB -type f 2>/dev/null | tr '\n' ' ')"
+  ad_draft "$(jqm $AD_Q '.id="q-2"')"; aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 0 && $(nfiles $INB) == 2 ]] || P+="a new id is refused: exit $RC"
+  verdict "ADMIRAL item: an item is never overwritten; the second publish of an id exits 2, leaves the first intact and no temp file"
+
+  ad_sc admiral-item-dest
+  ad_draft "$AD_Q"; mkdir -p $INB/q-1.json
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 && -s $SC/err ]] || P+="a directory at <id>.json: exit $RC, want 2 with a reason"
+  [[ $(nfiles $INB) == 0 ]] || P+="a directory at <id>.json: files left: $(find $INB -type f 2>/dev/null | tr '\n' ' ')"
+  rmdir $INB/q-1.json; mkdir -p $SC/elsewhere; ln -s $SC/elsewhere $INB/q-1.json
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 ]] || P+="a symlink to a directory at <id>.json: exit $RC, want 2"
+  [[ $(nfiles $SC/elsewhere) == 0 ]] || P+="wrote through the symlink: $(find $SC/elsewhere -type f 2>/dev/null | tr '\n' ' ')"
+  rm -f $INB/q-1.json; ln -s $SC/no-such-target $INB/q-1.json
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 && ! -e $SC/no-such-target ]] || P+="a dangling symlink at <id>.json: exit $RC"
+  aio ADMIRAL_INBOX=/ -- item $DR
+  [[ $RC == 2 && ! -e $SC/cwd/q-1.json && ! -e /q-1.json ]] || P+="ADMIRAL_INBOX=/: exit $RC"
+  verdict "ADMIRAL item: a directory, a symlink or ADMIRAL_INBOX=/ doesn't publish and doesn't succeed (exit 2, no temp file left)"
+
+  ad_sc admiral-item-hostile
+  T='x"; touch '$SC'/pwned; $(touch '$SC'/pwned2) `touch '$SC'/pwned3` \n é 😀'
+  ad_draft "$(print -r -- $AD_Q | jq -c --arg t "$T" '.title=$t')"
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 0 ]] || P+="exit $RC; stderr: $(head -c 200 $SC/err)"
+  [[ $(jq -r .title $SC/ship/inbox/s1/q-1.json 2>/dev/null) == $(jq -r .title $DR) ]] || P+="the title changed on the way"
+  [[ -e $SC/pwned || -e $SC/pwned2 || -e $SC/pwned3 ]] && P+="draft text was executed"
+  verdict "ADMIRAL item: text in the draft is data, never evaluated, and survives unchanged"
+
+  ad_sc admiral-item-trailing
+  ad_draft "$AD_Q"
+  aio ADMIRAL_INBOX=$SC/in/box -- item $DR
+  [[ $RC == 0 && -f $SC/in/box/q-1.json ]] || P+="without a trailing slash: exit $RC"
+  verdict "ADMIRAL item: ADMIRAL_INBOX with or without a trailing slash"
+}
+
+want admiral-report && {
+  ad_sc admiral-report-publish
+  for r in "done $AD_DONE" "partial $AD_PART" "failed $AD_FAIL"; do
+    rm -rf $SC/ship; ad_draft "${r#* }"
+    aio ADMIRAL_REPORT=$REP -- report $DR
+    [[ $RC == 0 ]] || P+="${r%% *}: exit $RC; stderr: $(head -c 200 $SC/err)"
+    same_json $REP "${r#* }"
+    [[ $(nfiles $SC/ship) == 1 ]] || P+="${r%% *}: files: $(find $SC/ship -type f 2>/dev/null | tr '\n' ' ')"
+  done
+  verdict "ADMIRAL report: publishes a done, a partial and a failed report to \$ADMIRAL_REPORT, creating its parent directory, leaving no temp file"
+
+  ad_sc admiral-report-replace
+  ad_draft "$AD_PART"; aio ADMIRAL_REPORT=$REP -- report $DR
+  ad_draft "$AD_FAIL"; aio ADMIRAL_REPORT=$REP -- report $DR
+  [[ $RC == 0 ]] || P+="a repeat in one ship: exit $RC; stderr: $(head -c 200 $SC/err)"
+  same_json $REP "$AD_FAIL"
+  [[ $(nfiles $SC/ship/reports) == 1 ]] || P+="files: $(find $SC/ship -type f 2>/dev/null | tr '\n' ' ')"
+  verdict "ADMIRAL report: a second report in the same ship replaces the first"
+
+  ad_sc admiral-report-dest
+  ad_draft "$AD_DONE"; mkdir -p $REP
+  aio ADMIRAL_REPORT=$REP -- report $DR
+  [[ $RC == 2 && -s $SC/err ]] || P+="a directory at the report path: exit $RC, want 2 with a reason"
+  [[ $(nfiles $REP) == 0 ]] || P+="files left in it: $(find $REP -type f 2>/dev/null | tr '\n' ' ')"
+  rmdir $REP; aio ADMIRAL_REPORT=$SC/ship/reports/r2/ -- report $DR
+  [[ $RC == 2 && ! -e $SC/ship/reports/r2 ]] || P+="a report path ending in a slash: exit $RC"
+  for d t in \
+    'duplicate why' '{"version": 1, "result": "done", "why": "a", "why": "b"}' \
+    'duplicate result' '{"version": 1, "result": "failed", "result": "done", "why": "a"}' \
+    'NaN' '{"version": 1, "result": "done", "why": "a", "n": NaN}' \
+    'Infinity' '{"version": 1, "result": "done", "why": "a", "n": Infinity}'; do
+    rm -rf $SC/ship; ad_draft "$t"; aio ADMIRAL_REPORT=$REP -- report $DR
+    [[ $RC == 2 && -s $SC/err && ! -e $SC/ship ]] || P+="$d: exit $RC"
+  done
+  verdict "ADMIRAL report: a directory or a path ending in a slash doesn't publish; duplicate keys and NaN exit 2"
+
+  ad_sc admiral-report-unset
+  ad_draft "$AD_DONE"
+  aio -- report $DR
+  [[ $RC == 0 && $(wc -l < $SC/err | tr -d ' ') == 1 ]] || P+="unset: exit $RC, stderr '$(head -c 200 $SC/err)'"
+  aio ADMIRAL_REPORT= -- report $DR
+  [[ $RC == 0 && $(wc -l < $SC/err | tr -d ' ') == 1 ]] || P+="empty: exit $RC, stderr '$(head -c 200 $SC/err)'"
+  aio ADMIRAL_INBOX=$INB -- report $DR
+  [[ $RC == 0 && $(wc -l < $SC/err | tr -d ' ') == 1 ]] || P+="only ADMIRAL_INBOX set: exit $RC, stderr '$(head -c 200 $SC/err)'"
+  print -r -- 'broken' > $DR; aio -- report $DR
+  [[ $RC == 0 ]] || P+="unset with a broken draft: exit $RC (the draft isn't read)"
+  [[ ! -e $SC/ship ]] || P+="created $SC/ship"
+  verdict "ADMIRAL report: with ADMIRAL_REPORT unset or empty it reads nothing, writes nothing and exits 0 with one stderr line"
+
+  ad_sc admiral-report-invalid
+  ad_draft "$AD_PART"; aio ADMIRAL_REPORT=$REP -- report $DR   # a good report is already in place
+  for d f in \
+    'no result' 'del(.result)' 'bad result' '.result="ok"' 'no why' 'del(.why)' 'no version' 'del(.version)' \
+    'partial without resume' 'del(.resume)' 'prs not an array' '.prs="u"'; do
+    ad_draft "$(jqm $AD_PART "$f")"
+    aio ADMIRAL_REPORT=$REP -- report $DR
+    [[ $RC == 2 && -s $SC/err ]] || P+="'$d': exit $RC, want 2 with a reason"
+    same_json $REP "$AD_PART"
+    [[ $(nfiles $SC/ship) == 1 ]] || P+="'$d' left files: $(find $SC/ship -type f 2>/dev/null | tr '\n' ' ')"
+  done
+  print -r -- '{"version": 1,' > $DR; aio ADMIRAL_REPORT=$REP -- report $DR
+  [[ $RC == 2 ]] || P+="truncated draft: exit $RC"
+  same_json $REP "$AD_PART"
+  ad_sc admiral-report-invalid-fresh; ad_draft "$(jqm $AD_DONE 'del(.why)')"
+  aio ADMIRAL_REPORT=$REP -- report $DR
+  [[ $RC == 2 && ! -e $SC/ship ]] || P+="fresh invalid: exit $RC, created $SC/ship"
+  verdict "ADMIRAL report: an invalid draft exits 2 with reasons and leaves any report already in place untouched"
+}
+
+want admiral-answer && {
+  ad_sc admiral-answer
+  mkdir -p $SC/inbox; A='{"answers": {"1": "Hold", "2": ["unit"]}, "note": "é"}'
+  print -r -- "$A" > $SC/inbox/q-1.answer.json
+  aio -- answer $SC/inbox q-1
+  [[ $RC == 0 ]] || P+="exit $RC; stderr: $(head -c 200 $SC/err)"
+  [[ $(jq -S . $SC/out 2>&1) == $(print -r -- "$A" | jq -S .) ]] || P+="stdout isn't the answer: $(head -c 150 $SC/out)"
+  aio ADMIRAL_INBOX=$SC/elsewhere -- answer $SC/inbox/ q-1
+  [[ $RC == 0 && $(jq -c .note $SC/out 2>&1) == '"é"' ]] || P+="with a trailing slash and another ADMIRAL_INBOX: exit $RC"
+  print -r -- '"just a string"' > $SC/inbox/q-s.answer.json
+  aio -- answer $SC/inbox q-s
+  [[ $RC == 0 && $(jq -r . $SC/out) == 'just a string' ]] || P+="a non-object JSON answer: exit $RC"
+  verdict "ADMIRAL answer: prints <inbox-dir>/<id>.answer.json and exits 0, whatever the ADMIRAL variables"
+
+  aio -- answer $SC/inbox q-2
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="missing: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  aio -- answer $SC/no-such-dir q-1
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="no such directory: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  print -r -- '{"answers": {"1": "Ho' > $SC/inbox/q-3.answer.json
+  aio -- answer $SC/inbox q-3
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="mid-write: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  [[ -s $SC/err ]] || P+="mid-write: no stderr note"
+  : > $SC/inbox/q-4.answer.json
+  aio -- answer $SC/inbox q-4
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="empty file: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  print -r -- '{"answers": {"1": NaN}}' > $SC/inbox/q-6.answer.json
+  aio -- answer $SC/inbox q-6
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="NaN in the answer: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  print -r -- '{"answers": {"1": "a", "1": "b"}}' > $SC/inbox/q-7.answer.json
+  aio -- answer $SC/inbox q-7
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="duplicate key in the answer: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  print -r -- "$A" > $SC/inbox/q-5.json   # the item itself is not its answer
+  aio -- answer $SC/inbox q-5
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="only the item exists: exit $RC"
+  verdict "ADMIRAL answer: a missing, empty or half-written answer exits 3 with nothing on stdout (a note on stderr for the half-written one)"
+
+  print -r -- "$A" > $SC/q-1.answer.json
+  for id in 'q-1.answer' '../q-1' '.q' 'a/b' '' '-q' "${(l:65::a:)}"; do
+    mkdir -p $SC/inbox/sub; print -r -- "$A" > $SC/inbox/sub/x.answer.json; print -r -- "$A" > $SC/inbox/.q.answer.json
+    aio -- answer $SC/inbox/sub "$id"
+    [[ $RC == 2 && ! -s $SC/out ]] || P+="id '$id': exit $RC, want 2, stdout '$(head -c 80 $SC/out)'"
+  done
+  verdict "ADMIRAL answer: an id that fails the id rule exits 2 and reads nothing (no .., no hidden files, no q-1.answer)"
+}
+
+want admiral-usage && {
+  ad_sc admiral-usage
+  ad_draft "$AD_Q"
+  for args in '' 'bogus' 'item' 'report' 'answer' 'answer d' 'item a b' 'answer a b c'; do
+    aio ADMIRAL_INBOX=$INB ADMIRAL_REPORT=$REP -- ${=args}
+    [[ $RC == 5 ]] || P+="'$args': exit $RC, want 5"
+    grep -q 'admiral-io.sh item' $SC/out || P+="'$args': usage block not on stdout"
+  done
+  [[ $(nfiles $SC/ship) == 0 ]] || P+="a usage error wrote: $(find $SC/ship -type f 2>/dev/null | tr '\n' ' ')"
+  verdict "ADMIRAL admiral-io.sh: no arguments, an unknown command or the wrong argument count exit 5 and print the usage block"
 }
 
 # ======================================================================================================================

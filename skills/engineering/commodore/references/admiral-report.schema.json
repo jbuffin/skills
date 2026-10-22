@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Admiral report",
+  "description": "The end-of-run JSON Commodore writes to $ADMIRAL_REPORT, from jbuffin/admiral#112 'Interfaces between Admiral and the skills'. Required fields are Commodore's reading of that contract. Extra top-level properties are allowed, so a later version-1 field breaks nothing. Validate with scripts/schema-check.py.",
+  "type": "object",
+  "required": ["version", "result", "why"],
+  "properties": {
+    "version": { "const": 1 },
+    "result": { "enum": ["done", "partial", "failed"] },
+    "why": { "type": "string", "description": "One line." },
+    "prs": { "type": "array", "items": { "type": "string" }, "description": "PR URLs." },
+    "assumptions": { "type": "array", "items": { "type": "string" }, "description": "Every default taken without asking." },
+    "inbox": { "type": "array", "items": { "type": "string" }, "description": "Ids of the inbox items written." },
+    "resume": { "type": "string", "description": "Text to launch with once every inbox item is answered." }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "result": { "const": "partial" } }, "required": ["result"] },
+      "then": { "required": ["resume"] }
+    }
+  ]
+}

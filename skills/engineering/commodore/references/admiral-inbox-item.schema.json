@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Admiral inbox item",
+  "description": "One inbox item Commodore writes to $ADMIRAL_INBOX/<id>.json, from jbuffin/admiral#112 'Interfaces between Admiral and the skills'. Only the object that matches `kind` is present. Required fields are Commodore's reading of that contract. Extra top-level properties are allowed. Validate with scripts/schema-check.py.",
+  "type": "object",
+  "required": ["version", "id", "kind", "created", "title"],
+  "properties": {
+    "version": { "const": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+      "description": "Commodore's addition to the contract: no dots, so no '..', no hidden file, and no id like 'q-1.answer' that collides with Admiral's q-1.answer.json."
+    },
+    "kind": { "enum": ["question", "review", "findings"] },
+    "created": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\\.[0-9]+)?([Zz]|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$",
+      "description": "RFC 3339 date-time. A pattern, because 'format' is only an annotation in 2020-12."
+    },
+    "title": { "type": "string", "description": "One line." },
+    "order_url": { "type": "string" },
+    "question": {
+      "type": "object",
+      "required": ["questions"],
+      "properties": {
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "text", "options", "recommended", "multi"],
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["label", "description"],
+                  "properties": { "label": { "type": "string" }, "description": { "type": "string" } }
+                }
+              },
+              "recommended": { "type": "string", "description": "The label of the recommended option." },
+              "multi": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": ["pr_url", "review_id", "summary"],
+      "properties": {
+        "pr_url": { "type": "string" },
+        "review_id": { "type": "integer" },
+        "summary": { "type": "string" }
+      }
+    },
+    "findings": {
+      "type": "object",
+      "description": "Finding cards. jbuffin/skills#118 (rung 6) may revise this format, so extra properties are allowed.",
+      "required": ["pr_url", "cards"],
+      "properties": {
+        "pr_url": { "type": "string" },
+        "cards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "source", "quote", "verdict", "reason", "proposal", "evidence"],
+            "properties": {
+              "id": { "type": "string" },
+              "source": { "type": "string", "description": "Reviewer login or check name." },
+              "quote": { "type": "string" },
+              "verdict": { "enum": ["agree", "disagree", "unclear"] },
+              "reason": { "type": "string" },
+              "proposal": {
+                "type": "object",
+                "required": ["kind", "content"],
+                "properties": { "kind": { "enum": ["diff", "reply"] }, "content": { "type": "string" } }
+              },
+              "evidence": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "question" } }, "required": ["kind"] },
+      "then": { "required": ["question"], "properties": { "review": false, "findings": false } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "review" } }, "required": ["kind"] },
+      "then": { "required": ["review"], "properties": { "question": false, "findings": false } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "findings" } }, "required": ["kind"] },
+      "then": { "required": ["findings"], "properties": { "question": false, "review": false } }
+    }
+  ]
+}
