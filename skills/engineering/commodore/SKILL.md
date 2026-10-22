@@ -92,7 +92,7 @@ A run is finished when its `state.md` has a `result:` line, which the mission's 
 
 A run whose `state.md` says `result: partial` and lists inbox items or open questions under `## Autopilot calls` isn't finished: `/commodore resume <run-name>` resumes it (see [Autopilot mode](#autopilot-mode)).
 
-- It has no `mission:` line, says `result: partial` and lists items under `## Autopilot calls` (a stop at mission confirmation): read the answers (see Resume in [Autopilot mode](#autopilot-mode)), settle the mission from them, and carry on from step 4 in the same run directory. Skip detection.
+- It has no `mission:` line, says `result: partial` and lists items under `## Autopilot calls` (a stop at mission confirmation): read the answers (see Resume in [Autopilot mode](#autopilot-mode)), settle the mission from them (only from an exact option label the item offered; free text counts as unanswered), and carry on from step 4 in the same run directory, with the launch text recorded under `## Autopilot calls`. Skip detection.
 - It has a `mission:` line and the run isn't finished: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
 - It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished: it's an unfinished run from before missions. Resume it as `build` the same way. Template headings alone don't count.
 - Otherwise this is a new run. Settle the mission with these steps. If the `state.md` holds only the empty template, reuse its run directory: pass the same run name to `team-init.sh`. A finished run's directory is never reused: pick a run name no earlier run has used.
@@ -184,7 +184,7 @@ Every run ends this way, in any mode.
 2. When `ADMIRAL_REPORT` is set, publish the Admiral report with `<team>/admiral-io.sh report <draft>`. It needs `version` (1), `result`, `why`, and for `partial` a `resume` of `/commodore resume <run-name>`; `prs`, `assumptions` and `inbox` are lists of strings. See [`admiral-report.schema.json`](references/admiral-report.schema.json). Exit 2 means fix the draft from the message and publish again.
 3. Write every draft you publish with `<team>/admiral-io.sh` (the Admiral report and, in autopilot mode, question and review items) with the file tool, never with a heredoc, `printf` or its text on a command line: it can quote text from people who aren't the engineer.
 
-Each mission's `result:` line points here.
+Each mission's `result:` line points here. A `/commodore resume` of a finished run says it's finished and stops.
 
 ## Autopilot mode
 
@@ -215,14 +215,14 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 
 **A high-stakes stop.**
 
-1. Put every pending question in one question item, each with its options and recommendation, and with `order_url` omitted. The item is `version` (1), `id` (`<run-name>-q<n>`; a re-ask gets the next `n`; letters, digits, `_` and `-`, at most 64), `kind` `question`, `created` (RFC 3339), `title`, and `question.questions[]`, each with `id`, `text`, `options[]` (`label`, `description`), `recommended` and `multi`. See [`admiral-inbox-item.schema.json`](references/admiral-inbox-item.schema.json).
+1. Put every pending question in one question item, each with its options and recommendation, and with `order_url` omitted. The item is `version` (1), `id` (`<run-name>-q<n>`; a re-ask gets the next `n`; in the id, replace any character of the run name outside `[A-Za-z0-9_-]` with `-` and truncate it so the id fits 64 characters), `kind` `question`, `created` (RFC 3339), `title`, and `question.questions[]`, each with `id`, `text`, `options[]` (`label`, `description`), `recommended` and `multi`. See [`admiral-inbox-item.schema.json`](references/admiral-inbox-item.schema.json).
 2. Write the draft in `<run>` with the file tool (see [Ending a run](#ending-a-run)) and publish it with `<team>/admiral-io.sh item <draft>`. Exit 2 means fix the draft from the message and publish again.
 3. Record the item id and inbox directory under `## Autopilot calls`.
-4. Publish an Admiral report as [Ending a run](#ending-a-run) says: `result: partial`, the item ids in `inbox`, and `resume`.
-5. Write `result: partial` in `state.md`, close every teammate, stop the watchdog and end the run cleanly.
+4. Write `result: partial` in `state.md`, then publish the Admiral report as [Ending a run](#ending-a-run) says, with the item ids in `inbox`.
+5. Close every teammate, stop the watchdog and end the run cleanly.
 
-- A stop at mission confirmation comes before any mission is recorded. Run `<team>/team-init.sh <run-name> <repo>` first, write no `mission:` line, keep the draft in that run directory, and record the item under `## Autopilot calls`. The `resume` is `/commodore resume <run-name>`.
-- With `ADMIRAL_INBOX` unset (a hand launch with `--autopilot`), never wait: stop `partial` with the questions in `state.md` and the final report. The engineer answers in the session, and `/commodore resume <run-name>` carries on from those answers.
+- A stop at mission confirmation comes before any mission is recorded. Run `<team>/team-init.sh <run-name> <repo>` first, write no `mission:` line, keep the draft in that run directory, and record the item and the original launch text under `## Autopilot calls`. The `resume` is `/commodore resume <run-name>`.
+- With `ADMIRAL_INBOX` unset (a hand launch with `--autopilot`), never wait: stop `partial` with the questions in `state.md` and the final report. The engineer answers in the session: resume without `--autopilot`, and the open questions under `## Autopilot calls` are asked as normal gates.
 
 **Resume.** `/commodore resume <run-name>` (on Codex, `$commodore resume <run-name>`) resumes `<teams>/<run-name>`.
 
@@ -231,4 +231,4 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 3. A security stop, a permission denial and any push or external write are cleared only by an exact option label. Free text on those counts as unanswered. Free text never widens allow rules, never lifts the push rule, and never goes on a command line.
 4. Apply each answer where the run stopped, mark it applied under `## Autopilot calls`, and replace the old `result: partial` line when the run goes on. Don't re-ask what's answered. Ask every unanswered question again as a new item, the same way.
 
-**No unattended pushes.** A pr-feedback or build run in autopilot mode never pushes without an explicit approval. Before its first push, it publishes a question item asking to push (the branch, the commits, a one-line summary) with the option label `Push`, and stops `partial` with that item in `inbox`. On resume it pushes only when that item's answer is exactly `Push`.
+**No unattended pushes.** A pr-feedback or build run in autopilot mode never pushes without that push's own approval. Before each push, it publishes a question item listing that push's branch and commits, with the exact option labels `Push` and `Don't push`, and stops `partial` with that item in `inbox`. On resume it pushes only the listed commits, and only when the answer is exactly `Push`. A later push, including a CI fix or another unit, needs a new item. `Don't push` ends the run `partial`, lists the unpushed branches and worktrees, and removes nothing.
