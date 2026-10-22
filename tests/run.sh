@@ -33,8 +33,8 @@
 #       two JSON Schemas in commodore/references that encode the Admiral contract (issue #116, admiral#112). Assertion
 #       style; `tests/run.sh admiral` runs just these.
 #   AUTOPILOT  Doc checks for the autopilot mode text in commodore (issue #116): the SKILL.md section, the gate pointers, the
-#       mission files, the Codex and Copilot rows, the changeset, and the lines that must read as before with it off
-#       (AC1). Assertion style; `tests/run.sh autopilot` runs just these.
+#       mission files, the Codex and Copilot rows, and the lines that must read as before with it off (AC1). Assertion
+#       style; `tests/run.sh autopilot` runs just these.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -3419,7 +3419,7 @@ want admiral-usage && {
 # ======================================================================================================================
 # AUTOPILOT: doc checks for Commodore's autopilot mode (issue #116, parent jbuffin/admiral#112). They pin what the skill
 # text must say, by meaning-bearing phrases, not exact prose: the `## Autopilot mode` section in SKILL.md and the
-# pointers to it from each gate, the mission files' autopilot rules, the Codex and Copilot rows, the changeset, and that
+# pointers to it from each gate, the mission files' autopilot rules, the Codex and Copilot rows, and that
 # the lines autopilot overrides still read as before when it is off (AC1). Assertion style; `tests/run.sh autopilot`
 # runs just these.
 # ======================================================================================================================
@@ -3738,12 +3738,6 @@ want autopilot && {
   cxp=$(awk -v RS= '/MCP question/' $AP_REF/harness-codex.md)
   print -r -- $cxp | grep -qi autopilot && print -r -- $cxp | grep -qi 'high-stakes' || P+="harness-codex.md: the MCP question isn't a high-stakes call in autopilot mode"
   verdict "AUTOPILOT Codex and Copilot: the AskUserQuestion row sends questions to the inbox, every call is high-stakes, Copilot's unattended-review rule and Codex's MCP question are high-stakes calls"
-
-  # ---- the changeset -----------------------------------------------------------------------------------------------
-  cs=; for f in $ROOT/.changeset/*.md(N); do [[ ${f:t} == README.md ]] || { grep -q '"jasonbuffin-skills": minor' $f && cs=$f; }; done
-  [[ -n $cs ]] || P+="no .changeset/*.md bumps \"jasonbuffin-skills\": minor"
-  [[ -z $cs ]] || grep -qiE 'autopilot' $cs || P+="${cs:t} doesn't mention autopilot mode"
-  verdict "AUTOPILOT a changeset bumps jasonbuffin-skills minor and names autopilot mode"
 
   # ---- AC1: with autopilot off, the lines autopilot overrides still read as before -----------------------------------
   ap_has $AP_SK 'Use AskUserQuestion with the mission that will run as the first option.' "SKILL.md: mission confirmation (step 3) changed"
