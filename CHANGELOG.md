@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 2.1.0
+
+### Minor Changes
+
+- [#120](https://github.com/jbuffin/skills/pull/120) [`0462d06`](https://github.com/jbuffin/skills/commit/0462d06ecfe91dbe715533c5befd01320f355470) Thanks [@jbuffin](https://github.com/jbuffin)! - Add autopilot mode to Commodore for unattended Admiral runs. With `ADMIRAL_AUTOPILOT=1` or a launch text starting with `--autopilot`, Commodore takes the recommended default on low-stakes calls, puts each high-stakes call in one inbox question item and stops `partial`, and leaves a review PENDING for the inbox. It resumes from `/commodore resume <run-name>` once the answers land. When `ADMIRAL_REPORT` is set, every run now publishes an Admiral report.
+
 ## 2.0.1
 
 ### Patch Changes
