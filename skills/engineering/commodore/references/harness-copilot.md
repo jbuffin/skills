@@ -50,12 +50,16 @@ The rest of the skill is written for Claude Code. On Copilot, apply these.
 
 | Where the text says | On Copilot |
 | --- | --- |
-| Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer |
+| Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer. In autopilot mode the inbox replaces the plain question: see Autopilot mode below |
 | `ADVISOR OFF` and `harness-claude.md` | Never reached: the advisor is n/a |
 | "The engineer can attach to a teammate" | They can't. Point them at `teammate-tail.sh` and `status` |
+
+## Autopilot mode
+
+Autopilot mode follows the same rules on Copilot ([Autopilot mode](../SKILL.md#autopilot-mode)). Every call is high-stakes here, because there is no advisor to classify it: each one goes into a question item and stops the run.
 
 ## Read-only roles
 
 Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Copilot the flag set follows `--read-only`, not the role. Their shell may run `gh pr view`, `gh pr diff` and `gh issue view`, plus `git log`, `git show`, `git diff` and `git status`, with any arguments, so `--output=<file>` writes a file (see "Security caveats" in agent-teammates' reference). agent-teammates' "How a read-only teammate reports" covers their report. Give them no `.proof`.
 
-Before an unattended run on Copilot, tell the engineer in the decision batch that until Copilot's OS sandbox (#49) lands, any teammate that reads text from people other than the engineer is unsafe: read-only teammates can write any path, and writers run as the engineer. That rules out the review mission (someone else's PR) and the PR-feedback mission's triager and fix units on comments from untrusted people. Record the answer in `state.md`. Agent-teammates' "Security caveats" has the detail.
+Before an unattended run on Copilot, tell the engineer in the decision batch that until Copilot's OS sandbox (#49) lands, any teammate that reads text from people other than the engineer is unsafe: read-only teammates can write any path, and writers run as the engineer. That rules out the review mission (someone else's PR) and the PR-feedback mission's triager and fix units on comments from untrusted people. Record the answer in `state.md`. In autopilot mode this is a high-stakes call. Agent-teammates' "Security caveats" has the detail.

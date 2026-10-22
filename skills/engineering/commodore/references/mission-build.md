@@ -4,6 +4,10 @@ The build mission turns a spec, an issue, a design doc or a free-text request in
 
 Read this file before phase 1 in [`SKILL.md`](../SKILL.md). Phase 1 runs all six steps and picks the mode below. Then run Phase 2 and Phase 3 from this file.
 
+## Autopilot mode
+
+In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), plan (phase 1 steps 1–4), draft the allow rules and list the secrets (step 5.1). Then put the whole decision batch, the secrets and step 2's cut question in one question item, report `partial` and stop. This holds until autopilot builds land. With autopilot off, nothing here applies.
+
 ## Mode, sized to the work
 
 | The work | Mode | Delivery |
