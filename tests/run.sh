@@ -2947,7 +2947,6 @@ AD_ITEM_SCH=$AD_SCH/admiral-inbox-item.schema.json
 AD_REP_SCH=$AD_SCH/admiral-report.schema.json
 AD_IO=$CM/admiral-io.sh
 AD_SC=$CM/schema-check.py
-AD_CREATED=2026-09-21T13:33:20Z
 
 AD_Q='{"version": 1, "id": "q-1", "kind": "question", "created": "2026-09-21T13:33:20Z", "title": "Two calls need you",
  "question": {"questions": [
@@ -3149,6 +3148,30 @@ want admiral-check && {
   sck $AD_ITEM_SCH 1 "$(jqm $AD_Q '.created="soon"')"; grep -q created $SC/err || P+="the reason doesn't name created: $(head -c 150 $SC/err)"
   sck $AD_ITEM_SCH 1 "$(jqm $AD_Q '.kind="x"')"; grep -q kind $SC/err || P+="the reason doesn't name kind: $(head -c 150 $SC/err)"
   verdict "ADMIRAL schema-check: the reasons on stderr name the offending field"
+
+  AD_QD='{"version":1,"id":"../../evil","id":"ok-2","kind":"question","kind":"review","created":"2026-09-21T13:33:20Z","title":"t","question":{"questions":[]}}'
+  sck $AD_ITEM_SCH 1 "$AD_QD"; grep -q 'duplicate key' $SC/err || P+="duplicate id and kind: the reason doesn't say so: $(head -c 150 $SC/err)"
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "a", "why": "b"}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "assumptions": [], "assumptions": []}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": NaN}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": Infinity}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": [-Infinity]}'
+  sck $AD_REP_SCH 1 '{"version": 1, "result": "done", "why": "x", "n": 1e999}'
+  sck $AD_REP_SCH 0 '{"version": 1, "result": "done", "why": "x", "n": 1e300}'
+  print -r -- '{"a": 1, "a": 2}' > $SC/inst.json; xrun $AD_SC --json $SC/inst.json; [[ $RC == 1 && -s $SC/err ]] || P+="--json with a duplicate key: exit $RC"
+  print -r -- '[NaN]' > $SC/inst.json; xrun $AD_SC --json $SC/inst.json; [[ $RC == 1 ]] || P+="--json with NaN: exit $RC"
+  print -r -- '{"a": [1, 2.5, "x"]}' > $SC/inst.json; xrun $AD_SC --json $SC/inst.json; [[ $RC == 0 ]] || P+="--json with plain JSON: exit $RC"
+  print -r -- '{"required": "abc"}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"properties": [1]}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"type": 3}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"enum": "x"}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"allOf": {}}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"pattern": 1}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"properties": {"a": 5}}' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '[]' > $SC/s.json; sck $SC/s.json 2 '{}'
+  print -r -- '{"pattern": "^a\\\\$"}' > $SC/s.json; sck $SC/s.json 0 '"a\\"'; sck $SC/s.json 1 '"a\\\n"'
+  print -r -- '{"pattern": "^[$]x$"}' > $SC/s.json; sck $SC/s.json 0 '"$x"'; sck $SC/s.json 1 '"$x\n"'
+  verdict "ADMIRAL schema-check: duplicate keys, NaN, Infinity and 1e999 are refused; a keyword with the wrong kind of argument exits 2; \$ in a pattern means end of string"
 }
 
 # ad_sc <name>: a scenario with draft path $SC/draft.json and the inbox/report locations Admiral would set
@@ -3192,7 +3215,8 @@ want admiral-item && {
   ad_sc admiral-item-invalid
   for d f in \
     'no title' 'del(.title)' 'no kind' 'del(.kind)' 'two kind objects' '.review={"pr_url":"u","review_id":1,"summary":"s"}' \
-    'bad created' '.created="soon"' 'id with a dot' '.id="q-1.answer"' 'id traversal' '.id="../q-1"' 'hidden id' '.id=".q"'; do
+    'bad created' '.created="soon"' 'id with a dot' '.id="q-1.answer"' 'id traversal' '.id="../q-1"' 'hidden id' '.id=".q"' \
+    'no version' 'del(.version)' 'version 2' '.version=2' 'no id' 'del(.id)' 'no created' 'del(.created)' 'bogus kind' '.kind="note"'; do
     ad_draft "$(jqm $AD_Q "$f")"; rm -rf $SC/ship
     aio ADMIRAL_INBOX=$INB -- item $DR
     [[ $RC == 2 ]] || P+="'$d': exit $RC, want 2"
@@ -3203,6 +3227,15 @@ want admiral-item && {
   [[ $RC == 2 && -s $SC/err && $(nfiles $SC/ship) == 0 ]] || P+="truncated draft: exit $RC, files $(nfiles $SC/ship)"
   ad_draft '[]'; aio ADMIRAL_INBOX=$INB -- item $DR
   [[ $RC == 2 && $(nfiles $SC/ship) == 0 ]] || P+="array draft: exit $RC"
+  for d t in \
+    'duplicate id and kind' '{"version":1,"id":"../../evil","id":"ok-2","kind":"question","kind":"review","created":"2026-09-21T13:33:20Z","title":"t","question":{"questions":[]}}' \
+    'duplicate title' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","title":"b","review":{"pr_url":"u","review_id":1,"summary":"s"}}' \
+    'NaN' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","x":NaN,"review":{"pr_url":"u","review_id":1,"summary":"s"}}' \
+    'Infinity' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","x":[Infinity],"review":{"pr_url":"u","review_id":1,"summary":"s"}}' \
+    '1e999' '{"version":1,"id":"q-9","kind":"review","created":"2026-09-21T13:33:20Z","title":"a","x":1e999,"review":{"pr_url":"u","review_id":1,"summary":"s"}}'; do
+    rm -rf $SC/ship; ad_draft "$t"; aio ADMIRAL_INBOX=$INB -- item $DR
+    [[ $RC == 2 && -s $SC/err && $(nfiles $SC/ship) == 0 ]] || P+="$d: exit $RC, files $(nfiles $SC/ship)"
+  done
   ad_draft "$AD_Q"; aio ADMIRAL_INBOX=$INB -- item $SC/no-such-draft.json
   [[ $RC == 2 || $RC == 5 ]] && [[ $(nfiles $SC/ship) == 0 ]] || P+="missing draft file: exit $RC"
   ad_draft "$(jqm $AD_Q '.id="../../escape"')"; aio ADMIRAL_INBOX=$INB -- item $DR
@@ -3221,6 +3254,22 @@ want admiral-item && {
   ad_draft "$(jqm $AD_Q '.id="q-2"')"; aio ADMIRAL_INBOX=$INB -- item $DR
   [[ $RC == 0 && $(nfiles $INB) == 2 ]] || P+="a new id is refused: exit $RC"
   verdict "ADMIRAL item: an item is never overwritten; the second publish of an id exits 2, leaves the first intact and no temp file"
+
+  ad_sc admiral-item-dest
+  ad_draft "$AD_Q"; mkdir -p $INB/q-1.json
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 && -s $SC/err ]] || P+="a directory at <id>.json: exit $RC, want 2 with a reason"
+  [[ $(nfiles $INB) == 0 ]] || P+="a directory at <id>.json: files left: $(find $INB -type f 2>/dev/null | tr '\n' ' ')"
+  rmdir $INB/q-1.json; mkdir -p $SC/elsewhere; ln -s $SC/elsewhere $INB/q-1.json
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 ]] || P+="a symlink to a directory at <id>.json: exit $RC, want 2"
+  [[ $(nfiles $SC/elsewhere) == 0 ]] || P+="wrote through the symlink: $(find $SC/elsewhere -type f 2>/dev/null | tr '\n' ' ')"
+  rm -f $INB/q-1.json; ln -s $SC/no-such-target $INB/q-1.json
+  aio ADMIRAL_INBOX=$INB -- item $DR
+  [[ $RC == 2 && ! -e $SC/no-such-target ]] || P+="a dangling symlink at <id>.json: exit $RC"
+  aio ADMIRAL_INBOX=/ -- item $DR
+  [[ $RC == 2 && ! -e $SC/cwd/q-1.json && ! -e /q-1.json ]] || P+="ADMIRAL_INBOX=/: exit $RC"
+  verdict "ADMIRAL item: a directory, a symlink or ADMIRAL_INBOX=/ doesn't publish and doesn't succeed (exit 2, no temp file left)"
 
   ad_sc admiral-item-hostile
   T='x"; touch '$SC'/pwned; $(touch '$SC'/pwned2) `touch '$SC'/pwned3` \n é 😀'
@@ -3256,6 +3305,23 @@ want admiral-report && {
   same_json $REP "$AD_FAIL"
   [[ $(nfiles $SC/ship/reports) == 1 ]] || P+="files: $(find $SC/ship -type f 2>/dev/null | tr '\n' ' ')"
   verdict "ADMIRAL report: a second report in the same ship replaces the first"
+
+  ad_sc admiral-report-dest
+  ad_draft "$AD_DONE"; mkdir -p $REP
+  aio ADMIRAL_REPORT=$REP -- report $DR
+  [[ $RC == 2 && -s $SC/err ]] || P+="a directory at the report path: exit $RC, want 2 with a reason"
+  [[ $(nfiles $REP) == 0 ]] || P+="files left in it: $(find $REP -type f 2>/dev/null | tr '\n' ' ')"
+  rmdir $REP; aio ADMIRAL_REPORT=$SC/ship/reports/r2/ -- report $DR
+  [[ $RC == 2 && ! -e $SC/ship/reports/r2 ]] || P+="a report path ending in a slash: exit $RC"
+  for d t in \
+    'duplicate why' '{"version": 1, "result": "done", "why": "a", "why": "b"}' \
+    'duplicate result' '{"version": 1, "result": "failed", "result": "done", "why": "a"}' \
+    'NaN' '{"version": 1, "result": "done", "why": "a", "n": NaN}' \
+    'Infinity' '{"version": 1, "result": "done", "why": "a", "n": Infinity}'; do
+    rm -rf $SC/ship; ad_draft "$t"; aio ADMIRAL_REPORT=$REP -- report $DR
+    [[ $RC == 2 && -s $SC/err && ! -e $SC/ship ]] || P+="$d: exit $RC"
+  done
+  verdict "ADMIRAL report: a directory or a path ending in a slash doesn't publish; duplicate keys and NaN exit 2"
 
   ad_sc admiral-report-unset
   ad_draft "$AD_DONE"
@@ -3315,6 +3381,12 @@ want admiral-answer && {
   : > $SC/inbox/q-4.answer.json
   aio -- answer $SC/inbox q-4
   [[ $RC == 3 && ! -s $SC/out ]] || P+="empty file: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  print -r -- '{"answers": {"1": NaN}}' > $SC/inbox/q-6.answer.json
+  aio -- answer $SC/inbox q-6
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="NaN in the answer: exit $RC, stdout '$(head -c 100 $SC/out)'"
+  print -r -- '{"answers": {"1": "a", "1": "b"}}' > $SC/inbox/q-7.answer.json
+  aio -- answer $SC/inbox q-7
+  [[ $RC == 3 && ! -s $SC/out ]] || P+="duplicate key in the answer: exit $RC, stdout '$(head -c 100 $SC/out)'"
   print -r -- "$A" > $SC/inbox/q-5.json   # the item itself is not its answer
   aio -- answer $SC/inbox q-5
   [[ $RC == 3 && ! -s $SC/out ]] || P+="only the item exists: exit $RC"
