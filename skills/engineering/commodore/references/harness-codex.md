@@ -45,7 +45,7 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 
 | Where the text says | On Codex |
 | --- | --- |
-| Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer |
+| Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer. In autopilot mode the inbox replaces the plain question: see Autopilot mode below |
 | Send searches to a subagent | There are no subagents. Search yourself, narrowly |
 | An allow rule is a `Bash(…)` line in settings | Teammates need only the two `git` rules in agent-teammates' "The `~/.codex/rules` lines". Your own calls (`gh`, the `<teammates>` and `<team>` scripts, file writes) stay out of `~/.codex/rules`, for the reason that section gives; the engineer approves them for your session through Codex's own approval |
 | A read-only role runs `gh` (`gh pr diff`, `gh pr view`, `gh issue view`) | Read-only Codex roles have no network. You fetch that data into files in the run directory and name them in the brief (see "Read-only roles have no network") |
@@ -54,6 +54,10 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 | Run in the background or with the maximum Bash timeout | Use the Codex shell's own limit, and pass an explicit long timeout on the call |
 | `ADVISOR OFF` and `harness-claude.md` | Never reached: the advisor is n/a |
 | "The engineer can attach to a teammate" | They can't. Point them at `teammate-tail.sh` and `status` |
+
+## Autopilot mode
+
+Autopilot mode follows the same rules on Codex ([Autopilot mode](../SKILL.md#autopilot-mode)). Every call is high-stakes here, because there is no advisor to classify it: each one goes into a question item and stops the run. The MCP question under "Caveats to settle before a Codex run" is a high-stakes call in autopilot mode.
 
 ## Read-only roles have no network
 

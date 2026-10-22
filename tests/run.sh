@@ -32,6 +32,9 @@
 #   ADMIRAL  admiral-io.sh (publish an Admiral report or inbox item, read an answer) and schema-check.py, with the
 #       two JSON Schemas in commodore/references that encode the Admiral contract (issue #116, admiral#112). Assertion
 #       style; `tests/run.sh admiral` runs just these.
+#   AUTOPILOT  Doc checks for the autopilot mode text in commodore (issue #116): the SKILL.md section, the gate pointers, the
+#       mission files, the Codex and Copilot rows, the changeset, and the lines that must read as before with it off
+#       (AC1). Assertion style; `tests/run.sh autopilot` runs just these.
 #   LINT  zsh -n on every zsh script and every sourced file without a shebang; shellcheck on the test fakes.
 #
 # --record rebuilds tests/golden from `git archive dfb39c8` and runs only the D4 scenarios.
@@ -3411,6 +3414,357 @@ want admiral-usage && {
   done
   [[ $(nfiles $SC/ship) == 0 ]] || P+="a usage error wrote: $(find $SC/ship -type f 2>/dev/null | tr '\n' ' ')"
   verdict "ADMIRAL admiral-io.sh: no arguments, an unknown command or the wrong argument count exit 5 and print the usage block"
+}
+
+# ======================================================================================================================
+# AUTOPILOT: doc checks for Commodore's autopilot mode (issue #116, parent jbuffin/admiral#112). They pin what the skill
+# text must say, by meaning-bearing phrases, not exact prose: the `## Autopilot mode` section in SKILL.md and the
+# pointers to it from each gate, the mission files' autopilot rules, the Codex and Copilot rows, the changeset, and that
+# the lines autopilot overrides still read as before when it is off (AC1). Assertion style; `tests/run.sh autopilot`
+# runs just these.
+# ======================================================================================================================
+AP_CMD=$ROOT/skills/engineering/commodore
+AP_SK=$AP_CMD/SKILL.md
+AP_REF=$AP_CMD/references
+# ap_sec <file> <heading regex>: the body of the `## ` section whose heading matches, up to the next `## `
+ap_sec() { awk -v h="$2" '$0 ~ h && /^## /{p=1; next} p && /^## /{p=0} p' $1; }
+# ap_need <text> <regex> <what is missing>: the text must match the case-insensitive extended regex
+ap_need() { print -r -- "$1" | grep -qiE -- "$2" || P+="$3"; }
+# ap_has <file> <fixed string> <what is missing>: the file still holds this existing line (or fragment) verbatim
+ap_has() { grep -qF -- "$2" $1 || P+="$3"; }
+# ap_aut <file>: the autopilot parts of a mission or harness file: every `Autopilot` heading's body, and every line naming it
+ap_aut() { awk '/^#+ .*[Aa]utopilot/{p=1; next} p && /^#/{p=0} p' $1; grep -i autopilot $1; }
+
+want autopilot && {
+  sec=$(ap_sec $AP_SK '^## Autopilot mode$')
+  words=$(ap_sec $AP_SK '^## Words used here$')
+
+  [[ $(grep -c '^## Autopilot mode$' $AP_SK) == 1 ]] || P+="SKILL.md must have exactly one '## Autopilot mode' heading"
+  (( ${#sec} > 400 )) || P+="the '## Autopilot mode' section is missing or nearly empty"
+  verdict "AUTOPILOT SKILL.md has one '## Autopilot mode' section"
+
+  for t in 'autopilot mode' 'call' 'low-stakes' 'high-stakes' 'question item' 'Admiral report'; do
+    print -r -- $words | grep -qiE -- "^- (A|An|The) \*\*[^*]*${t}" || P+="'Words used here' has no bullet defining '$t'"
+  done
+  print -r -- $words | grep -qE 'ADMIRAL_REPORT' || P+="the Admiral report's definition doesn't name \$ADMIRAL_REPORT"
+  print -r -- $words | grep -qiE 'final report' || P+="the Admiral report isn't told apart from the final report"
+  verdict "AUTOPILOT 'Words used here' defines autopilot mode, call, low-stakes and high-stakes call, question item and Admiral report"
+
+  ap_need "$sec" 'ADMIRAL_AUTOPILOT=1' "turn-on: ADMIRAL_AUTOPILOT=1 isn't named"
+  ap_need "$sec" 'launch text.*--autopilot|--autopilot.*launch text|starts? with .?--autopilot' "turn-on: launch text starting with --autopilot isn't named"
+  ap_need "$sec" 'autopilot: on' "turn-on: 'autopilot: on' isn't recorded"
+  ap_need "$sec" 'Mode, phase, current unit' "turn-on: the record doesn't go under '## Mode, phase, current unit'"
+  ap_need "$sec" 'resum.*(show|print|say|report)|(show|print|say|report).*resum' "turn-on: resume doesn't show autopilot"
+  ap_need "$sec" 'final report' "turn-on: the final report doesn't show autopilot"
+  ap_need "$sec" 'current (launch|run).*(decid|set)|(decid|set).*current launch|launch.*decides' "turn-on: on a resume the current launch doesn't decide, nor is it recorded again"
+  verdict "AUTOPILOT section: turning it on, recording 'autopilot: on', showing it on resume and in the final report, the current launch deciding"
+
+  ap_need "$sec" 'ADMIRAL_LOW_STAKES' "classifier: ADMIRAL_LOW_STAKES isn't named"
+  ap_need "$sec" '`?advisor`?.*default|default.*`?advisor`?' "classifier: 'advisor' isn't the default"
+  ap_need "$sec" 'empty' "classifier: an empty value isn't treated as the default"
+  ap_need "$sec" 'low or high stakes, and why' "classifier: the question put to the advisor ('low or high stakes, and why') is missing"
+  ap_need "$sec" 'question.*options.*recommendation' "classifier: the advisor isn't given the question, the options and the recommendation"
+  ap_need "$sec" 'clear.{0,12}"?low' "classifier: only a clear 'low' counts as low"
+  ap_need "$sec" '`never`' "classifier: the 'never' value isn't named"
+  ap_need "$sec" 'any other value|other value.*never|unknown value' "classifier: any other value doesn't count as never"
+  verdict "AUTOPILOT section: ADMIRAL_LOW_STAKES advisor (default, also empty) and never; any other value is never; only a clear 'low' is low"
+
+  ap_need "$sec" 'no advisor|advisor tool' "high-stakes: no advisor tool in the session isn't a case"
+  ap_need "$sec" 'ADVISOR=none' "high-stakes: ADVISOR=none isn't a case"
+  ap_need "$sec" 'ADVISOR OFF' "high-stakes: the 'ADVISOR OFF' probe line isn't a case"
+  ap_need "$sec" 'on the codex and copilot harnesses' "high-stakes: Codex and Copilot aren't named as always high-stakes"
+  ap_need "$sec" 'anything (but|other than) a clear' "high-stakes: an answer other than a clear 'low' isn't a case"
+  ap_need "$sec" 'product, scope, departures from the source.*external or irreversible' "high-stakes: product, scope, departures from the source, external and irreversible calls aren't always high-stakes"
+  ap_need "$sec" 'cheap to reverse.*part of that question|part of that question.*cheap to reverse' "classifier: 'cheap to reverse' isn't part of the question put to the advisor"
+  print -r -- $words | grep -qi 'cheap to reverse' && P+="'Words used here' still adds a second 'cheap to reverse' test to low-stakes"
+  ap_need "$sec" 'So is a permission denial \(the denial rule in' "high-stakes: a permission denial isn't a case"
+  ap_need "$sec" 'Guarding the coordinator' "high-stakes: the denial rule in 'Guarding the coordinator' isn't pointed at"
+  verdict "AUTOPILOT section: every call is high-stakes with no advisor, on Codex and Copilot, on a non-'low' answer; product, scope, irreversible and denials too"
+
+  ap_need "$sec" 'security stop' "security stops: not named as security stops"
+  ap_need "$sec" 'never classif|not classif|without classif|skip the classifier|no classifier' "security stops: not marked as never classified"
+  ap_need "$sec" 'agent-config' "security stops: mission-review's agent-config stop isn't named"
+  ap_need "$sec" 'fork steward|steward.*fork|fork.*steward' "security stops: mission-review's fork-steward question isn't named"
+  ap_need "$sec" 'head.mismatch' "security stops: mission-pr-feedback's head-mismatch stop isn't named"
+  ap_need "$sec" "mission-pr-feedback.s head.mismatch and agent-config" "security stops: mission-pr-feedback's two stops aren't named"
+  verdict "AUTOPILOT section: the four security stops are always high-stakes and never classified"
+
+  ap_need "$sec" '## Autopilot calls|Autopilot calls' "recording: '## Autopilot calls' isn't named"
+  ap_need "$sec" 'state\.md' "recording: state.md isn't named"
+  ap_need "$sec" 'classification.*reason|reason.*classification' "recording: the classification and its reason aren't recorded"
+  ap_need "$sec" 'item id.*inbox dir|inbox dir.*item id' "recording: a high-stakes call's item id and inbox directory aren't recorded"
+  ap_need "$sec" "team-init.s template stays unchanged" "recording: that team-init's template stays unchanged and the coordinator adds the heading isn't said"
+  ap_need "$sec" 'assumptions' "recording: the Admiral report's assumptions aren't named"
+  ap_need "$sec" 'default: ' "recording: the 'default: …' label isn't given"
+  ap_need "$sec" 'asked: … \(item <id>\)' "recording: the 'asked: … (item <id>)' label isn't given"
+  verdict "AUTOPILOT section: every call under '## Autopilot calls' and in the report's assumptions, labelled default: or asked:"
+
+  ap_need "$sec" 'Mission confirmation \(the mission section, step 3\)' "gate: mission confirmation isn't covered"
+  ap_need "$sec" 'detected mission|take the detected' "gate: mission confirmation doesn't take the detected mission"
+  ap_need "$sec" 'none or (more than one|several)|more than one|fits none' "gate: none or several fitting missions isn't high-stakes"
+  ap_need "$sec" 'can.t tell|unclear' "gate: the unclear pre-mission run isn't covered"
+  ap_need "$sec" 'smallest cut' "gate: phase 1 step 2's smallest cut isn't covered"
+  ap_need "$sec" 'decision batch' "gate: the decision batch isn't covered"
+  ap_need "$sec" 'allow rules.*mode.*ground rules|proposed defaults' "gate: the decision batch doesn't take the proposed defaults for allow rules, mode and ground rules"
+  ap_need "$sec" 'security role skill' "gate: the no-security-role-skill rule isn't covered"
+  ap_need "$sec" 'security role skill.*push code.*high-stakes' "gate: no security role skill isn't high-stakes when the run would push code"
+  ap_need "$sec" 'review pushes nothing.*classifier' "gate: for review, no security role skill doesn't go through the classifier"
+  ap_need "$sec" 'clear "low" takes the default.*no security reviewer' "gate: for review, a clear 'low' doesn't take the default (no security reviewer)"
+  ap_need "$sec" 'anything else makes it a question item' "gate: for review, anything but a clear 'low' isn't a question item"
+  ap_need "$sec" 'keychain' "gate: step 5's Keychain secrets aren't covered"
+  ap_need "$sec" 'finding of the probe \(step 5\.4\)' "gate: the probe's findings (step 5.4) aren't covered"
+  ap_need "$sec" 'bubbling questions up' "gate: 'Bubbling questions up' isn't covered"
+  ap_need "$sec" 'when the advisor is off' "gate: 'When the advisor is off' isn't covered"
+  ap_need "$sec" "record.*don.t wait|don.t wait|never wait|without waiting" "gate: an off advisor isn't recorded without waiting"
+  ap_need "$sec" 'mission-review' "gate: the review mission's posting doesn't point to mission-review"
+  verdict "AUTOPILOT section: names each gate and what it does (mission confirmation, unclear run, smallest cut, decision batch, secrets, probe, bubbling, advisor off, review posting)"
+
+  ap_need "$sec" 'AskUserQuestion' "gates: the section doesn't say it replaces AskUserQuestion"
+  ap_need "$sec" 'ask the engineer' "gates: the section doesn't say it replaces 'ask the engineer'"
+  ap_need "$sec" 'replac' "gates: the section doesn't say it replaces the engineer questions"
+  verdict "AUTOPILOT section: replaces AskUserQuestion and 'ask the engineer' wherever a gate uses them"
+
+  mis=$(ap_sec $AP_SK '^## The mission, before phase 1$')
+  s2=$(grep -E '^2\. Plan the units' $AP_SK)
+  s5=$(awk '/^5\. Run pre-flight/{p=1; next} p && /^6\. Write the common brief/{p=0} p' $AP_SK)
+  bub=$(ap_sec $AP_SK '^## Bubbling questions up$')
+  grd=$(ap_sec $AP_SK '^## Guarding the coordinator$')
+  for pair in 'the mission section:mis' 'phase 1 step 2:s2' 'phase 1 step 5:s5' "'Bubbling questions up':bub" "'Guarding the coordinator':grd"; do
+    nm=${pair%:*}; txt=${(P)${pair##*:}}
+    print -r -- $txt | grep -qiE 'autopilot' && print -r -- $txt | grep -qF '(#autopilot-mode)' || P+="$nm has no pointer to [Autopilot mode](#autopilot-mode)"
+  done
+  print -r -- $mis | grep -qiE 'autopilot' && print -r -- $mis | grep -qiE 'confirm' || P+="the mission section's pointer doesn't cover step 3 (confirmation)"
+  verdict "AUTOPILOT each gate section links to the Autopilot mode section (mission steps 1 and 3, phase 1 steps 2 and 5, bubbling, guarding)"
+
+  ap_need "$sec" 'one question item|single question item|in one .*question item|every pending question' "stop: every pending question doesn't go in one question item"
+  ap_need "$sec" 'options.*recommendation|recommendation.*options' "stop: each question doesn't carry its options and recommendation"
+  ap_need "$sec" 'order_url' "stop: order_url being omitted isn't said"
+  ap_need "$sec" 'file tool|file-writing tool|file-editing tool' "stop: the draft isn't written with the file tool"
+  ap_need "$sec" 'admiral-io\.sh item' "stop: '<team>/admiral-io.sh item <draft>' isn't the publish call"
+  ap_need "$sec" 'then publish the Admiral report as \[Ending a run\]' "stop: the report isn't published, after the result: line, as 'Ending a run' says"
+  ap_need "$sec" 'result: partial' "stop: 'result: partial' isn't named"
+  ap_need "$sec" '`?inbox`?.*item ids|item ids.*`?inbox`?' "stop: the report's inbox doesn't list the item ids"
+  ap_need "$sec" '/commodore resume <run-name>' "stop: the resume text '/commodore resume <run-name>' isn't given"
+  ap_need "$sec" 'close every teammate' "stop: teammates aren't all closed"
+  ap_need "$sec" 'watchdog' "stop: the watchdog isn't stopped"
+  ap_need "$sec" 'end (the run )?cleanly|ends? cleanly' "stop: the run doesn't end cleanly"
+  verdict "AUTOPILOT section: a high-stakes stop is one question item via the file tool and admiral-io.sh, a partial report with resume, teammates closed, watchdog stopped"
+
+  ap_need "$sec" 'before any mission is recorded' "stop at mission confirmation: 'before any mission is recorded' isn't covered"
+  ap_need "$sec" 'team-init\.sh <run-name> <repo>.{0,10} first' "stop at mission confirmation: team-init.sh doesn't run first"
+  ap_need "$sec" 'write no `mission:` line' "stop at mission confirmation: no 'mission:' line isn't said"
+  ap_need "$sec" 'draft in that run directory' "stop at mission confirmation: the draft doesn't live in the run directory"
+  ap_need "$mis" 'no `mission:` line, says `result: partial`' "mission section: a run with no mission: line and result: partial isn't resumed to settle the mission from the answer"
+  ap_need "$mis" 'settle the mission from them \(only from an exact option label the item offered; free text counts as unanswered\)' "mission section: the mission isn't settled only from an exact option label (free text counts as unanswered)"
+  ap_need "$mis" 'launch text recorded under `## Autopilot calls`' "mission section: the resumed run doesn't use the launch text recorded under '## Autopilot calls'"
+  ap_need "$sec" 'item and the original launch text under `## Autopilot calls`' "stop at mission confirmation: the original launch text isn't recorded"
+  ap_need "$sec" 'replace any character of the run name outside `\[A-Za-z0-9_-\]` with `-` and truncate it so the id fits 64' "stop: an id from a run name with other characters isn't cleaned and truncated"
+  ap_need "$sec" 'resume without `--autopilot`, and the open questions under `## Autopilot calls` are asked as normal gates' "no inbox: a resume without --autopilot doesn't ask the open questions as normal gates"
+  ap_need "$sec" 'ADMIRAL_INBOX.{0,40}unset|unset.{0,40}ADMIRAL_INBOX' "no inbox: autopilot with ADMIRAL_INBOX unset isn't covered"
+  ap_need "$sec" 'never wait' "no inbox: 'never wait' isn't said"
+  ap_need "$sec" 'questions in .?state\.md.? and the final report|state\.md and the final report' "no inbox: the questions don't go in state.md and the final report"
+  ap_need "$sec" 'engineer answers in the session' "no inbox: the engineer can't answer in the session to resume by hand"
+  verdict "AUTOPILOT section: a stop at mission confirmation (no run directory yet) and autopilot with ADMIRAL_INBOX unset"
+
+  ap_need "$sec" 'resume <run-name>' "resume: 'resume <run-name>' isn't named"
+  ap_need "$sec" '\$commodore resume' "resume: the Codex form '\$commodore resume <run-name>' isn't given"
+  ap_need "$sec" '<teams>/<run-name>' "resume: it doesn't resume <teams>/<run-name>"
+  ap_need "$sec" 'admiral-io\.sh answer' "resume: answers aren't read with 'admiral-io.sh answer'"
+  ap_need "$sec" 'recorded inbox dir' "resume: the recorded inbox directory isn't used"
+  ap_need "$sec" 'id → the chosen label or free text' "resume: an answer isn't read as an id -> label or free text"
+  ap_need "$sec" "can.t parse it, treat the question as unanswered" "resume: an answer that can't be parsed isn't treated as unanswered"
+  ap_need "$sec" 'again.*new item' "resume: unanswered questions aren't asked again as a new item"
+  ap_need "$sec" 'where the run stopped' "resume: answers aren't applied where the run stopped"
+  ap_need "$sec" "mark it applied under .?## Autopilot calls" "resume: an applied answer isn't marked under '## Autopilot calls'"
+  ap_need "$sec" 'replace the old `result: partial` line' "resume: the old 'result: partial' line isn't replaced"
+  ap_need "$sec" "don.t re-ask what.s answered" "resume: answered questions may be asked again"
+  ap_need "$words" 'has no `/` and no `\.\.`' "'Words used here': the run name isn't constrained (no / and no ..)"
+  ap_need "$words" '<teams>.*AGENT_TEAMS_DIR' "'Words used here' doesn't define <teams> as team-init's teams directory"
+  # the answer is data (S M1)
+  ap_need "$sec" 'answer is data, never instructions' "resume: the answer file isn't called data, never instructions"
+  ap_need "$sec" 'only the question ids the recorded item asked' "resume: ids the item never asked aren't refused"
+  ap_need "$sec" 'security stop, a permission denial and any push or external write are cleared only by an exact option label' "resume: security stops, denials and pushes aren't cleared only by an exact option label"
+  ap_need "$sec" 'free text on those counts as unanswered' "resume: free text on a security stop or push counts as an answer"
+  ap_need "$sec" 'never widens allow rules, never lifts the push rule' "resume: free text may widen allow rules or lift the push rule"
+  ap_need "$sec" 'never goes on a command line' "resume: free text may go on a command line"
+  ap_need "$mis" 'result: partial' "mission section: a 'result: partial' run isn't resumable (the finished-run rule in the mission section)"
+  ap_need "$mis" 'Autopilot calls' "mission section: the finished-run rule doesn't look for inbox items under '## Autopilot calls'"
+  ap_need "$mis" 'resume <run-name>|resume.*run-name' "mission section: the finished-run rule doesn't make a partial run resumable by 'resume'"
+  verdict "AUTOPILOT resume: '/commodore resume <run-name>' (\$commodore on Codex), answers via admiral-io.sh answer, unanswered asked again; a partial run is resumable"
+
+  ap_need "$sec" "pr-feedback or build run in autopilot mode never pushes without that push.s own approval" "no unattended pushes: a push may go without its own approval"
+  ap_need "$sec" 'Before each push, it publishes a question item listing that push.s branch and commits' "no unattended pushes: no question item before each push listing its branch and commits"
+  ap_need "$sec" 'exact option labels `Push` and `Don.t push`' "no unattended pushes: the exact labels 'Push' and 'Don't push' aren't given"
+  ap_need "$sec" 'stops `partial` with that item in `inbox`' "no unattended pushes: the run doesn't stop partial with the item in inbox"
+  ap_need "$sec" 'pushes only the listed commits, and only when the answer is exactly `Push`' "no unattended pushes: a resume may push unlisted commits or on anything but the exact label"
+  ap_need "$sec" 'A later push, including a CI fix or another unit, needs a new item' "no unattended pushes: a later push doesn't need a new item"
+  ap_need "$sec" 'Don.t push. ends the run `partial`, lists the unpushed branches and worktrees, and removes nothing' "no unattended pushes: 'Don't push' doesn't end partial, list the unpushed work and remove nothing"
+  print -r -- $sec | grep -qi 'first push' && P+="the push rule still says 'first push' (each push needs its own approval)"
+  verdict "AUTOPILOT section: a pr-feedback or build run never pushes without an exact-label approval (question item, partial stop, resume pushes only on 'Push')"
+
+  ap_need "$sec" 'applies only in autopilot mode\. With it off, every gate reads as written' "scope: the section doesn't say that with it off every gate reads as written"
+  verdict "AUTOPILOT section limits itself to autopilot mode (with it off, every gate reads as written)"
+
+  # ---- ending a run: one shared rule outside the Autopilot section ----
+  endr=$(ap_sec $AP_SK '^## Ending a run$')
+  ap_need "$endr" 'in any mode' "ending a run: the rule isn't for any mode"
+  ap_need "$endr" 'Write the `result:` line into `state\.md`' "ending a run: the result: line in state.md isn't written"
+  ap_need "$endr" '`done`, `partial` or `failed`' "ending a run: done, partial and failed aren't the results"
+  ap_need "$endr" '`failed` means the run can.t go on for a reason no answer would fix' "ending a run: 'failed' isn't defined"
+  ap_need "$endr" 'a tool or a script fails, the repo or the PR is gone' "ending a run: failed doesn't give its causes"
+  ap_need "$endr" 'When `ADMIRAL_REPORT` is set, publish the Admiral report' "ending a run: the Admiral report isn't published when ADMIRAL_REPORT is set"
+  ap_need "$endr" 'for `partial` a `resume` of `/commodore resume <run-name>`' "ending a run: every partial doesn't get a resume"
+  ap_need "$endr" 'admiral-report\.schema\.json' "ending a run: the report schema isn't linked"
+  ap_need "$endr" 'version. \(1\), `result`, `why`' "ending a run: the report's required fields aren't listed"
+  ap_need "$endr" 'admiral-io\.sh report <draft>' "ending a run: '<team>/admiral-io.sh report <draft>' isn't the report call"
+  ap_need "$endr" 'Exit 2 means fix the draft' "ending a run: exit 2 isn't handled"
+  ap_need "$endr" 'every draft you publish.*file tool, never with a heredoc, `printf` or its text on a command line' "ending a run: the file-tool rule for every draft isn't stated"
+  ap_need "$endr" 'question and review items' "ending a run: the file-tool rule doesn't cover question and review items"
+  print -r -- $sec | grep -qiE 'ADMIRAL_REPORT' && P+="the Autopilot section still carries the every-run rule (it belongs in 'Ending a run')"
+  print -r -- $sec | grep -qF '(#ending-a-run)' || P+="the Autopilot section doesn't point at 'Ending a run'"
+  for pair in "mission-build.md:$AP_REF/mission-build.md" "mission-pr-feedback.md:$AP_REF/mission-pr-feedback.md" "mission-review.md:$AP_REF/mission-review.md"; do
+    f=${pair#*:}
+    grep -F 'End it with a `result:` line' $f | grep -qF '(../SKILL.md#ending-a-run) writes it into `state.md` and publishes the Admiral report; the run can also end `failed`' || P+="${pair%%:*}: the result: line doesn't point at 'Ending a run', or doesn't say failed is possible"
+    grep -qF 'Write the same `result:` line' $f && P+="${pair%%:*}: still copies the result: line instead of linking 'Ending a run'"
+  done
+  print -r -- "$endr" | grep -q '^1\. Write the `result:` line' || P+="ending a run: the result: line isn't step 1 (before the report)"
+  ap_need "$endr" 'resume. of a finished run says it.s finished and stops' "ending a run: a resume of a finished run isn't said to stop"
+  grep -F 'skip to phase 3 step 6 and end with `result: partial`' $AP_REF/mission-review.md | grep -qF '(../SKILL.md#ending-a-run)' || P+="mission-review.md: the security 'no' (result: partial) doesn't point at 'Ending a run'"
+  ap_need "$sec" 'admiral-inbox-item\.schema\.json' "stop: the item schema isn't linked"
+  ap_need "$sec" '<run-name>-q<n>' "stop: the item id scheme '<run-name>-q<n>' isn't given"
+  ap_need "$sec" 'a re-ask gets the next `n`' "stop: a re-ask doesn't get the next n"
+  ap_need "$sec" '`version` \(1\), `id`.*`kind` `question`, `created`' "stop: the item's required fields aren't listed"
+  ap_need "$sec" 'each with .id., .text., .options\[\]. \(.label., .description.\), .recommended. and .multi.' "stop: each question's fields aren't listed"
+  verdict "AUTOPILOT 'Ending a run': one rule for any mode (result: line, Admiral report when ADMIRAL_REPORT is set, partial resume, failed defined, file-tool drafts), pointed at by each mission and the stop"
+
+  # ---- mission-review --------------------------------------------------------------------------------------------
+  mr=$AP_REF/mission-review.md
+  mra=$(ap_aut $mr)
+  mr3=$(awk '/^## Phase 3/{p=1; next} p && /^## /{p=0} p' $mr)
+  ap_need "$mra" 'autopilot' "mission-review.md never mentions autopilot mode"
+  ap_need "$mra" 'Autopilot mode\]\(\.\./SKILL\.md#autopilot-mode\)|SKILL\.md#autopilot-mode' "mission-review.md doesn't link SKILL.md's Autopilot mode section"
+  ap_need "$mra" 'go into one question item' "mission-review: direct questions don't go into one question item"
+  ap_need "$mra" "step 2.s clone question" "mission-review: the clone question (phase 1 step 2) isn't covered"
+  ap_need "$mra" 'security role skill \(phase 1 step 7\) is a call that goes through the classifier' "mission-review: the no-security-role-skill call (phase 1 step 7) doesn't go through the classifier"
+  ap_need "$mra" 'security stop' "mission-review: the agent-config stop and fork steward aren't security stops"
+  ap_need "$mra" 'agent-config stop \(phase 1 step 6\)' "mission-review: the agent-config stop (phase 1 step 6) isn't named"
+  ap_need "$mra" 'fork steward question \(phase 1 step 8\)' "mission-review: the fork steward (phase 1 step 8) isn't named"
+  verdict "AUTOPILOT mission-review: direct questions in one question item; agent-config stop and fork steward are security stops"
+
+  ap_need "$mra" 'builds `review.json` with no `event`' "mission-review posting: review.json has no event"
+  ap_need "$mra" 'so the review stays PENDING' "mission-review posting: the review isn't left PENDING"
+  ap_need "$mra" 'same `gh api … /reviews` request' "mission-review posting: the same 'gh api … /reviews' request isn't used"
+  ap_need "$mra" 'integer REST `id`' "mission-review posting: the review id isn't the integer REST id"
+  ap_need "$mra" '`review_id` \(that integer\)' "mission-review posting: the item's review_id isn't that integer"
+  ap_need "$mra" 'publish a `review` item' "mission-review posting: no 'review' inbox item is published"
+  ap_need "$mra" '`id` \(`<run-name>-review`, with the run name cleaned' "mission-review posting: the review item's id scheme isn't given"
+  ap_need "$mra" 'already exists means it.s already published: carry on' "mission-review posting: exit 2 'already exists' on the review item isn't 'carry on'"
+  ap_need "$mra" 'admiral-inbox-item\.schema\.json' "mission-review posting: the item schema isn't linked"
+  ap_need "$mra" '`version` \(1\), `id`.*`kind` `review`, `created`, `title`' "mission-review posting: the item's required fields aren't listed"
+  ap_need "$mra" 'pr_url' "mission-review posting: the item lacks pr_url"
+  ap_need "$mra" 'at most 3 lines|3 lines at most|three lines' "mission-review posting: the summary isn't capped at 3 lines"
+  ap_need "$mra" 'admiral-io\.sh item' "mission-review posting: the item isn't published with admiral-io.sh item"
+  ap_need "$mra" 'publish a `done` Admiral report' "mission-review posting: a done Admiral report isn't published"
+  ap_need "$mra" 'file tool.*as that section says|file tool, as that section says' "mission-review posting: the file-tool rule isn't pointed at"
+  ap_need "$mra" 'PENDING review of yours is already on the PR and its body matches `review.json`, it.s this run.s own post' "mission-review posting: a PENDING review matching review.json isn't treated as this run's own post"
+  ap_need "$mra" 'record its `id` and go on to the review item' "mission-review posting: this run's own PENDING review isn't recorded"
+  ap_need "$mra" 'exact labels `Posted again after I submitted or deleted it` and `Stop`' "mission-review posting: a foreign PENDING review's item lacks the exact labels"
+  ap_need "$mra" 'A resume re-checks the reviews before it posts' "mission-review posting: a resume doesn't re-check the reviews first"
+  ap_need "$mra" '`Stop` ends the run `done` with nothing posted' "mission-review posting: 'Stop' doesn't end the run done with nothing posted"
+  ap_need "$mra" 'phase 3 step 5 stays: post exactly one review' "mission-review: what of phase 3 step 5 is overridden isn't said (post exactly one review stays)"
+  ap_need "$mra" 'Never submit, delete or edit the existing review' "mission-review posting: an existing PENDING review may be submitted, deleted or edited"
+  ap_need "$mra" "item.s id in .inbox., as \[Ending a run\]" "mission-review posting: the done report doesn't list the item in inbox, as 'Ending a run' says"
+  ap_need "$mra" 'never submit' "mission-review posting: 'never submit' isn't said"
+  ap_need "$mra" '/events' "mission-review posting: the /events call isn't ruled out"
+  ap_need "$mra" 'Phase 3 step 3 doesn.t ask' "mission-review posting: phase 3 step 3 still asks (it should not in autopilot mode)"
+  ap_need "$mr3" 'autopilot' "mission-review Phase 3 never mentions autopilot mode"
+  verdict "AUTOPILOT mission-review posting: no event (PENDING), same /reviews call, review id recorded, review item, done report, never submits"
+
+  ev=$(grep -F 'Always set `event`' $mr)
+  [[ -n $ev ]] || P+="mission-review.md lost the 'Always set \`event\`' line (AC1: it stays for the engineer-present path)"
+  print -r -- $ev | grep -qi autopilot || P+="the 'Always set \`event\`' line isn't overridden for autopilot mode"
+  ap_need "$mra" 'Overridden in autopilot mode only' "mission-review: nothing is said to override the lines that contradict autopilot"
+  ap_need "$mra" 'the stop rule in phase 1 step 7' "mission-review: the stop rule (phase 1 step 7: 'the engineer declines to post') isn't overridden"
+  ap_need "$mra" "you.ll need them again to approve the findings" "mission-review: phase 1's closing ('you'll need them again') isn't overridden"
+  ap_need "$mra" 'worktree removal, so the worktrees stay and you list them' "mission-review: phase 3 step 6 (worktrees stay; list them) isn't overridden"
+  verdict "AUTOPILOT mission-review overrides, in autopilot mode only, 'Always set event', the stop rule, phase 1's 'you'll need them again' and phase 3 step 6 (worktrees stay; list them)"
+
+  # ---- mission-pr-feedback ---------------------------------------------------------------------------------------
+  pf=$AP_REF/mission-pr-feedback.md
+  pfa=$(ap_aut $pf)
+  ap_need "$pfa" 'autopilot' "mission-pr-feedback.md never mentions autopilot mode"
+  ap_need "$pfa" 'SKILL\.md#autopilot-mode' "mission-pr-feedback.md doesn't link SKILL.md's Autopilot mode section"
+  ap_need "$pfa" 'security stop' "mission-pr-feedback: the pre-triage stops (phase 1 step 3) aren't security stops"
+  ap_need "$pfa" 'the head mismatch' "mission-pr-feedback: the head-mismatch stop (phase 1 step 3) isn't named"
+  ap_need "$pfa" 'commits that touch agent config' "mission-pr-feedback: the agent-config commits stop (phase 1 step 3) isn't named"
+  ap_need "$pfa" 'run the triage, then' "mission-pr-feedback: autopilot doesn't run the triage first"
+  ap_need "$pfa" "approval gate \(step 11.s decision batch\)" "mission-pr-feedback: the approval gate (phase 1 step 11) isn't named"
+  ap_need "$pfa" "approval gate \(step 11.s decision batch\) as high-stakes" "mission-pr-feedback: the approval gate isn't high-stakes"
+  ap_need "$pfa" 'one question item' "mission-pr-feedback: the stop isn't one question item"
+  ap_need "$pfa" 'summari[sz]es? the triage' "mission-pr-feedback: the item doesn't summarise the triage"
+  ap_need "$pfa" 'edited push-back reply \(step 11\) is asked again as its own item, with the edited text and an `Approve` label' "mission-pr-feedback: an edited reply isn't asked again as its own item with an Approve label"
+  ap_need "$pfa" 'a `partial` Admiral report, stop' "mission-pr-feedback: the stop isn't a partial Admiral report, then stop"
+  ap_need "$pfa" 'before each push follow \[Autopilot mode\]\(\.\./SKILL\.md#autopilot-mode\) \(Resume, No unattended pushes\)' "mission-pr-feedback: Resume and the push approval before each push aren't pointed at"
+  verdict "AUTOPILOT mission-pr-feedback: pre-triage stops are security stops; otherwise triage, then the approval gate is one question item, a partial report, stop"
+
+  # ---- mission-build ---------------------------------------------------------------------------------------------
+  mb=$AP_REF/mission-build.md
+  mba=$(ap_aut $mb)
+  ap_need "$mba" 'autopilot' "mission-build.md never mentions autopilot mode"
+  ap_need "$mba" 'SKILL\.md#autopilot-mode' "mission-build.md doesn't link SKILL.md's Autopilot mode section"
+  ap_need "$mba" 'plan \(phase 1 steps 1–4\)' "mission-build: autopilot doesn't plan first (phase 1 steps 1-4)"
+  ap_need "$mba" 'allow rules' "mission-build: autopilot doesn't draft the allow rules (step 5.1)"
+  ap_need "$mba" 'list the secrets \(step 5\.1\)' "mission-build: autopilot doesn't list the secrets (step 5.1)"
+  ap_need "$mba" 'decision batch' "mission-build: the decision batch isn't in the item"
+  ap_need "$mba" "step 2.s cut question" "mission-build: step 2's cut question isn't in the item"
+  ap_need "$mba" 'one question item' "mission-build: the stop isn't one question item"
+  ap_need "$mba" 'report `partial` and stop' "mission-build: the stop isn't a partial Admiral report, then stop"
+  ap_need "$mba" 'before each push follow \[Autopilot mode\]\(\.\./SKILL\.md#autopilot-mode\) \(Resume, No unattended pushes\)' "mission-build: Resume and the push approval before each push aren't pointed at"
+  verdict "AUTOPILOT mission-build: plan, draft the allow rules, list the secrets, then decision batch, secrets and cut question in one question item, partial, stop"
+
+  # ---- Codex and Copilot -----------------------------------------------------------------------------------------
+  for h in codex copilot; do
+    hf=$AP_REF/harness-$h.md
+    row=$(grep -E '^\| Use AskUserQuestion' $hf)
+    print -r -- $row | grep -qi autopilot || P+="harness-$h.md: the AskUserQuestion row doesn't mention autopilot mode"
+    print -r -- $row | grep -qi inbox || P+="harness-$h.md: the AskUserQuestion row doesn't say the inbox replaces the plain question"
+    ha=$(ap_aut $hf)
+    print -r -- $ha | grep -qiE 'same rules|follows' || P+="harness-$h.md: doesn't say autopilot mode follows the same rules"
+    print -r -- $ha | grep -qiE 'every call.{0,40}high-stakes|high-stakes.{0,40}every call' || P+="harness-$h.md: doesn't say every call is high-stakes there"
+    print -r -- $ha | grep -qiE 'no advisor' || P+="harness-$h.md: doesn't give 'no advisor' as the reason"
+  done
+  cpp=$(awk -v RS= '/unattended run on Copilot/' $AP_REF/harness-copilot.md)
+  print -r -- $cpp | grep -qi autopilot && print -r -- $cpp | grep -qi 'high-stakes' || P+="harness-copilot.md: the unattended-review rule isn't a high-stakes call in autopilot mode"
+  cxp=$(awk -v RS= '/MCP question/' $AP_REF/harness-codex.md)
+  print -r -- $cxp | grep -qi autopilot && print -r -- $cxp | grep -qi 'high-stakes' || P+="harness-codex.md: the MCP question isn't a high-stakes call in autopilot mode"
+  verdict "AUTOPILOT Codex and Copilot: the AskUserQuestion row sends questions to the inbox, every call is high-stakes, Copilot's unattended-review rule and Codex's MCP question are high-stakes calls"
+
+  # ---- the changeset -----------------------------------------------------------------------------------------------
+  cs=; for f in $ROOT/.changeset/*.md(N); do [[ ${f:t} == README.md ]] || { grep -q '"jasonbuffin-skills": minor' $f && cs=$f; }; done
+  [[ -n $cs ]] || P+="no .changeset/*.md bumps \"jasonbuffin-skills\": minor"
+  [[ -z $cs ]] || grep -qiE 'autopilot' $cs || P+="${cs:t} doesn't mention autopilot mode"
+  verdict "AUTOPILOT a changeset bumps jasonbuffin-skills minor and names autopilot mode"
+
+  # ---- AC1: with autopilot off, the lines autopilot overrides still read as before -----------------------------------
+  ap_has $AP_SK 'Use AskUserQuestion with the mission that will run as the first option.' "SKILL.md: mission confirmation (step 3) changed"
+  ap_has $AP_SK 'When the input fits more than one mission, or none, say so and ask the engineer which one they mean.' "SKILL.md: the detection fallback changed"
+  ap_has $AP_SK 'A run is finished when its `state.md` has a `result:` line' "SKILL.md: the finished-run rule changed"
+  ap_has $AP_SK 'propose the smallest cut that meets the stop rule, and ask.' "SKILL.md: phase 1 step 2's cut question changed"
+  ap_has $AP_SK 'Ask one decision batch: the allow rules, the mode, every question from steps 1–4, and the run'"'"'s ground rules' "SKILL.md: the decision batch (step 5.2) changed"
+  ap_has $AP_SK 'have the engineer store the Keychain secrets' "SKILL.md: step 5.1's Keychain secrets changed"
+  ap_has $AP_SK 'It starts only once the engineer approves that.' "SKILL.md: the no-security-role-skill ground rule changed"
+  ap_has $AP_SK 'If the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line' "SKILL.md: Bubbling questions up changed"
+  ap_has $AP_SK 'When a denial is about the outcome rather than the syntax, stop and ask' "SKILL.md: the denial rule changed"
+  ap_has $AP_REF/mission-review.md 'Ask with AskUserQuestion: post as `COMMENT` (first option)' "mission-review.md: phase 3 step 3 changed"
+  ap_has $AP_REF/mission-review.md 'If the engineer is away, end your update with a `needs input:` line and post nothing.' "mission-review.md: the engineer-away rule changed"
+  ap_has $AP_REF/mission-review.md '"event": "COMMENT"' "mission-review.md: review.json's event changed"
+  ap_has $AP_REF/mission-review.md "you'll need them again to approve the findings" "mission-review.md: phase 1's closing line changed"
+  ap_has $AP_REF/mission-review.md 'only when the engineer says so.' "mission-review.md: the worktree removal rule changed"
+  ap_has $AP_REF/mission-pr-feedback.md 'launch nobody until they say they recognise them and to go ahead.' "mission-pr-feedback.md: the agent-config commits stop changed"
+  ap_has $AP_REF/harness-claude.md "If they've already left, put it in your next update and carry on." "harness-claude.md: 'When the advisor is off' step 1 changed"
+  ap_has $AP_REF/harness-codex.md '| Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer' "harness-codex.md: the AskUserQuestion row's plain-question text changed"
+  ap_has $AP_REF/harness-copilot.md '| Use AskUserQuestion | Ask a plain question in your reply, with your recommendation first, and wait for the answer' "harness-copilot.md: the AskUserQuestion row's plain-question text changed"
+  verdict "AUTOPILOT AC1: with autopilot off, the existing gate lines the brief names still read as before"
 }
 
 # ======================================================================================================================

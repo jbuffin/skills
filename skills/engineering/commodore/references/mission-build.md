@@ -4,6 +4,10 @@ The build mission turns a spec, an issue, a design doc or a free-text request in
 
 Read this file before phase 1 in [`SKILL.md`](../SKILL.md). Phase 1 runs all six steps and picks the mode below. Then run Phase 2 and Phase 3 from this file.
 
+## Autopilot mode
+
+In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), plan (phase 1 steps 1–4), draft the allow rules and list the secrets (step 5.1). Then put the whole decision batch, the secrets and step 2's cut question in one question item, report `partial` and stop. Resume and the push approval before each push follow [Autopilot mode](../SKILL.md#autopilot-mode) (Resume, No unattended pushes). This holds until autopilot builds land. With autopilot off, nothing here applies.
+
 ## Mode, sized to the work
 
 | The work | Mode | Delivery |
@@ -85,5 +89,5 @@ The run ends when the stop rule is observed on the target it names. Opening the 
    If any check fails, the run is partial. Say exactly which checks failed.
 3. Close every teammate, stop the watchdog and the CI watchers, and leave the target in the agreed state. List every worktree from `worktrees.tsv` with its branch and whether it's clean. Remove them only when the engineer says so.
 4. Leave the delivery the way the ground rules say. Every PR at the round cap has its human-review comment.
-5. Write the final report: units and PRs, "no security review: no security role skill" when the run had no security reviewer, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why. Write the same `result:` line into `state.md`, under `## Mode, phase, current unit`.
+5. Write the final report: units and PRs, "no security review: no security role skill" when the run had no security reviewer, the unfixed non-blocking findings from `state.md`, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why. [Ending a run](../SKILL.md#ending-a-run) writes it into `state.md` and publishes the Admiral report; the run can also end `failed`.
 6. Lessons go to the repo's own docs, as a proposed edit for the engineer to accept, whenever the run tripped over a missing or wrong instruction there.
