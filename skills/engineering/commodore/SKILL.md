@@ -116,7 +116,7 @@ A run whose `state.md` says `result: partial` and lists inbox items or open ques
    Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, say so and ask the engineer which one they mean. In autopilot mode, [Autopilot mode](#autopilot-mode) replaces that question and step 3's confirmation.
 2. Find the mission's row in the mission table below.
 3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option. For `review` on the engineer's own PR, say that only a `COMMENT` review can be posted.
-4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away record the mission with `<team>/state-set.sh <run> mode mission <name>`.
+4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above; when `<teams>/<run-name>` already exists and isn't the empty run you are reusing, add `-2`, `-3` and so on until the name is free), and straight away record the mission with `<team>/state-set.sh <run> mode mission <name>`.
 5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
 
 Done when the engineer has confirmed the mission and the mission is recorded in `state.md`.
