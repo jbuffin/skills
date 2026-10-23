@@ -1,7 +1,0 @@
-## argv
-## stdout
-missing skills next to commodore in @SB@/src-noskills: run-preflight
-commodore needs agent-teammates, run-preflight and target-evaluation installed alongside it.
-## exit
-6
-## files

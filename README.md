@@ -30,8 +30,7 @@ incubator/<name>/SKILL.md    In development. Not in a discovery path, and marked
                              `metadata.internal: true` as a second guard.
 templates/SKILL.template.md  Starting point used by scripts/new-skill.sh.
 templates/AGENTS.template.md Generic AGENTS.md starting point for other repos.
-scripts/                     new-skill, promote, validate, and the check-* scripts CI runs.
-tests/                       tests/run.sh, its goldens and the fake harness CLIs in tests/bin.
+scripts/                     new-skill, promote, validate, and the check-* scripts.
 docs/                        Agent docs (docs/agents) and ADRs (docs/adr).
 .githooks/                   Optional pre-commit hook.
 .claude-plugin/              Claude Code plugin + marketplace manifests.
@@ -134,7 +133,8 @@ a PR doesn't release anything: its changeset waits on `main` until you decide to
 
 ## Checks
 
-CI (`.github/workflows/validate.yml`) runs on every push and pull request:
+CI (`.github/workflows/validate.yml`) runs on every pull request and on pushes to `main`. A new commit on a pull
+request cancels the run in progress.
 
 | Job | What it checks |
 | --- | --- |
@@ -144,8 +144,6 @@ CI (`.github/workflows/validate.yml`) runs on every push and pull request:
 | python | `ruff check` and `ruff format --check` (see `ruff.toml`) |
 | workflows | `actionlint` |
 | plugin | `claude plugin validate .` |
-| discovery | `scripts/check-discovery.sh`: `npx skills` finds exactly the promoted skills |
-| tests | `tests/run.sh`: the team skills' scripts against fake harness CLIs (claude, codex, copilot), no network |
 
 Other workflows:
 

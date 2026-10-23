@@ -33,7 +33,7 @@ This repo publishes agent skills. Each skill is a folder with a `SKILL.md` (YAML
 ## Checks and pull requests
 
 - Run `scripts/validate.sh` before committing. CI runs it plus shell, Markdown, Python, workflow,
-  plugin and discovery checks (see the Checks section of `README.md`).
+  and plugin checks (see the Checks section of `README.md`).
 - When a PR changes a `SKILL.md`, say in the description what behaviour changes for the agent.
 
 ## Agent skills
