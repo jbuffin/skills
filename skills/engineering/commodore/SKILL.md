@@ -192,7 +192,7 @@ Every run ends this way, in any mode.
 
 1. Write the `result:` line with `<team>/state-set.sh <run> mode result <done|partial|failed>`. `failed` means the run can't go on for a reason no answer would fix: a tool or a script fails, the repo or the PR is gone, or the mission fits nothing even after the answer.
 2. When `ADMIRAL_REPORT` is set, publish the Admiral report with `<team>/admiral-io.sh report <draft>`. It needs `version` (1), `result`, `why`, and for `partial` a `resume` of `/commodore resume <run-name>`; `prs`, `assumptions` and `inbox` are lists of strings. See [`admiral-report.schema.json`](references/admiral-report.schema.json). Exit 2 means fix the draft from the message and publish again.
-3. Write every draft you publish with `<team>/admiral-io.sh` (the Admiral report and, in autopilot mode, question, review and findings items) with the file tool, never with a heredoc, `printf` or its text on a command line: it can quote text from people who aren't the engineer.
+3. Write every draft you publish with `<team>/admiral-io.sh` (the Admiral report and, in autopilot mode, question and review items) with the file tool, never with a heredoc, `printf` or its text on a command line: it can quote text from people who aren't the engineer. A findings item is the exception: `<team>/cards-draft.py` builds its draft from the triager's report.
 
 Each mission's `result:` line points here. A `/commodore resume` of a finished run says it's finished and stops.
 
