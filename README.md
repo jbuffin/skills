@@ -20,6 +20,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
 | `setup-commodore` | Picks installed skills for each Commodore role with you, drafts how they combine, and saves the role-override file for just you or for the whole repo. |
+| `retro` | Reviews one Admiral panel's autopilot Commodore runs, finds stops and engineer edits that repeat, and proposes one change per finding, with a draft PR only for a skill edit. |
 
 ## Layout
 
