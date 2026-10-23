@@ -182,9 +182,20 @@ fi
 
 ## Mode, phase, current unit
 
-## Units (unit → branch → worktree → head SHA → PR)
+## Units (head is a snapshot; git is the source of truth)
 
-## Acceptance trace (criterion from the source of truth → owning unit → test or scenario → status → evidence path)
+| unit | branch | worktree | base | head (as of) | PR | reviewed SHA | status | notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
+## Acceptance trace (criterion from the source of truth)
+
+| criterion | unit | test or scenario | status | evidence |
+| --- | --- | --- | --- | --- |
+
+## Non-blocking findings (unfixed ones go in the final report)
+
+| id | unit | severity | finding | status |
+| --- | --- | --- | --- | --- |
 
 ## Ground rules (from the engineer)
 

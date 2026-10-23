@@ -23,7 +23,7 @@ In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), the rules belo
 
 Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktrees below in place of step 4. Skip step 2: the PR is the one unit, and there is no acceptance trace. Skip step 5: no Keychain secrets, no push allow rules, no decision batch and no implementer probe, because nothing gets pushed. Where step 3 says to put something in the decision batch, ask the engineer directly instead.
 
-1. Read the PR: `gh pr view <n> --json number,url,title,body,author,baseRefName,baseRefOid,headRefOid,isCrossRepository,closingIssuesReferences`. Record the PR URL, `baseRefOid` and `headRefOid` in `state.md` under `## Units`. Those two SHAs are the reviewed range for the whole run. The PR's `url` names its base repository, `<owner>/<repo>`.
+1. Read the PR: `gh pr view <n> --json number,url,title,body,author,baseRefName,baseRefOid,headRefOid,isCrossRepository,closingIssuesReferences`. Record them as the units row `review`: `<team>/state-set.sh <run> units --add review base=<baseRefOid> head=<headRefOid> PR=<url>`. Those two SHAs are the reviewed range for the whole run. The PR's `url` names its base repository, `<owner>/<repo>`.
 2. Check the repositories against that base repository, and record the results in `state.md`:
    - Clone: `<repo>` must be a local clone of the base repository, or of a fork of it. When it isn't, ask the engineer for the path to a clone, or for leave to clone it, before step 4, and set `REPO` and `WORKTREES_DIR` in `team.env` to that clone. Never fetch another repository's `pull/<n>/head` into an unrelated checkout.
    - Fetch: when `git -C <repo> remote get-url origin` isn't the base repository, use the base repository's URL in place of `origin` in step 4's fetch.
@@ -36,7 +36,7 @@ Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktrees below in place of st
    git -C <repo> worktree add --detach <WORKTREES_DIR>/<run-name>-review <headRefOid>
    ```
 
-   Use the `headRefOid` from step 1, never `FETCH_HEAD`, which other sessions share and can move. `<WORKTREES_DIR>` is the literal path from `team.env`. With your file-editing tool, add the line `review - <WORKTREES_DIR>/<run-name>-review` to `<run>/worktrees.tsv`, and record the path in `state.md` under `## Units`. The `-` branch keeps it off the run's own branches: `push-branch.sh` refuses `-` as a branch name and refuses a detached HEAD. The advisor probe needs that line to find a directory to start in.
+   Use the `headRefOid` from step 1, never `FETCH_HEAD`, which other sessions share and can move. `<WORKTREES_DIR>` is the literal path from `team.env`. With your file-editing tool, add the line `review - <WORKTREES_DIR>/<run-name>-review` to `<run>/worktrees.tsv`, and record the path with `<team>/state-set.sh <run> units review worktree <path>`. The `-` branch keeps it off the run's own branches: `push-branch.sh` refuses `-` as a branch name and refuses a detached HEAD. The advisor probe needs that line to find a directory to start in.
 5. List the changed files from git, which has no file cap: `git -C <repo> diff --name-only <baseRefOid>...<headRefOid>`. Use this list for steps 6 and 8.
 6. Check for agent config. Every teammate starts a session in a worktree of this PR, and that session loads the checkout's config as its own. Stop before any launch when either holds:
    - The base or the head `.claude/settings.json` (or a tracked `.claude/settings.local.json`) has any key other than `permissions`, any `permissions` key other than `deny` and `ask` (such as `allow`, `additionalDirectories` or `defaultMode`), or `.mcp.json` defines any server `command`. Read each file at both `'<baseRefOid>:<path>'` and `'<headRefOid>:<path>'`. Hooks, `env`, the `*Helper` keys and plugin settings can run any repo code indirectly, so this holds whatever the PR changes.
@@ -53,7 +53,7 @@ Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktrees below in place of st
    cp -R <repo>/<path> <WORKTREES_DIR>/<run-name>-steward/<path>
    ```
 
-   Do this for each `WORKTREE_SETUP` entry kept in step 8, the way `unit-worktree.sh` does: skip a path the worktree already has, and use `cp -cR` for a `clone:` entry, falling back to `cp -R` if it fails. Add `steward - <WORKTREES_DIR>/<run-name>-steward` to `worktrees.tsv` and record the path in `state.md`.
+   Do this for each `WORKTREE_SETUP` entry kept in step 8, the way `unit-worktree.sh` does: skip a path the worktree already has, and use `cp -cR` for a `clone:` entry, falling back to `cp -R` if it fails. Add `steward - <WORKTREES_DIR>/<run-name>-steward` to `worktrees.tsv` and record the path with `<team>/state-set.sh <run> units --add steward worktree=<path>`.
 10. Where the harness has an advisor, check it: run `<team>/advisor-probe.sh <run> <model>` once per distinct model this run launches. On `ADVISOR OFF`, follow "When the advisor is off" in [`harness-claude.md`](harness-claude.md) (the harness reference).
 11. Write the common brief (SKILL.md step 6). Delivery is "no PR; the coordinator posts one GitHub review". Replace the template's lines about working on a branch, pushing through `push-branch.sh` and committing before the marker with: every teammate leaves its worktree as it found it, with no edits, commits or pushes.
 

@@ -14,7 +14,7 @@ In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), phase 1 step 3
 
 Run SKILL.md's phase 1 steps in this order. The triage comes before step 2, because the units come from it.
 
-1. Read the PR: `gh pr view <n> --repo <owner>/<repo> --json number,url,title,author,headRefName,headRefOid,baseRefName,state`, with the repository the engineer pointed you at. Record the PR URL, `headRefName` and `headRefOid` in `state.md` under `## Units`. The PR's `url` names its repository, `<owner>/<repo>`; pass `--repo <owner>/<repo>` to every `gh pr` call in this mission.
+1. Read the PR: `gh pr view <n> --repo <owner>/<repo> --json number,url,title,author,headRefName,headRefOid,baseRefName,state`, with the repository the engineer pointed you at. Record them as the units row `pr`: `<team>/state-set.sh <run> units --add pr branch=<headRefName> head=<headRefOid> PR=<url>`. The PR's `url` names its repository, `<owner>/<repo>`; pass `--repo <owner>/<repo>` to every `gh pr` call in this mission.
 2. Write the profile (SKILL.md step 1). The mode is existing PR. The stop rule is "every approved fix pushed with CI green, and every approved reply posted". Set `MODEL_TRIAGER` along with the other roles.
 3. Create the worktree (SKILL.md step 4): set `WORKTREE_SETUP`, then run `<team>/unit-worktree.sh <run> pr u1 <n>`, following the Existing PR section of [`modes.md`](modes.md). Every unit works in this one worktree. Before anyone starts a session in it, check what it holds. Stop when `git -C <worktree> rev-parse HEAD` differs from `headRefOid`, and ask the engineer. Then list the branch's commits:
 
