@@ -82,7 +82,7 @@ For each item, read it, check it against the code at the head SHA, and sort it i
 - **needs your call**: it turns on product behaviour, scope, design or taste, or you can't tell. Give the options and your recommendation.
 - **already done**: the code at the head already does what it asks. Name the commit that did it.
 
-Report one entry per item, in the item list's order: the item ID, its source (person or bot, with the login, and thread, review, comment or check), the category, the reasoning, and the draft reply for push back. Make no edits, and write nothing to GitHub.
+Report one entry per item, in the item list's order: the item ID, its source (person or bot, with the login, and thread, review, comment or check), the category and the reasoning. Then turn each entry into a finding card as [`finding-cards.md`](finding-cards.md) says, and end the report with the cards in one fenced `json` block, the only `json` fence in it. Make no edits, and write nothing to GitHub.
 
 **Fallback.** None needed: the contract is the whole procedure.
 
