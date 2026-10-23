@@ -20,14 +20,14 @@ The run's role skills are the table in `profile.md`, which `<team>/role-skills.s
 | --- | --- | --- |
 | Brief checker | one per batch of briefs | a cheap, independent read of the brief before anyone builds on it |
 | Test writer | one per unit | fresh, so the tests come from the source of truth and not from an implementation |
-| Implementer | one per unit, alive through that unit's fix rounds | fixes are small, and re-reading the unit cold every round costs more than any bias it avoids |
-| Reviewer | fresh every round | independence is the whole point; re-reviews cover only the fix diff |
-| Security reviewer | fresh every round | same reason as the reviewer: independence; re-reviews cover only the range since the last reviewed SHA |
+| Implementer | one per unit, alive through that unit's fix round | fixes are small, and re-reading the unit cold costs more than any bias it avoids |
+| Reviewer | fresh every round, at most two per unit | independence is the whole point; round 2 covers only the fix diff |
+| Security reviewer | one per unit, in round 1 | same reason as the reviewer: independence. Later rounds rarely find security issues, so the round-2 reviewer checks that its findings were fixed |
 | Triager | fresh per mission | it sorts the feedback against the PR's head before anyone fixes it, so the sorting owes nothing to a fix |
 | Target steward | the whole run | it owns the target's state, sign-in, dialogs and cleanup, so that know-how stays in one place and the target has one owner instead of a queue |
 | Scribe | the whole run, or one per unit if its context grows | PR bodies and round-cap PR comments, kept out of the coordinator's context |
 
-When the implementer's context gets heavy (a hard unit, a lot of rounds), or it starts defending its own code against findings, close it and give the remaining findings to a fresh implementer, with the reviewer's report as its pointer.
+When the implementer's context gets heavy (a hard unit, a long CI fix), or it starts defending its own code against findings, close it and give the remaining findings to a fresh implementer, with the reviewer's report as its pointer.
 
 Investigation and documentation work keeps the same roles. The implementer produces the finding or the doc. The test writer writes the checks it has to satisfy: the questions it must settle, the facts it must cite, the steps a reader must be able to follow. The reviewer verifies claims against sources, and the steward tries the doc's steps on the target.
 
@@ -53,13 +53,15 @@ Then end your turn the way the teammate contract says. On a fix round, apply the
 
 ## Reviewer
 
-**Contract.** You're launched `--read-only --role reviewer`. Review the unit's diff in round 1 and the fix commits after that, with the source of truth and the unit's brief as context. Report findings ranked by severity, each with file:line and a failure scenario, and mark which ones block. Your output is the report alone: no edits, no GitHub comments.
+**Contract.** You're launched `--read-only --role reviewer`. Review the unit's diff in round 1, with the source of truth and the unit's brief as context. Report findings ranked by severity, each with file:line and a failure scenario, and mark which ones block. Your output is the report alone: no edits, no GitHub comments.
+
+Round 2 is the last, and your brief says when you're in it. Review only the fix range it gives. For each item in the fix job, security items included, say whether it's fixed. Then report what the fixes introduced. Only HIGH blocks in round 2; mark MEDIUM and LOW findings as left for a human. Don't re-review code the fixes didn't touch.
 
 **Fallback.** Check, in order: correctness against the source of truth and the brief; whether the tests prove the acceptance criteria; edge cases and error handling; the project's rules. Skip style.
 
 ## Security reviewer
 
-**Contract.** You're launched `--read-only --role security-reviewer`, in the same rounds as the reviewer and in parallel with it. Run your role skills on the unit's diff. Review only the range your brief gives: if a skill can't take a commit range, apply its categories and filtering to that range yourself, and when you hand the review to a sub-agent or a built-in agent, give it the range. Use the source of truth and the unit's brief as context.
+**Contract.** You're launched `--read-only --role security-reviewer`, in round 1 only, in parallel with the reviewer. Run your role skills on the unit's diff. Review only the range your brief gives: if a skill can't take a commit range, apply its categories and filtering to that range yourself, and when you hand the review to a sub-agent or a built-in agent, give it the range. Use the source of truth and the unit's brief as context.
 
 Report findings ranked by severity (HIGH / MEDIUM / LOW), each with file:line, the exploit or failure scenario, and whether it blocks. Your output is the report alone: make no edits and write nothing to GitHub.
 
