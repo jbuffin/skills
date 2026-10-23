@@ -28,7 +28,7 @@ Map the triager's four categories like this, and nowhere else:
 
 An `unclear` card lists its options in `reason`, with the recommended one marked, and the proposal is that recommended option's diff or reply. Approve takes it, Edit writes the engineer's own choice, Reject means no action. Edit keeps the proposal's kind, so to switch an unclear card to its other option, the engineer rejects it and re-runs. There's no separate options field.
 
-Fixes that overlap on the same lines become one `diff` card. Its `reason` names the other triage items it covers. Each covered item still gets its own card, with a `reply` proposal that points at the merged card. The coordinator posts that reply only if the merged card is approved or edited, as the fixed-reply template, so it never quotes a card id.
+Fixes that overlap on the same lines become one `diff` card. Its `reason` names the other triage items it covers. Each covered item still gets its own card, with a `reply` proposal that points at the merged card. The coordinator posts that reply only if the covered card's own decision and the merged card's are both approved or edited, as the fixed-reply template, unless the engineer edited it, so it never quotes a card id.
 
 A `diff` that touches agent config (`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.mcp.json`, anything under `.claude/`, hooks, `.github/workflows/`) starts its `reason` with `agent-config:` and the path, as a courtesy: the coordinator decides from the diff's paths, not from the prefix.
 

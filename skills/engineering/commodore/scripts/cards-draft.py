@@ -7,18 +7,18 @@ The report must hold exactly one fenced `json` block (the info string is case-in
 column 0): the cards array (references/finding-cards.md). Other fences are ignored. The report is untrusted data:
 this script only parses the block as strict JSON (a duplicate key is an error) and never evaluates anything. items.md
 is the coordinator's triage item list; each item's line starts with its ID (`t1`, `r1`, `c1`, `ci1`), optionally
-behind a list marker, a number or a table `|`, and holds exactly one https URL, the item's link (an `r` or `c` line
-may hold none). The cards must be
-objects whose string ids are unique and equal the items' ids in items.md's order. A `t` card's first `evidence` entry
-is the item's link. A `rerun` proposal is allowed only on a `ci` card, with the item's link as its content. The
+behind a list marker, a number or a table `|`, and holds exactly one https URL, the item's link (an `r`, `c` or `ci`
+line may hold none, and then a `rerun` card for that item is refused). The cards must be objects whose string ids are
+unique and equal the items' ids in items.md's order. A `t` card's first `evidence` entry is the item's link. A `rerun`
+proposal is allowed only on a `ci` card, with the item's link as its content. The
 finished draft must pass admiral-inbox-item.schema.json. The draft is `version` 1, `kind` `findings`, `id`, `created`
 now, `title` and `findings.{pr_url, cards}`.
 
 Exit 0 with the draft written. Exit 1 with nothing written when the triager's report is wrong (no block, more than one,
 not UTF-8, not an array, nested too deep, a lone surrogate, a bad card, or a card the rules above or the schema
 refuse): send the triager back. Exit 2 with nothing written when the coordinator or the environment is wrong (an
-unreadable file or items.md, an items.md with no ids, a repeated id or a line without exactly one URL, a bad id,
-pr-url or title argument, a write error): never send the triager back. Exit 5 on usage.
+unreadable file or items.md, an items.md with no ids, a repeated id, a line with two URLs or a `t` line without one,
+a bad id, pr-url or title argument, a write error): never send the triager back. Exit 5 on usage.
 """
 
 import json
@@ -71,9 +71,9 @@ def cards(report):
 
 
 def items(text):
-    """item id -> its link (None for an r or c item without one), in items.md's order.
+    """item id -> its link (None for an r, c or ci item without one), in items.md's order.
 
-    items.md is the coordinator's file: a repeated id, a line with more than one URL, or a t or ci line with no URL is
+    items.md is the coordinator's file: a repeated id, a line with more than one URL, or a t line with no URL is
     its mistake, not the triager's.
     """
     found = {}
@@ -81,7 +81,7 @@ def items(text):
         links = [link.rstrip(".,;:!?") for link in LINK_RE.findall(rest)]
         if item_id in found:
             raise CannotRun(f"items.md lists {item_id} twice")
-        if len(links) > 1 or (not links and not re.fullmatch(r"[rc][0-9]+", item_id)):
+        if len(links) > 1 or (not links and not re.fullmatch(r"[rc][0-9]+|ci[0-9]+", item_id)):
             raise CannotRun(f"items.md line for {item_id} must hold exactly one URL, found {len(links)}")
         found[item_id] = links[0] if links else None
     if not found:
@@ -107,7 +107,7 @@ def match(found, wanted):
         link = wanted[card["id"]]
         proposal = card.get("proposal")
         kind = proposal.get("kind") if isinstance(proposal, dict) else None
-        if kind == "rerun" and not (card["id"].startswith("ci") and proposal.get("content") == link):
+        if kind == "rerun" and not (card["id"].startswith("ci") and link and proposal.get("content") == link):
             raise Refused(f"card {card['id']}: a rerun is only for a ci item, with that item's link as its content")
         evidence = card.get("evidence")
         if card["id"].startswith("t") and not (isinstance(evidence, list) and evidence[:1] == [link]):
@@ -121,7 +121,7 @@ def write(draft, out):
             f.write(json.dumps(draft, ensure_ascii=False) + "\n")
         done = subprocess.run([sys.executable, "-I", CHECK, SCHEMA, tmp], capture_output=True, text=True, check=False)
         if done.returncode == 1:
-            errors = done.stderr.strip().splitlines()
+            errors = done.stderr.strip().split("\n")
             if any(not e.startswith("/findings/cards") for e in errors):  # the coordinator's fields, not a card
                 raise CannotRun(f"the draft fails the item schema:\n{done.stderr.strip()}")
             raise Refused(f"the draft fails the item schema:\n{done.stderr.strip()}")
