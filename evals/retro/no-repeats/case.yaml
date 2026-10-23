@@ -1,0 +1,64 @@
+schema_version: "1.0"
+name: no-repeats
+description: "Four autopilot review runs with no repeated stop and no repeated edit: the retro says no changes are proposed and opens no PR."
+tags: [retro]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: >-
+    /jasonbuffin:retro github-2/prs-needs-review --dry-run
+    --outcomes fixture/outcomes.jsonl --teams-dir fixture/teams
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+runs: 3
+graders:
+  - name: says-no-changes-in-retro-md
+    type: regex
+    target: files
+    pattern: '^No changes proposed\.$'
+    flags: m
+    match: contains
+  - name: says-no-changes-to-the-engineer
+    type: regex
+    target: last_message
+    pattern: 'no changes proposed'
+    flags: i
+    match: contains
+  - name: no-finding-sections
+    type: regex
+    target: files
+    pattern: 'Proposed change:'
+    match: not_contains
+  - name: retro-md-was-written
+    type: file_exists
+    path: '**/retro.md'
+  - name: never-edits-a-config-json-with-write
+    type: tool_used
+    tool: Write
+    input_match: 'config\.json'
+    max: 0
+  - name: never-edits-a-config-json-with-edit
+    type: tool_used
+    tool: Edit
+    input_match: 'config\.json'
+    max: 0
+  - name: never-writes-a-config-json-from-bash
+    type: tool_used
+    tool: Bash
+    input_match: '(>|tee|sed -i|cp|mv|rm)[^|;&]*config\.json'
+    max: 0
+  - name: no-config-json-appears
+    type: file_exists
+    path: '**/config.json'
+    exists: false
+  - name: never-pushes
+    type: tool_used
+    tool: Bash
+    input_match: 'git push'
+    max: 0
+  - name: never-opens-a-pr
+    type: tool_used
+    tool: Bash
+    input_match: 'gh pr create'
+    max: 0

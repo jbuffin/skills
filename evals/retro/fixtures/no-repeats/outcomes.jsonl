@@ -1,0 +1,37 @@
+{"v":1,"ts":"2026-09-13T08:00:00Z","ship":"kilo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"retro"},"source":"github-2","panel":"prs-needs-review","order_id":"2","order_url":"https://github.com/example/fixture/pull/2","title":"Fixture order 2","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-13T08:30:00Z","ship":"kilo","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"retro done","retro":{"panel":"github-2/prs-needs-review","since":"2026-09-08T00:00:00Z","until":"2026-09-14T00:00:00Z","pr":null}}}
+{"v":1,"ts":"2026-09-14T10:00:00Z","ship":"echo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"issues-ready","order_id":"401","order_url":"https://github.com/example/fixture/pull/401","title":"Fixture order 401","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-14T10:05:00Z","ship":"echo","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-14T10:08:00Z","ship":"echo","event":"underway","waited_s":40}
+{"v":1,"ts":"2026-09-14T10:10:00Z","ship":"echo","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"triaged"}}
+{"v":1,"ts":"2026-09-15T09:00:00Z","ship":"alpha","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"301","order_url":"https://github.com/example/fixture/pull/301","title":"Fixture order 301","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-15T09:05:00Z","ship":"alpha","event":"needs_you","reason":"stop"}
+{"v":1,"ts":"2026-09-15T09:06:00Z","ship":"alpha","event":"underway","waited_s":20}
+{"v":1,"ts":"2026-09-15T09:10:00Z","ship":"alpha","event":"needs_you","reason":"question"}
+{"v":1,"ts":"2026-09-15T09:12:00Z","ship":"alpha","event":"underway","waited_s":40}
+{"v":1,"ts":"2026-09-15T09:13:00Z","ship":"alpha","event":"answered","item":"q-301","kind":"question"}
+{"v":1,"ts":"2026-09-15T09:20:00Z","ship":"alpha","event":"review_submitted","item":"rev-301","kind":"review","review_event":"APPROVE","edited":false}
+{"v":1,"ts":"2026-09-15T09:25:00Z","ship":"alpha","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"review submitted","assumptions":["default: used main"]}}
+{"v":1,"ts":"2026-09-15T10:00:00Z","ship":"","event":"skipped","source":"github-2","panel":"prs-needs-review","order_id":"350","title":"Fixture order 350","reason":"at cap"}
+{"v":1,"ts":"2026-09-15T11:00:00Z","ship":"bravo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"302","order_url":"https://github.com/example/fixture/pull/302","title":"Fixture order 302","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-15T11:05:00Z","ship":"bravo","event":"needs_you","reason":"idle"}
+{"v":1,"ts":"2026-09-15T11:08:00Z","ship":"bravo","event":"underway","waited_s":100}
+{"v":1,"ts":"2026-09-15T11:10:00Z","ship":"bravo","event":"guard_denied","rule":"Bash(rm:*)","tool":"Bash"}
+{"v":1,"ts":"2026-09-15T11:15:00Z","ship":"bravo","event":"review_discarded","item":"rev-302","kind":"review","unreachable":true}
+{"v":1,"ts":"2026-09-15T11:20:00Z","ship":"bravo","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"pull request is gone","assumptions":["asked: continue without the PR?","default: close out"]}}
+{"v":1,"ts":"2026-09-15T15:00:00Z","ship":"foxtrot","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"303","order_url":"https://github.com/example/fixture/pull/303","title":"Fixture order 303","dir":"/work/fixture","autopilot":false}
+{"v":1,"ts":"2026-09-15T15:05:00Z","ship":"foxtrot","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-15T15:06:00Z","ship":"foxtrot","event":"underway","waited_s":500}
+{"v":1,"ts":"2026-09-15T15:30:00Z","ship":"foxtrot","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"hand run"}}
+{"v":1,"ts":"2026-09-16T09:00:00Z","ship":"echo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"304","order_url":"https://github.com/example/fixture/pull/304","title":"Fixture order 304","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-16T09:05:00Z","ship":"echo","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-16T09:06:00Z","ship":"echo","event":"underway","waited_s":60}
+{"v":1,"ts":"2026-09-16T09:10:00Z","ship":"echo","event":"needs_you","reason":"idle"}
+{"v":1,"ts":"2026-09-16T09:11:00Z","ship":"echo","event":"underway","waited_s":10}
+{"v":1,"ts":"2026-09-16T09:20:00Z","ship":"echo","event":"review_submitted","item":"rev-304","kind":"review","review_event":"COMMENT","edited":true}
+{"v":1,"ts":"2026-09-16T09:25:00Z","ship":"echo","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":null}
+{"v":1,"ts":"2026-09-16T13:00:00Z","ship":"delta","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"305","order_url":"https://github.com/example/fixture/pull/305","title":"Fixture order 305","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-16T13:05:00Z","ship":"delta","event":"needs_you","reason":"unknown"}
+{"v":1,"ts":"2026-09-16T13:10:00Z","ship":"delta","event":"card_approved","item":"f-305","kind":"findings","card":"c1"}
+{"v":1,"ts":"2026-09-16T13:11:00Z","ship":"delta","event":"card_rejected","item":"f-305","kind":"findings","card":"c2"}
+{"v":1,"ts":"2026-09-16T13:12:00Z","ship":"delta","event":"review_discarded","item":"rev-305","kind":"review"}
