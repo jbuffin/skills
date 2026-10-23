@@ -11,9 +11,14 @@ usage() { sed -n 2,9p $0 >&2; exit 5; }
 refuse() { print -ru2 -r -- "pr-ready.sh: $1"; exit 5; }
 [[ -z $1 || -z $2 || $# -gt 2 || ! -f $1/team.env || ! -f $1/state.md ]] && usage
 command -v jq >/dev/null || refuse "needs jq on PATH"
-# Admiral's variables count only from the real environment: team.env can't stand in for them.
-AUTOPILOT=${ADMIRAL_AUTOPILOT-}; AUTO_MERGE=${ADMIRAL_AUTO_MERGE-}
-RUN=${1:A}; U=$2; source $RUN/team.env; REPO=${REPO:-$WORKTREE}
+# Admiral's variables count only from the real environment: team.env can't stand in for them. Read the two keys
+# needed from team.env in a subshell, so nothing in it can change a variable this script decides with.
+AUTOPILOT=${ADMIRAL_AUTOPILOT-}; AUTO_MERGE=${ADMIRAL_AUTO_MERGE-}; OUT=
+RUN=${1:A}; U=$2
+TE=$(source $RUN/team.env >/dev/null && print -r -- ${REPO:-$WORKTREE} && print -r -- $BASE_BRANCH) \
+  || refuse "can't read REPO and BASE_BRANCH from team.env"
+REPO=${${(@f)TE}[1]}; BASE_BRANCH=${${(@f)TE}[2]}
+[[ -n $REPO ]] || refuse "team.env sets neither REPO nor WORKTREE"
 [[ $U =~ '^[A-Za-z0-9._-]+$' ]] || refuse "invalid unit name '$U'"
 [[ $AUTOPILOT == 1 ]] || refuse "ADMIRAL_AUTOPILOT=1 isn't set; only Admiral's guard makes autopilot's gh writes safe"
 awk '/^## /{s=($0 ~ /^## Mode, phase, current unit/)} s && /^autopilot: on[ \t]*$/{f=1} END{exit !f}' $RUN/state.md \
@@ -43,7 +48,7 @@ rows() {
     END { if (!s || !h || bad) exit 7 }' $RUN/state.md
 }
 ROW=$(rows "## Units" unit,branch,PR); RC=$?
-(( RC == 7 )) && refuse "state.md's units table lacks a needed column (unit, branch, PR)"
+(( RC )) && refuse "state.md's units table is missing, lacks a needed column (unit, branch, PR) or can't be read"
 [[ -n $ROW ]] || refuse "no row for unit '$U' in state.md"
 ROW=${ROW#*$'\t'}; BR=${ROW%%$'\t'*}; PR=${ROW#*$'\t'}
 [[ $PR =~ '^https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/[0-9]+$' ]] \
@@ -53,7 +58,7 @@ case $AUTO_MERGE in ''|squash|merge|rebase) ;; *) refuse "ADMIRAL_AUTO_MERGE mus
 notclean() { print -r -- "not clean: $PR: $1"; exit 1; }
 # A human row stays whatever its severity: mission-build puts findings left at the round cap there.
 FIND=$(rows "## Non-blocking findings" unit,status); RC=$?
-(( RC == 7 )) && refuse "state.md's findings table lacks a needed column (unit, status)"
+(( RC )) && refuse "state.md's findings table is missing, lacks a needed column (unit, status) or can't be read"
 HUMAN=$(print -r -- $FIND | grep -c $'\thuman$')
 JSON=$(gh pr view $PR --json isDraft,state,baseRefName,headRefOid,statusCheckRollup) || notclean "gh pr view failed"
 J() { print -r -- "$JSON" | jq -r "$1"; }
