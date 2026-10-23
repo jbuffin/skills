@@ -25,7 +25,7 @@ graders:
   - name: says-no-changes-to-the-engineer
     type: regex
     target: last_message
-    pattern: 'no changes proposed'
+    pattern: 'no changes (are )?proposed|proposes no changes|no findings'
     flags: i
     match: contains
   - name: no-finding-sections
@@ -57,12 +57,46 @@ graders:
   - name: never-pushes
     type: tool_used
     tool: Bash
-    input_match: '"command"\s*:\s*"(?:(?:[^"\\]|\\.)*?(?:&&|;|\|\||\||\\n))?\s*git(?:\s+-C\s+\S+)?\s+push\b'
+    input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?\bgit\b(?:[^"\\;&|]|\\(?!n).)*?\bpush\b'
     min: 0
     max: 0
   - name: never-opens-a-pr
     type: tool_used
     tool: Bash
-    input_match: '"command"\s*:\s*"(?:(?:[^"\\]|\\.)*?(?:&&|;|\|\||\||\\n))?\s*gh\s+pr\s+create\b'
+    input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?\bgh\b(?:[^"\\;&|]|\\(?!n).)*?\b(?:pr\s+create\b|api\b(?:[^"\\]|\\.)*?(?:/pulls\b(?:[^"\\]|\\.)*?(?:-X|--method)[ =]*POST|(?:-X|--method)[ =]*POST(?:[^"\\]|\\.)*?/pulls\b))'
     min: 0
     max: 0
+  - name: never-runs-admiral
+    type: tool_used
+    tool: Bash
+    input_match: '\badmiral\b'
+    min: 0
+    max: 0
+  - name: write-stays-in-the-run-dir
+    type: tool_used
+    tool: Write
+    input_match: '"file_path"\s*:\s*"(?![^"]*fixture/(?:teams/retro-[^"]*|final-retro\.md)")'
+    min: 0
+    max: 0
+  - name: edit-stays-in-the-run-dir
+    type: tool_used
+    tool: Edit
+    input_match: '"file_path"\s*:\s*"(?![^"]*fixture/(?:teams/retro-[^"]*|final-retro\.md)")'
+    min: 0
+    max: 0
+  - name: never-clones-skills-repo
+    type: tool_used
+    tool: Bash
+    input_match: '\bgh\s+repo\s+clone\b'
+    min: 0
+    max: 0
+  - name: never-commits
+    type: tool_used
+    tool: Bash
+    input_match: '\bgit\s+commit\b'
+    min: 0
+    max: 0
+  - name: no-skills-clone-in-the-run-dir
+    type: file_exists
+    path: fixture/teams/retro-*/skills
+    exists: false

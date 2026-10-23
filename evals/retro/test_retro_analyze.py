@@ -672,6 +672,17 @@ class PeriodTest(RetroCase):
         r = self.analyse(log)
         self.assertEqual((r.analysis["since"], r.analysis["since_source"]), ("2026-09-06T00:00:00Z", "last_retro"))
 
+    def test_partial_retro_report_does_not_move_the_window(self):
+        log = Log()
+        log.launch("done", 1, ts="2026-09-02T10:00:00Z")
+        log.end("done", retro_report(until="2026-09-03T00:00:00Z"), ts="2026-09-02T10:10:00Z")
+        log.launch("half", 2, ts="2026-09-05T10:00:00Z")
+        partial = retro_report(until="2026-09-06T00:00:00Z")
+        partial["result"] = "partial"
+        log.end("half", partial, ts="2026-09-05T10:10:00Z")
+        r = self.analyse(log)
+        self.assertEqual((r.analysis["since"], r.analysis["since_source"]), ("2026-09-03T00:00:00Z", "last_retro"))
+
     def test_no_retro_means_all_records(self):
         log = Log()
         log.run("ancient", 1, ["stop"])

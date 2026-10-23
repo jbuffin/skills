@@ -159,12 +159,14 @@ def group_runs(records):
 
 
 def last_retro_until(runs, panel):
-    """The `until` of the newest ended retro report for this panel, or None."""
+    """The `until` of the newest ended, non-partial retro report for this panel, or None."""
     best, best_key = None, None
     for run in runs:
         report = run.report
         retro = report.get("retro") if report else None
         if not isinstance(retro, dict) or retro.get("panel") != panel:
+            continue
+        if report.get("result") == "partial":
             continue
         until = retro.get("until")
         if parse_ts(until) is None:
@@ -276,7 +278,7 @@ def is_permission(reason):
     return reason == "permission" or reason.startswith("permission:")
 
 
-def analyse(args, records, skipped_lines, teams_dir):  # noqa: PLR0912, PLR0915
+def analyse(args, records, skipped_lines, teams_dir):  # noqa: PLR0912, PLR0915 -- one pass over the runs; splitting it would scatter the shared tallies
     panel = args.panel
     source, _, panel_name = panel.partition("/")
     all_runs, shipless = group_runs(records)
@@ -450,7 +452,7 @@ def clean(value):
 def code(value, table=False):
     text = clean(value) or "(none)"
     if table:
-        text = text.replace("\\", "\\\\").replace("|", "\\|")
+        text = text.replace("|", "\\|")
     return f"`{text}`"
 
 

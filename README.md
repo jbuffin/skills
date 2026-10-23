@@ -79,6 +79,9 @@ and approve every reply before you leave, and the fixes and replies land on the 
 - **Install all four together.** `commodore` runs scripts from the other three by sibling path, so
   `npx skills add jbuffin/skills --skill commodore` alone leaves it broken. The plugin route always
   installs all four.
+- **`retro` uses `commodore`'s scripts when both are installed.** It publishes its report and inbox items through
+  `commodore/scripts/admiral-io.sh` by sibling path. Installed alone, it falls back to `cp` for the report and
+  writes its questions to `notes.md` instead of the inbox.
 - **macOS with zsh.** The scripts are zsh, and secrets live in the macOS Keychain (`security`).
 - **Claude Code with background sessions, Codex, or Copilot CLI.** These are the supported harnesses. The
   harness is detected from where the run starts. On Claude Code, teammates run as `claude --bg`
