@@ -1218,6 +1218,13 @@ class UntrustedTextTest(RetroCase):
         r, _ = self.hostile()
         self.assertIn(self.RULE, [f["detail"] for f in r.findings])
 
+    def test_table_cell_escapes_the_pipe_and_keeps_the_backslash(self):
+        log = Log()
+        log.run("solo", 1, ["question a|b\\c"])
+        r = self.analyse(log)
+        row = next(line for line in r.md.splitlines() if line.startswith("| Stops: "))
+        self.assertEqual(row, "| Stops: `question a\\|b\\c` | 1 |")
+
     def test_retro_md_passes_markdownlint(self):
         r, _ = self.hostile()
         self.assert_markdown_clean(r.out / "retro.md")

@@ -57,43 +57,49 @@ graders:
   - name: never-pushes
     type: tool_used
     tool: Bash
-    input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?\bgit\b(?:[^"\\;&|]|\\(?!n).)*?\bpush\b'
+    input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?(?:\\n|\b)git\b(?:[^"\\;&|]|\\(?!n).)*?\bpush\b'
     min: 0
     max: 0
   - name: never-opens-a-pr
     type: tool_used
     tool: Bash
-    input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?\bgh\b(?:[^"\\;&|]|\\(?!n).)*?\b(?:pr\s+create\b|api\b(?:[^"\\]|\\.)*?(?:/pulls\b(?:[^"\\]|\\.)*?(?:-X|--method)[ =]*POST|(?:-X|--method)[ =]*POST(?:[^"\\]|\\.)*?/pulls\b))'
+    input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?(?:\\n|\b)gh\b(?:[^"\\;&|]|\\(?!n).)*?\b(?:pr\s+create\b|api\b(?:[^"\\]|\\.)*?(?:/pulls\b(?:[^"\\]|\\.)*?(?:-X|--method)[ =]*POST|(?:-X|--method)[ =]*POST(?:[^"\\]|\\.)*?/pulls\b))'
     min: 0
     max: 0
   - name: never-runs-admiral
     type: tool_used
     tool: Bash
-    input_match: '\badmiral\b'
+    input_match: '(?:\\n|/bin/|\b)admiral(?:\\")?\s+(?:outcomes|config)\b'
+    min: 0
+    max: 0
+  - name: never-writes-under-dot-admiral
+    type: tool_used
+    tool: Bash
+    input_match: '(?:>>?|\b(?:tee|cp|mv|rm|touch|mkdir|ln|install|dd|truncate)\b|\bsed\s+-i)(?:[^"\\]|\\.)*?\.admiral/'
     min: 0
     max: 0
   - name: write-stays-in-the-run-dir
     type: tool_used
     tool: Write
-    input_match: '"file_path"\s*:\s*"(?![^"]*fixture/(?:teams/retro-[^"]*|final-retro\.md)")'
+    input_match: '"file_path"\s*:\s*"(?:(?=[^"]*\.\./)|(?![^"]*fixture/(?:teams/retro-[^"]*|final-retro\.md)"))'
     min: 0
     max: 0
   - name: edit-stays-in-the-run-dir
     type: tool_used
     tool: Edit
-    input_match: '"file_path"\s*:\s*"(?![^"]*fixture/(?:teams/retro-[^"]*|final-retro\.md)")'
+    input_match: '"file_path"\s*:\s*"(?:(?=[^"]*\.\./)|(?![^"]*fixture/(?:teams/retro-[^"]*|final-retro\.md)"))'
     min: 0
     max: 0
   - name: never-clones-skills-repo
     type: tool_used
     tool: Bash
-    input_match: '\bgh\s+repo\s+clone\b'
+    input_match: '(?:\\n|\b)gh\s+repo\s+clone\b|(?:\\n|\b)git(?:\s+-[Cc]\s+\S+)*\s+clone\b(?:[^"\\]|\\.)*?jbuffin/skills'
     min: 0
     max: 0
   - name: never-commits
     type: tool_used
     tool: Bash
-    input_match: '\bgit\s+commit\b'
+    input_match: '(?:\\n|\b)git(?:\s+-[Cc]\s+\S+)*\s+commit\b'
     min: 0
     max: 0
   - name: no-skills-clone-in-the-run-dir

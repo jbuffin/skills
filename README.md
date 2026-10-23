@@ -67,7 +67,7 @@ npx skills add ./incubator/<name>
 
 ### Engineering team skills
 
-`skills/engineering/` holds four skills that work together: `commodore` (the orchestrator),
+`skills/engineering/` holds four skills that work together (`retro` is a fifth that borrows from `commodore`, see below): `commodore` (the orchestrator),
 `agent-teammates`, `run-preflight` and `target-evaluation`.
 
 `commodore` starts every run by working out its mission from what you point it at, and confirms it
