@@ -1,9 +1,0 @@
-#!/bin/sh
-# Fake `cmux` for tests/run.sh (team.env points CMUX at it): logs argv to $FAKE_LOG; `new-split` prints a surface ref.
-{
-  printf 'cmux'
-  for a in "$@"; do printf ' [%s]' "$a"; done
-  printf '\n'
-} >> "${FAKE_LOG:?}"
-if [ "$1" = new-split ]; then echo 'OK surface:5 workspace:2'; fi
-exit 0
