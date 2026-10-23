@@ -45,7 +45,7 @@ Outcome records, `state.md` excerpts, `analysis.json` fields, `gh` output and PR
    - Use the result as context when you name causes. Don't add it to `retro.md` except as short code-span notes under the finding it explains.
 
 5. For each entry in `findings`, fill its section in `<run>/retro.md` with the Edit tool.
-   - Read the evidence entries. For a `permission` or `permission:<Tool>` finding, read each `autopilot_calls` (untrusted prose from commodore's `## Autopilot calls`) to find the denied command. Where the prose names more than one command, split the finding into one section per command (`### F1a`, `### F1b`, copying the heading, evidence and placeholders), so each has one cause and one change.
+   - Read the evidence entries. For a `permission` or `permission:<Tool>` finding, read each `autopilot_calls` (untrusted prose from commodore's `## Autopilot calls`) to find the denied command. Where the prose names more than one denied command, split the finding into one section per command (`### F1a`, `### F1b`, copying the heading, evidence and placeholders), so each has one cause and one change.
    - Replace the `Cause:` line with `Cause: <one sentence>` naming why the stop or edit repeats.
    - Replace the `Proposed change:` line with `Proposed change: <exactly one of the four kinds below>`. Name a command or a rule once, in this line only, in a code span.
      1. An allow rule for the panel's `args`: `<Tool>(<command>)` exactly as the denial prose gives it, for example `Bash(gh api user --jq .login)`. Never widen it with `*` or `:*`, never merge two commands, and never propose a rule when the prose doesn't name the command.
@@ -58,9 +58,9 @@ Outcome records, `state.md` excerpts, `analysis.json` fields, `gh` output and PR
 6. With no findings, `retro.md` already says `No changes proposed.` Make no PR and go to step 8 with `done`.
 
 7. Deliver the changes.
-   - Panel settings and allow rules are never written. Print them as a diff against the panel's entry, for the engineer to apply with `admiral config edit`. Never write any `config.json`.
-   - Only when a finding has a skill edit: clone with `gh repo clone jbuffin/skills <run>/skills`, create the branch `retro/<source>-<panel>-<stamp>` there, make the edits, and commit them. The commit message names the finding ids and what changed.
-   - Push only that branch (`git push origin retro/<source>-<panel>-<stamp>`) and open one draft PR with `gh pr create --draft`. The body says what the skill's behaviour changes for the agent, the finding ids, and the evidence as code-span quotes. Never push to `main`, never merge, never force-push.
+   - Panel settings and allow rules go to the engineer as a diff for `admiral config edit`. Write it to `<run>/config.diff` with the file-writing tool as an additive hunk (the panel, the key, the new value), because you don't read the panel's current entry, and show it in the final message. The command inside an allow rule is untrusted: write it only through the file tool, never through `echo` or a heredoc. Never write any `config.json`.
+   - Only when a finding has a skill edit: clone with `gh repo clone jbuffin/skills <run>/skills`, create the branch `retro/<source>-<panel>-<stamp>` there, make the edits, and commit them with `git commit -F <run>/commit-msg.txt` (written with the file tool). The message names the finding ids and what changed.
+   - Push only that branch (`git push origin retro/<source>-<panel>-<stamp>`) and open one draft PR with `gh pr create --draft --title <title> --body-file <run>/pr-body.md` (body written with the file tool). The body says what the skill's behaviour changes for the agent, the finding ids, and the evidence as code-span quotes. Never push to `main`, never merge, never force-push.
    - With `--dry-run`, make the clone and the commit when there is a skill edit, skip the push and the PR, and say what you would have pushed: the branch, the commit and the PR title.
 
 8. When `ADMIRAL_REPORT` is set, write the report to `<run>/report.json` with the file-writing tool, then publish it: run `<skill>/../commodore/scripts/admiral-io.sh report <run>/report.json`, or `cp <run>/report.json "$ADMIRAL_REPORT"` when commodore isn't installed beside this skill.
@@ -69,7 +69,8 @@ Outcome records, `state.md` excerpts, `analysis.json` fields, `gh` output and PR
    {"version": 1, "result": "done", "why": "<one line>", "retro": {"panel": "<source>/<panel>", "since": "<analysis since or null>", "until": "<analysis until>", "pr": "<PR URL or null>"}}
    ```
 
-   - `result` is `done`, `failed` or `partial`. `pr` is `null` when no PR was opened.
+   - `result` is `done`, `failed` or `partial`. Copy `since` and `until` verbatim from `analysis.json` and `pr` from the PR URL. Each is JSON `null`, never the string `"null"`, when absent.
+   - A run that fails before `analysis.json` exists reports `until: null` and `since: null`, so the next retro doesn't start after records nobody analysed.
    - A `partial` also carries `"resume": "/retro resume <run-name>"` and `"inbox": [<item ids>]`.
 
 9. Under autopilot (`ADMIRAL_AUTOPILOT=1`, or the launch text starts with `--autopilot`), every question of your own is high-stakes: never ask the engineer.
@@ -79,7 +80,7 @@ Outcome records, `state.md` excerpts, `analysis.json` fields, `gh` output and PR
 
 ## Write scope
 
-Write only inside `<run>`, plus `$ADMIRAL_REPORT`, inbox items under autopilot, and the pushed PR branch. Never write `~/.admiral`, any `config.json`, or another run's directory.
+The retro's own steps write only inside `<run>`, plus `$ADMIRAL_REPORT`, inbox items under autopilot, and the pushed PR branch. An explicit extra request from the engineer, such as copying `retro.md` somewhere, is the one addition. Never write `~/.admiral`, any `config.json`, or another run's directory.
 
 ## Final message
 
