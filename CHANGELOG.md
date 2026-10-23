@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 2.3.0
+
+### Minor Changes
+
+- [#134](https://github.com/jbuffin/skills/pull/134) [`6b5ec40`](https://github.com/jbuffin/skills/commit/6b5ec40256059b86d6343900a986e03bd244de39) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore's `state.md` gets a fixed format: `key: value` lines under the mode heading, and tables for units, the acceptance trace and non-blocking findings, each row keyed by its first column. The new `state-set.sh` edits one field per call and prints nothing, and refuses an unknown row or column or a status outside the table's set. The coordinator now changes those parts only through it, and edits the prose sections with its file-editing tool, never `python3` heredocs or `sed -i`, which took hundreds of calls in a 13-unit run. A `state.md` from before this change isn't migrated: `state-set.sh` refuses its old sections.
+
 ## 2.2.0
 
 ### Minor Changes
