@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Break down where a commodore coordinator's context goes, from its Claude Code session transcripts.
 
-usage: coordinator-tokens.py [--days N] [--min-calls N] [--raw] [--sessions] [--simulate-handoff] [--json]
-                             [transcript.jsonl | projects-dir ...]
+usage: coordinator-tokens.py [--days N] [--min-calls N] [--units N] [--raw] [--sessions] [--simulate-handoff]
+                             [--json] [transcript.jsonl | projects-dir ...]
 
 With no paths it scans ~/.claude*/projects/*/ for sessions that invoked commodore (or the older agent-team skills)
 as a slash command in the last --days days. A path may be a transcript or a projects directory.
@@ -11,6 +11,10 @@ For each API call the context is input + cache read + cache write. The growth si
 across what was added in between (tool results, tool inputs, attachments, assistant text) in proportion to their
 characters. An item's carry is its tokens times the calls that re-read it before the context next shrinks
 (a compaction). Summed, carry matches the sessions' cache reads, so it shows which sources drive cost.
+
+Calls per unit divides the API calls by the run's units. --units N sets the count; otherwise each session's run
+directory is the one whose state.md its tool calls name most, and its units are the rows of the Units table (or the
+`- uN →` bullets of the older format). Sessions of the same run count its units once.
 
 --simulate-handoff replays each session as if the coordinator restarted fresh whenever its context passed a
 threshold, resetting to the session's first-call context plus RESUME_TOKENS for re-reading state and references.
@@ -30,10 +34,12 @@ COORD = re.compile(r"command-name>/[^<]*\b(commodore|agent-team[\w-]*)</command-
 NOT_COORD = re.compile(r"setup-commodore|commodore-launcher")
 SCRIPTS = re.compile(
     r"(verify-report|watch-teammates|watch-ci|teammate-tail|team-preflight|advisor-probe|launch-teammate|"
-    r"close-teammate|retasked|retask|team-init|role-skills|push-branch|unit-worktree|evidence|team-env)\.(sh|zsh)"
+    r"close-teammate|retasked|retask|team-init|role-skills|push-branch|unit-worktree|evidence|team-env|state-set|"
+    r"review-round|admiral-io)\.(sh|zsh)"
 )
 COMPACTION_DROP = 2000
 RESUME_TOKENS = 35_000
+STATE_PATH = re.compile(r"[~\w/.$-]*/teams/[\w.-]+/state\.md")
 HANDOFF_THRESHOLDS = (150_000, 200_000, 300_000)
 MIN_TRANSCRIPT_BYTES = 200_000
 MIN_SHARE_SHOWN = 0.002
@@ -50,8 +56,9 @@ GROUPS = [
     (r"teammate-tail|bash:claude", "teammate-tail / claude logs"),
     (r"team-preflight|advisor-probe", "team-preflight / advisor probe"),
     (r"launch-teammate|close-teammate|retask", "launch / retask / close"),
-    (r"team-init|role-skills|team-env|unit-worktree|push-branch", "other commodore scripts"),
-    (r"state\.md|read-state", "state.md"),
+    (r"review-round", "review-round.sh"),
+    (r"team-init|role-skills|team-env|unit-worktree|push-branch|admiral-io", "other commodore scripts"),
+    (r"state\.md|read-state|state-set", "state.md"),
     (r"prompt/brief|profile/brief-common|read-brief", "briefs, job files, profile"),
     (r"read-diff", "diffs read by the coordinator"),
     (r"read:source|read-source", "source read by the coordinator"),
@@ -188,9 +195,39 @@ def assistant_items(msg, tool_cat):
     return items
 
 
+def section(text, heading):
+    m = re.search(r"^## " + heading + r"\b.*?$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return m.group(1) if m else ""
+
+
+def count_units(state):
+    """Count the units in a state.md: rows of the Units table (or `- uN →` bullets in the older format), plus any
+    uN that owns an acceptance-trace row, since older runs stopped adding bullets."""
+    try:
+        text = Path(state).read_text(errors="replace")
+    except OSError:
+        return None
+    rows = re.findall(r"^\|\s*([^|]*?)\s*\|", section(text, "Units"), re.M)
+    units = {r for r in rows if r and r != "unit" and not r.startswith("---")}
+    units |= set(re.findall(r"^- (u\d+) →", section(text, "Units"), re.M))
+    for cell in re.findall(r"^\|[^|]*\|([^|]*)\|", section(text, "Acceptance trace"), re.M):
+        units |= set(re.findall(r"\bu\d+\b", cell))
+    return len(units) or None
+
+
+def find_run(state_paths):
+    """Return the run directory whose state.md the session named most, if it still exists."""
+    for named, _ in state_paths.most_common():
+        path = os.path.expanduser(named.replace("$HOME", "~"))
+        if os.path.isfile(path):
+            return os.path.dirname(path)
+    return None
+
+
 def read_calls(path):
-    """Return the session's API calls in order as (context_tokens, items_added_before_it, usage)."""
+    """Return the session's model, API calls in order as (context_tokens, items_added_before_it, usage), and run."""
     tool_cat, pending, calls, seen = {}, [], [], set()
+    state_paths = collections.Counter()
     model = None
     with open(path, errors="replace") as f:
         for line in f:
@@ -214,11 +251,14 @@ def read_calls(path):
                     calls.append((ctx, pending, usage))
                     pending = []
                 pending += assistant_items(msg, tool_cat)
+                for b in msg.get("content") or []:
+                    if b.get("type") == "tool_use":
+                        state_paths.update(STATE_PATH.findall(json.dumps(b.get("input", {}))))
             elif kind == "user":
                 pending += user_items(e, tool_cat)
             elif kind == "attachment":
                 pending += attachment_items(e)
-    return model, calls
+    return model, calls, find_run(state_paths)
 
 
 def attribute(calls):
@@ -291,6 +331,8 @@ def report(sessions, args):
             added[k if args.raw else group(k)] += v
     calls = sum(s["calls"] for s in sessions)
     total = sum(carry.values())
+    runs = {s["run"]: s["units"] for s in sessions}
+    units = args.units or (sum(runs.values()) if None not in runs and None not in runs.values() else None)
     out = {
         "sessions": len(sessions),
         "calls": calls,
@@ -298,6 +340,8 @@ def report(sessions, args):
         "mean_context_per_call": round(total / calls) if calls else 0,
         "never_compacted": sum(1 for s in sessions if s["compactions"] == 0),
         "mean_initial_context": round(sum(s["added"].get("initial", 0) for s in sessions) / len(sessions)),
+        "units": units,
+        "calls_per_unit": round(calls / units, 1) if units else None,
         "breakdown": [
             {"source": k, "carry": round(v), "share": round(v / total, 4), "added": round(added[k])}
             for k, v in carry.most_common()
@@ -312,9 +356,8 @@ def report(sessions, args):
                 {"threshold": t, "saving": round(1 - sim_total / total, 4), "handoffs": sum(h for _, h in sims)}
             )
     if args.sessions:
-        out["per_session"] = [
-            {k: s[k] for k in ("path", "model", "calls", "peak", "compactions", "cache_read")} for s in sessions
-        ]
+        keys = ("path", "model", "calls", "peak", "compactions", "cache_read", "run", "units")
+        out["per_session"] = [{k: s[k] for k in keys} for s in sessions]
     return out
 
 
@@ -322,6 +365,10 @@ def print_text(out):
     print(
         f"{out['sessions']} coordinator sessions, {out['calls']} API calls, {out['cache_read'] / 1e6:.0f}M cache reads"
     )
+    if out["units"]:
+        print(f"{out['units']} units, {out['calls_per_unit']:.1f} calls per unit")
+    else:
+        print("units unknown: pass --units N for calls per unit")
     print(
         f"mean context per call {out['mean_context_per_call'] / 1e3:.0f}k, mean initial context "
         f"{out['mean_initial_context'] / 1e3:.0f}k, {out['never_compacted']} never compacted\n"
@@ -336,7 +383,9 @@ def print_text(out):
             f"handoff above {h['threshold'] // 1000}k: {h['saving']:.0%} fewer input tokens, {h['handoffs']} handoffs"
         )
     for s in out.get("per_session", []):
-        print(f"{s['calls']:5} calls  peak {s['peak'] / 1e3:4.0f}k  {s['compactions']} compactions  {s['path']}")
+        units = f"{s['units']} units" if s["units"] is not None else "? units"
+        peak = f"peak {s['peak'] / 1e3:4.0f}k"
+        print(f"{s['calls']:5} calls  {peak}  {s['compactions']} compactions  {units:>8}  {s['path']}")
 
 
 def main():
@@ -344,6 +393,7 @@ def main():
     ap.add_argument("paths", nargs="*", help="transcripts or projects directories (default: ~/.claude*/projects)")
     ap.add_argument("--days", type=int, default=30, help="only transcripts modified in the last N days")
     ap.add_argument("--min-calls", type=int, default=50, help="skip sessions with fewer API calls")
+    ap.add_argument("--units", type=int, help="units in the run(s), for calls per unit (default: from state.md)")
     ap.add_argument("--raw", action="store_true", help="show raw categories instead of groups")
     ap.add_argument("--sessions", action="store_true", help="list the sessions analysed")
     ap.add_argument("--simulate-handoff", action="store_true", help="estimate savings from fresh-coordinator handoff")
@@ -352,7 +402,7 @@ def main():
 
     sessions = []
     for path in find_transcripts(args.paths, args.days):
-        model, calls = read_calls(path)
+        model, calls, run = read_calls(path)
         if len(calls) < args.min_calls:
             continue
         added, carry, compactions = attribute(calls)
@@ -367,6 +417,8 @@ def main():
                 "added": added,
                 "carry": carry,
                 "series": calls,
+                "run": run and run.replace(str(Path.home()), "~"),
+                "units": run and count_units(os.path.join(run, "state.md")),
             }
         )
     if not sessions:
