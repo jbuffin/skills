@@ -254,13 +254,15 @@ class RetroCase(unittest.TestCase):
         if npx is None:
             self.skipTest("npx not found: cannot run markdownlint-cli2@0.23.2")
         proc = subprocess.run(
-            [npx, "-y", *MARKDOWNLINT, str(md_path)],
+            [npx, "-y", *MARKDOWNLINT, md_path.name],
             cwd=md_path.parent,
             capture_output=True,
             text=True,
             check=False,
             timeout=300,
         )
+        # a glob that matches nothing also exits 0, so check the file was actually linted
+        self.assertIn("Linting: 1 file", proc.stdout, proc.stdout + proc.stderr)
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
 

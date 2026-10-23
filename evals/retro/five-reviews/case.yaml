@@ -5,9 +5,10 @@ tags: [retro]
 context:
   scaffold_script: scaffold.sh
 execution:
-  prompt: >-
-    /jasonbuffin:retro github-2/prs-needs-review --dry-run
-    --outcomes fixture/outcomes.jsonl --teams-dir fixture/teams
+  prompt: |-
+    /jasonbuffin:retro github-2/prs-needs-review --dry-run --outcomes fixture/outcomes.jsonl --teams-dir fixture/teams
+
+    When the retro is done, copy the retro.md from its run directory to fixture/final-retro.md so I can review it.
   max_turns: 40
   timeout_seconds: 900
   allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
@@ -15,47 +16,54 @@ runs: 3
 graders:
   - name: summary-table
     type: regex
-    target: files
+    target:
+      source: file
+      path: fixture/final-retro.md
     pattern: '^\|[ :|-]*---'
     flags: m
     match: contains
   - name: one-proposed-allow-rule
     type: regex
-    target: files
+    target:
+      source: file
+      path: fixture/final-retro.md
     pattern: 'Proposed change:[\s\S]{0,300}Bash\(gh api user --jq \.login\)'
     match: count:1
   - name: rule-is-not-widened
     type: regex
-    target: files
+    target:
+      source: file
+      path: fixture/final-retro.md
     pattern: 'Bash\(gh api user[^)]*\*'
     match: not_contains
   - name: one-finding-section
     type: regex
-    target: files
+    target:
+      source: file
+      path: fixture/final-retro.md
     pattern: 'Proposed change:'
     match: count:1
   - name: edited-review-is-linked
     type: regex
-    target: files
+    target:
+      source: file
+      path: fixture/final-retro.md
     pattern: '\]\(https://github\.com/example/fixture/pull/102\)'
     match: contains
   - name: retro-md-was-written
     type: file_exists
     path: '**/retro.md'
-  - name: never-edits-a-config-json-with-write
+  - name: never-writes-a-config-json
     type: tool_used
     tool: Write
-    input_match: 'config\.json'
+    input_match: '"file_path"\s*:\s*"[^"]*config\.json"'
+    min: 0
     max: 0
-  - name: never-edits-a-config-json-with-edit
+  - name: never-edits-a-config-json
     type: tool_used
     tool: Edit
-    input_match: 'config\.json'
-    max: 0
-  - name: never-writes-a-config-json-from-bash
-    type: tool_used
-    tool: Bash
-    input_match: '(>|tee|sed -i|cp|mv|rm)[^|;&]*config\.json'
+    input_match: '"file_path"\s*:\s*"[^"]*config\.json"'
+    min: 0
     max: 0
   - name: no-config-json-appears
     type: file_exists
@@ -64,10 +72,12 @@ graders:
   - name: never-pushes
     type: tool_used
     tool: Bash
-    input_match: 'git push'
+    input_match: '"command"\s*:\s*"(?:(?:[^"\\]|\\.)*?(?:&&|;|\|\||\||\\n))?\s*git(?:\s+-C\s+\S+)?\s+push\b'
+    min: 0
     max: 0
   - name: never-opens-a-pr
     type: tool_used
     tool: Bash
-    input_match: 'gh pr create'
+    input_match: '"command"\s*:\s*"(?:(?:[^"\\]|\\.)*?(?:&&|;|\|\||\||\\n))?\s*gh\s+pr\s+create\b'
+    min: 0
     max: 0
