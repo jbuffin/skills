@@ -246,10 +246,12 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 
 **Marking ready.** In a build run, at Phase 3 step 4, run `<team>/pr-ready.sh <run> <unit>` for each unit that has a PR, even when the completion gate made the run `partial`. It reads the PR and makes no gh write.
 
-- Exit 0 (clean) prints lines that start with `run:`. Run each as its own bare tool call, in order, with the text after `run:` as the command. Stop that PR's lines at the first refusal or failure.
+- Exit 0 (clean) prints lines that start with `run:`. Run each as its own bare tool call, in order, with the text after `run:` as the command. Stop that PR's lines at the first refusal or failure. `ready: <pr>` means there's nothing to run.
 - Exit 1 (`not clean: <pr>: <reason>`) means the PR stays draft. Name each such PR and its reason in the Admiral report's `why`.
-- Exit 5 means a precondition failed (for example no full PR URL in the unit's `PR` cell). Report it in `why` and leave the PR draft.
-- A refusal from Admiral's guard, or any failure of `gh pr ready` or `gh pr merge --auto`, goes in `why` with the PR. Don't retry it, don't rephrase it, don't merge another way. An `auto_merge_unconfirmed` refusal of the merge leaves the PR ready but unmerged: the guard allows `--auto` only when `ADMIRAL_AUTO_MERGE` matches and the base branch requires an approving review.
+- Exit 5 means a precondition failed (for example no full PR URL in the unit's `PR` cell). Report it in `why`, or in the final report when there's no Admiral report, and leave the PR draft.
+- A refusal from Admiral's guard, or any failure of `gh pr ready` or `gh pr merge --auto`, goes in `why` with the PR. Don't retry it, don't rephrase it, don't merge another way. It isn't a call: write no question item and don't stop, report it and go on to the next PR. An `auto_merge_unconfirmed` refusal of the merge leaves the PR ready but unmerged: the guard allows `--auto` only when `ADMIRAL_AUTO_MERGE` matches and the base branch requires an approving review.
 - Never run `gh pr merge` without `--auto`. `--auto` merges at once when the PR already has its approval and green CI, which is the outcome auto-merge reaches anyway.
+
+Running the printed `run:` lines isn't a high-stakes call. The rules that make a GitHub write or a denial high-stakes don't send them to the inbox.
 
 This doesn't change "No unattended pushes": each push still needs its own `Push` approval.

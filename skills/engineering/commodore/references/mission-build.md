@@ -84,7 +84,7 @@ The run ends when the stop rule is observed on the target it names. Opening the 
    - Every claim in a PR body traces to a verified report.
    - Every unit's last verify-report verdict is `verified`, and CI is green, or each exception is named.
    - Every gap, carry-forward check and thing not checked is listed.
-   - Every gated action that wasn't approved (pushes, marking ready, merges) is still pending, not done. In autopilot mode, Admiral's guard allowing those commands is the approval.
+   - Every gated action that wasn't approved (pushes, marking ready, merges) is still pending, not done. In autopilot mode, Admiral's guard allowing `gh pr ready` and `gh pr merge --auto` is the approval for marking ready and merges; each push still needs its `Push` answer.
 
    If any check fails, the run is partial. Say exactly which checks failed.
 3. Close every teammate, stop the watchdog and the CI watchers, and leave the target in the agreed state. List every worktree from `worktrees.tsv` with its branch and whether it's clean. Remove them only when the engineer says so.
