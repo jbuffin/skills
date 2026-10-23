@@ -104,5 +104,5 @@ graders:
     max: 0
   - name: no-skills-clone-in-the-run-dir
     type: file_exists
-    path: fixture/teams/retro-*/skills
+    path: fixture/teams/retro-*/skills/**
     exists: false
