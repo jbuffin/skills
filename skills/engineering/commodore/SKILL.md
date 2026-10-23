@@ -81,9 +81,16 @@ In every mission, a re-task's job goes in a coordinator-owned file `<run>/prompt
 
 Everything for a run lives in one run directory outside the source tree, so it survives compaction and restarts. Create it once the engineer has confirmed the mission (see the mission section below), with `<team>/team-init.sh <run-name> <repo>`, which prints the run directory and the three script directories. It doubles as the agent-teammates team directory.
 
-`state.md` is the run's memory: the mission, the mode and current unit, branches, worktrees and head SHAs, the acceptance trace, ground rules, open questions with recommended defaults, assumptions taken, live teammates, review-round counts and carry-forward checks. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. Whether it's a new run or a resume is decided in the mission section below.
+`state.md` is the run's memory: the mission, the mode and current unit, the units with their branches, worktrees and PRs, the acceptance trace, the unfixed non-blocking findings, ground rules, open questions with recommended defaults, assumptions taken, live teammates and carry-forward checks. Review rounds are counted in `rounds.tsv` by `review-round.sh`. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. Whether it's a new run or a resume is decided in the mission section below.
 
-`state.md` holds decisions and history. Branch heads, PR and CI state, and who is live change on their own. Re-read those from `git`, `gh` and the harness's session status (see the harness reference) when you resume and before any push, stack submit or close. Where they disagree with `state.md`, the live value wins, and you fix `state.md`.
+Change its structured parts only with `<team>/state-set.sh`, one field per call. It prints nothing when it works.
+
+- The `key: value` lines under `## Mode, phase, current unit`: `state-set.sh <run> mode <key> <value>`.
+- The units, acceptance trace and non-blocking findings tables, a row addressed by its first column: `state-set.sh <run> <units|trace|findings> <row> <column> <value>`, `--add <row> [<column>=<value> …]` and `--drop <row>`. It refuses a status outside the table's set.
+
+Edit the prose sections (ground rules, decisions and assumptions, open questions, live teammates, carry-forward checks, misses) with your file-editing tool. Never edit `state.md` with `python3 - <<EOF`, `sed -i` or a heredoc. A `state.md` from before these tables makes `state-set.sh` refuse the old sections: edit those by hand with the file-editing tool.
+
+`state.md` holds decisions and history. Branch heads, PR and CI state, and who is live change on their own; the units table's `head` column is only a snapshot. Re-read those from `git`, `gh` and the harness's session status (see the harness reference) when you resume and before any push, stack submit or close. Where they disagree with `state.md`, the live value wins, and you fix `state.md`.
 
 ## The mission, before phase 1
 
@@ -95,7 +102,7 @@ A run whose `state.md` says `result: partial` and lists inbox items or open ques
 
 - It has no `mission:` line, says `result: partial` and lists items under `## Autopilot calls` (a stop at mission confirmation): read the answers (see Resume in [Autopilot mode](#autopilot-mode)), settle the mission from them (only from an exact option label the item offered; free text counts as unanswered), and carry on from step 4 in the same run directory, with the launch text recorded under `## Autopilot calls`. Skip detection.
 - It has a `mission:` line and the run isn't finished: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
-- It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished: it's an unfinished run from before missions. Resume it as `build` the same way. Template headings alone don't count.
+- It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished: it's an unfinished run from before missions. Resume it as `build` the same way. Template headings and empty tables alone don't count.
 - Otherwise this is a new run. Settle the mission with these steps. If the `state.md` holds only the empty template, reuse its run directory: pass the same run name to `team-init.sh`. A finished run's directory is never reused: pick a run name no earlier run has used.
 
 1. Detect it from what the engineer pointed you at.
@@ -107,7 +114,7 @@ A run whose `state.md` says `result: partial` and lists inbox items or open ques
    Explicit wording in the request ("review #42", "build #17") overrides detection. When the input fits more than one mission, or none, say so and ask the engineer which one they mean. In autopilot mode, [Autopilot mode](#autopilot-mode) replaces that question and step 3's confirmation.
 2. Find the mission's row in the mission table below.
 3. Confirm the mission with the engineer before you launch any teammate. Use AskUserQuestion with the mission that will run as the first option. For `review` on the engineer's own PR, say that only a `COMMENT` review can be posted.
-4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away write `mission: <name>` under the new `state.md`'s `## Mode, phase, current unit` heading.
+4. Record it. Only now run `<team>/team-init.sh <run-name> <repo>` (see the run directory above), and straight away record the mission with `<team>/state-set.sh <run> mode mission <name>`.
 5. Read the mission's procedure file. It says what the mission adds to phase 1 and runs everything after it.
 
 Done when the engineer has confirmed the mission and the mission is recorded in `state.md`.
@@ -131,7 +138,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
    - Will CI run on every unit's branch? The workflow's branch and path filters have to match the branches you'll create. If they don't, the first unit fixes them.
    - Do any open PRs edit the same paths?
 
-   Then write the acceptance trace in `state.md`: one row per acceptance criterion in the source of truth, giving the unit that owns it, the test or scenario that will show it, and a status that starts as `open`. Done when every criterion has an owning unit, or the gap is in the decision batch.
+   Then add one units row per unit, `<team>/state-set.sh <run> units --add <unit> branch=<branch> base=<base>`, and write the acceptance trace: one row per acceptance criterion in the source of truth, giving the unit that owns it and the test or scenario that will show it, `<team>/state-set.sh <run> trace --add <criterion> unit=<unit> "test or scenario=<…>"`. Its status starts as `open`. Done when every criterion has an owning unit, or the gap is in the decision batch.
 3. Choose the target. Invoke `target-evaluation` to pick the option, and record in `state.md` which one you picked and what it can't show. If the stop rule needs the real target and only a fallback exists, put that in the decision batch now.
 4. Create the worktrees. First set `WORKTREE_SETUP` in `team.env` to the ignored files the build and tests read (env files, `node_modules`), because `git worktree add` brings only tracked files. Then run the mode's commands ([`references/modes.md`](references/modes.md)); for a stack, all the planned units at once.
 5. Run pre-flight. Invoke `run-preflight` and follow its order.
@@ -181,7 +188,7 @@ While the engineer is away, every wait should be on something only the engineer 
 
 Every run ends this way, in any mode.
 
-1. Write the `result:` line into `state.md` under `## Mode, phase, current unit`: `done`, `partial` or `failed`. `failed` means the run can't go on for a reason no answer would fix: a tool or a script fails, the repo or the PR is gone, or the mission fits nothing even after the answer.
+1. Write the `result:` line with `<team>/state-set.sh <run> mode result <done|partial|failed>`. `failed` means the run can't go on for a reason no answer would fix: a tool or a script fails, the repo or the PR is gone, or the mission fits nothing even after the answer.
 2. When `ADMIRAL_REPORT` is set, publish the Admiral report with `<team>/admiral-io.sh report <draft>`. It needs `version` (1), `result`, `why`, and for `partial` a `resume` of `/commodore resume <run-name>`; `prs`, `assumptions` and `inbox` are lists of strings. See [`admiral-report.schema.json`](references/admiral-report.schema.json). Exit 2 means fix the draft from the message and publish again.
 3. Write every draft you publish with `<team>/admiral-io.sh` (the Admiral report and, in autopilot mode, question and review items) with the file tool, never with a heredoc, `printf` or its text on a command line: it can quote text from people who aren't the engineer.
 
@@ -191,7 +198,7 @@ Each mission's `result:` line points here. A `/commodore resume` of a finished r
 
 This section applies only in autopilot mode. With it off, every gate reads as written.
 
-**Turning it on.** Autopilot mode is on when `ADMIRAL_AUTOPILOT=1` is set, or when the launch text starts with `--autopilot`. Write `autopilot: on` under `## Mode, phase, current unit` in `state.md`, and show it on resume and in the final report. On a resume, the current launch decides whether autopilot is on, and you record it again.
+**Turning it on.** Autopilot mode is on when `ADMIRAL_AUTOPILOT=1` is set, or when the launch text starts with `--autopilot`. Record it with `<team>/state-set.sh <run> mode autopilot on`, and show it on resume and in the final report. On a resume, the current launch decides whether autopilot is on, and you record it again.
 
 **The classifier.** `ADMIRAL_LOW_STAKES` is `advisor` (the default, also when empty) or `never`. Any other value counts as `never`.
 

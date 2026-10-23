@@ -23,3 +23,7 @@
 **Role contract**: the part of a role that always applies, whatever role skill runs: its inputs, launch flags, scope, report, done signal, proofs and safety rules. A role skill or its instructions can't override it. _Avoid_: role rules, base prompt.
 
 **Override layer**: one of the places a role skill is set, in precedence order: built-in (empty), user-global, repo, then the run, which only the engineer's prompt or the profile can set. _Avoid_: config level, scope, tier.
+
+**Unit**: one slice of a run's work that ships as its own branch and PR, reviewed in its own review rounds. _Avoid_: task, chunk, slice.
+
+**Acceptance trace**: the run's table mapping each acceptance criterion in the source of truth to the unit that owns it, the test or scenario that will show it, its status, and the evidence. _Avoid_: requirements matrix, checklist.
