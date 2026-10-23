@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 2.3.1
+
+### Patch Changes
+
+- [#136](https://github.com/jbuffin/skills/pull/136) [`40531be`](https://github.com/jbuffin/skills/commit/40531be8705b15adb99c26f2a103b475db74c713) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore keeps waiting on CI with `watch-ci.sh` after a compaction. Phase 1 writes the run's exact ship and CI commands on a new `ship:` line in `state.md`, and after a compaction the coordinator re-reads its mission's current phase as well as `state.md`. In a 13-unit run, a compaction summary dropped `watch-ci.sh`, and the coordinator hand-wrote about 33 CI-wait calls for the remaining seven units, one of which marked a red run green. On a red run, `watch-ci.sh` now saves `gh run view --log-failed` to the run directory and prints the path and up to 20 failing lines, so the coordinator doesn't fetch the log itself.
+
 ## 2.3.0
 
 ### Minor Changes
