@@ -1,0 +1,5 @@
+---
+"jasonbuffin-skills": minor
+---
+
+Commodore's pr-feedback mission sorts feedback into finding cards. The triager ends its report with one card per triage item (quote, verdict, reason, proposal, evidence), in the format defined once in `references/finding-cards.md`, and chat presents the same cards before the decision batch asks approve, edit or reject per card. In autopilot mode the mission publishes one `findings` inbox item, built by the new `cards-draft.py` from the triager's report so no comment text is retyped, instead of a question item. A resume applies the answer: approved and edited cards go through the fix-unit loop, then a push-approval item carries the test and lint proof, and the next resume pushes and posts the replies. A CI check that looks flaky gets a `rerun` card, behind its own `Rerun` / `Don't rerun` question. The inbox item schema gains the `rerun` proposal kind.

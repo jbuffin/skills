@@ -57,7 +57,7 @@
     },
     "findings": {
       "type": "object",
-      "description": "Finding cards. jbuffin/skills#118 (rung 6) may revise this format, so extra properties are allowed.",
+      "description": "Finding cards, one per triage item: the format is in references/finding-cards.md. Extra properties are allowed.",
       "required": ["pr_url", "cards"],
       "properties": {
         "pr_url": { "type": "string" },
@@ -75,7 +75,7 @@
               "proposal": {
                 "type": "object",
                 "required": ["kind", "content"],
-                "properties": { "kind": { "enum": ["diff", "reply"] }, "content": { "type": "string" } }
+                "properties": { "kind": { "enum": ["diff", "reply", "rerun"] }, "content": { "type": "string" } }
               },
               "evidence": { "type": "array", "items": { "type": "string" } }
             }
