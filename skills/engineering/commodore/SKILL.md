@@ -245,7 +245,8 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 **No unattended pushes.** A pr-feedback or build run in autopilot mode never pushes without that push's own approval. Before each push, it publishes a question item listing that push's branch and commits, with the exact option labels `Push` and `Don't push`, and stops `partial` with that item in `inbox`. On resume it pushes only the listed commits, and only when the answer is exactly `Push`. A later push, including a CI fix or another unit, needs a new item. `Don't push` ends the run `partial`, lists the unpushed branches and worktrees, and removes nothing.
 
 **Marking ready.** In a build run, at Phase 3 step 4, run `<team>/pr-ready.sh <run> <unit>` for each unit that has a PR, even when the completion gate made the run `partial`. It reads the PR and makes no gh write.
-- Exit 0 (clean) prints `run: ` lines. Run each as its own bare tool call, in order, with the line after `run: ` as the command. Stop that PR's lines at the first refusal or failure.
+
+- Exit 0 (clean) prints lines that start with `run:`. Run each as its own bare tool call, in order, with the text after `run:` as the command. Stop that PR's lines at the first refusal or failure.
 - Exit 1 (`not clean: <pr>: <reason>`) means the PR stays draft. Name each such PR and its reason in the Admiral report's `why`.
 - Exit 5 means a precondition failed (for example no full PR URL in the unit's `PR` cell). Report it in `why` and leave the PR draft.
 - A refusal from Admiral's guard, or any failure of `gh pr ready` or `gh pr merge --auto`, goes in `why` with the PR. Don't retry it, don't rephrase it, don't merge another way. An `auto_merge_unconfirmed` refusal of the merge leaves the PR ready but unmerged: the guard allows `--auto` only when `ADMIRAL_AUTO_MERGE` matches and the base branch requires an approving review.
