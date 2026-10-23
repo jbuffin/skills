@@ -1,8 +1,10 @@
 # Glossary
 
-**Security reviewer**: a read-only teammate, fresh every review round, that reviews a unit's diff only for security vulnerabilities, alongside the reviewer. _Avoid_: security auditor, security checker.
+**Review round**: one pass of review over a unit. Round 1 reviews the unit's diff; round 2, the last, checks only the fixes. _Avoid_: review cycle, iteration.
 
-**Blocking finding**: a review finding at or above the profile's severity threshold, which must be fixed (or handed to a human at the round cap) before the unit ships. _Avoid_: must-fix, critical finding.
+**Security reviewer**: a read-only teammate, launched once per unit in review round 1, that reviews the unit's diff only for security vulnerabilities, alongside the reviewer. _Avoid_: security auditor, security checker.
+
+**Blocking finding**: a review finding at or above the profile's severity threshold in round 1, or a HIGH finding in round 2, which must be fixed (or handed to a human at the round cap) before the unit ships. _Avoid_: must-fix, critical finding.
 
 **Non-blocking finding**: a review finding below the threshold. It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial. _Avoid_: nit, minor finding.
 

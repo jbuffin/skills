@@ -24,8 +24,9 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 - The **mission** is what a run is for, worked out from what the engineer points you at: `build`, `review` or `pr-feedback`. It decides the run's task force.
 - The **task force** is the set of roles a mission assembles for a run.
-- A **security reviewer** is a read-only teammate, fresh every review round, that reviews a unit's diff only for security vulnerabilities, alongside the reviewer.
-- A **blocking finding** is a review finding at or above the profile's severity threshold (default: HIGH and MEDIUM). It must be fixed, or handed to a human at the round cap, before the unit ships.
+- A **review round** is one pass of review over a unit. Round 1 reviews the unit's diff. Round 2, the last, checks only the fixes. `<team>/review-round.sh` counts them and refuses a third.
+- A **security reviewer** is a read-only teammate, launched once per unit in round 1, that reviews the unit's diff only for security vulnerabilities, alongside the reviewer.
+- A **blocking finding** is a review finding at or above the profile's severity threshold (default: HIGH and MEDIUM) in round 1, or a HIGH finding in round 2. It must be fixed, or handed to a human at the round cap, before the unit ships.
 - A **non-blocking finding** is a review finding below the threshold (default: LOW). It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial.
 - A **unit** is one piece of the work a single reviewer can hold in their head, usually one PR. The plan is an ordered list of units.
 - The **source of truth** is what a unit gets checked against: a spec, a design, an issue's acceptance criteria, existing behaviour, or reference code at a commit SHA. It is never a paraphrase of any of those.
@@ -138,7 +139,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
    2. Ask one decision batch: the allow rules, the mode, every question from steps 1–4, and the run's ground rules, which default to these.
       - PRs stay draft, and nothing gets merged.
       - Force-pushes go only through `<team>/push-branch.sh`, which pushes the run's own branches with `--force-with-lease` and nothing else.
-      - Review rounds cap at 3. After that, a PR comment hands what's left to a human.
+      - Review rounds cap at 2: a full review, then one check of the fixes. After that, a PR comment hands what's left to a human.
       - Anything the engineer names stays untouched.
       - With no security role skill, the run has no security reviewer. It starts only once the engineer approves that.
 

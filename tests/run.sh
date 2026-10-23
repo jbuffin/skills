@@ -3762,6 +3762,29 @@ want autopilot && {
 }
 
 # ======================================================================================================================
+# ROUNDS: review-round.sh caps each unit's review at two rounds (issue #129). `tests/run.sh rounds` runs just these.
+# ======================================================================================================================
+want rounds && {
+  mk rounds-cap
+  xrun $CM/review-round.sh $D u1; rc_is 0
+  [[ $(<$SC/out) == "round 1 of 2 for u1: full review."* ]] || P+="round 1: $(<$SC/out)"
+  xrun $CM/review-round.sh $D u1; rc_is 0
+  [[ $(<$SC/out) == "round 2 of 2 for u1, the last:"*"Only HIGH blocks"* ]] || P+="round 2: $(<$SC/out)"
+  xrun $CM/review-round.sh $D u1; rc_is 1
+  [[ $(<$SC/out) == "CAP u1: 2 review rounds done;"* ]] || P+="round 3: $(<$SC/out)"
+  xrun $CM/review-round.sh $D u2; rc_is 0
+  [[ $(<$SC/out) == "round 1 of 2 for u2:"* ]] || P+="u2 counts apart from u1: $(<$SC/out)"
+  [[ $(<$D/rounds.tsv) == $'u1 1\nu1 2\nu2 1' ]] || P+="rounds.tsv: $(<$D/rounds.tsv | tr '\n' '|')"
+  verdict "ROUNDS review-round.sh gives each unit round 1 then round 2, refuses a third with exit 1, and records only rounds started"
+
+  mk rounds-refuse
+  xrun $CM/review-round.sh $D 'u1;x'; rc_is 5
+  xrun $CM/review-round.sh $SC/no-run u1; rc_is 5
+  [[ -e $D/rounds.tsv ]] && P+="a refused call wrote rounds.tsv"
+  verdict "ROUNDS review-round.sh refuses a bad unit name or a directory without team.env, and writes nothing"
+}
+
+# ======================================================================================================================
 # LINT: the checks CI runs on shell files, including the files its shebang search misses.
 # ======================================================================================================================
 bad=(); sbad=()
