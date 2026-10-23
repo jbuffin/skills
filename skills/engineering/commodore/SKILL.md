@@ -83,6 +83,8 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 `state.md` is the run's memory: the mission, the mode and current unit, the units with their branches, worktrees and PRs, the acceptance trace, the unfixed non-blocking findings, ground rules, open questions with recommended defaults, assumptions taken, live teammates and carry-forward checks. Review rounds are counted in `rounds.tsv` by `review-round.sh`. Update it after every report you act on, whenever a decision lands, and at the end of every unit. Every time you start, including after compaction or a crash, read `state.md` first and resume from it. Whether it's a new run or a resume is decided in the mission section below.
 
+After a compaction, also re-read the current phase of the mission's procedure file (the mission table below names it): a compaction summary drops steps it doesn't name, such as how to wait on CI. Ship and wait on CI only with the commands on `state.md`'s `ship:` line; never write your own `gh run watch` or `sleep` loop.
+
 Change its structured parts only with `<team>/state-set.sh`, one field per call. It prints nothing when it works.
 
 - The `key: value` lines under `## Mode, phase, current unit`: `state-set.sh <run> mode <key> <value>`.
@@ -102,7 +104,7 @@ A run whose `state.md` says `result: partial` and lists inbox items or open ques
 
 - It has no `mission:` line, says `result: partial` and lists items under `## Autopilot calls` (a stop at mission confirmation): read the answers (see Resume in [Autopilot mode](#autopilot-mode)), settle the mission from them (only from an exact option label the item offered; free text counts as unanswered), and carry on from step 4 in the same run directory, with the launch text recorded under `## Autopilot calls`. Skip detection.
 - It has a `mission:` line and the run isn't finished: you're resuming. Read that mission's procedure file from the mission table below, then continue the run from `state.md`. Skip detection.
-- It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished: it's an unfinished run from before missions. Resume it as `build` the same way. Template headings and empty tables alone don't count.
+- It has no `mission:` line, records something beyond the empty template (a mode, units, an acceptance trace or ground rules), and the run isn't finished: it's an unfinished run from before missions. Resume it as `build` the same way. Template headings, empty tables and the unfilled `ship:` line alone don't count.
 - Otherwise this is a new run. Settle the mission with these steps. If the `state.md` holds only the empty template, reuse its run directory: pass the same run name to `team-init.sh`. A finished run's directory is never reused: pick a run name no earlier run has used.
 
 1. Detect it from what the engineer pointed you at.
@@ -150,7 +152,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
       - Anything the engineer names stays untouched.
       - With no security role skill, the run has no security reviewer. It starts only once the engineer approves that.
 
-      Record the answers in `state.md`. The rest of the run reads its ground rules from there.
+      Record the answers in `state.md`. The rest of the run reads its ground rules from there. Then fill the `ship:` line with the exact commands this run ships a unit and waits on CI with, from the mission's ship step and the chosen mode, with `<team>` and `<run>` written out as paths: `<team>/state-set.sh <run> mode ship "<push or stack command>; CI: <team>/watch-ci.sh <run> <branch> (background)"`.
    3. Run `<team>/team-preflight.sh <run>` in the background or with the maximum Bash timeout. It does the team checks plus run-preflight's, lists any ignored files the worktrees still lack, and, where the harness has an advisor, probes it with one real session per distinct teammate model, which can take about 5 minutes. Otherwise it prints `ADVISOR n/a`. On a `WARN  ADVISOR OFF` line, follow "When the advisor is off" in the harness reference before you launch anyone.
    4. Launch run-preflight's probe with agent-teammates and `--role implementer`, so it runs exactly the way teammates will, on the model of the teammates that write, and settle whatever it reports with the engineer. The probe proves the launch path and the gated actions. It doesn't prove the advisor; `advisor-probe.sh` does.
 

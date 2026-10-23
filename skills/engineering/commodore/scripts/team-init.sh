@@ -182,6 +182,8 @@ fi
 
 ## Mode, phase, current unit
 
+ship: (set in phase 1: how units ship and wait on CI)
+
 ## Units (head is a snapshot; git is the source of truth)
 
 | unit | branch | worktree | base | head (as of) | PR | reviewed SHA | status | notes |
