@@ -146,7 +146,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
 5. Run pre-flight. Invoke `run-preflight` and follow its order.
    1. Write the requirements manifest, have the engineer store the Keychain secrets, and draft the allow rules.
    2. Ask one decision batch: the allow rules, the mode, every question from steps 1–4, and the run's ground rules, which default to these.
-      - PRs stay draft, and nothing gets merged.
+      - PRs stay draft, and nothing gets merged. In autopilot mode a clean build PR is the one exception (see [Autopilot mode](#autopilot-mode), Marking ready).
       - Force-pushes go only through `<team>/push-branch.sh`, which pushes the run's own branches with `--force-with-lease` and nothing else.
       - Review rounds cap at 2: a full review, then one check of the fixes. After that, a PR comment hands what's left to a human.
       - Anything the engineer names stays untouched.
@@ -243,3 +243,15 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 5. Apply each answer where the run stopped, mark it applied under `## Autopilot calls`, and replace the old `result: partial` line when the run goes on. Don't re-ask what's answered. Ask every unanswered question again as a new item, the same way.
 
 **No unattended pushes.** A pr-feedback or build run in autopilot mode never pushes without that push's own approval. Before each push, it publishes a question item listing that push's branch and commits, with the exact option labels `Push` and `Don't push`, and stops `partial` with that item in `inbox`. On resume it pushes only the listed commits, and only when the answer is exactly `Push`. A later push, including a CI fix or another unit, needs a new item. `Don't push` ends the run `partial`, lists the unpushed branches and worktrees, and removes nothing.
+
+**Marking ready.** In a build run, at Phase 3 step 4, run `<team>/pr-ready.sh <run> <unit>` for each unit that has a PR, even when the completion gate made the run `partial`. It reads the PR and makes no gh write.
+
+- Exit 0 (clean) prints lines that start with `run:`. Run each as its own bare tool call, in order, with the text after `run:` as the command. Stop that PR's lines at the first refusal or failure. `ready: <pr>` means there's nothing to run.
+- Exit 1 (`not clean: <pr>: <reason>`) means the PR stays draft. Name each such PR and its reason in the Admiral report's `why`.
+- Exit 5 means a precondition failed (for example no full PR URL in the unit's `PR` cell). Report it in `why`, or in the final report when there's no Admiral report, and leave the PR draft.
+- A refusal from Admiral's guard, or any failure of `gh pr ready` or `gh pr merge --auto`, goes in `why` with the PR. Don't retry it, don't rephrase it, don't merge another way. It isn't a call: write no question item and don't stop, report it and go on to the next PR. An `auto_merge_unconfirmed` refusal of the merge leaves the PR ready but unmerged: the guard allows `--auto` only when `ADMIRAL_AUTO_MERGE` matches and the base branch requires an approving review.
+- Never run `gh pr merge` without `--auto`. `--auto` merges at once when the PR already has its approval and green CI, which is the outcome auto-merge reaches anyway.
+
+Running the printed `run:` lines isn't a high-stakes call. The rules that make a GitHub write or a denial high-stakes don't send them to the inbox.
+
+This doesn't change "No unattended pushes": each push still needs its own `Push` approval.
