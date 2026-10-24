@@ -20,6 +20,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
 | `setup-commodore` | Picks installed skills for each Commodore role with you, drafts how they combine, and saves the role-override file for just you or for the whole repo. |
+| `retro` | Reviews one Admiral panel's autopilot Commodore runs, finds stops and engineer edits that repeat, and proposes one change per finding, with a draft PR only for a skill edit. |
 
 ## Layout
 
@@ -66,7 +67,7 @@ npx skills add ./incubator/<name>
 
 ### Engineering team skills
 
-`skills/engineering/` holds four skills that work together: `commodore` (the orchestrator),
+`skills/engineering/` holds four skills that work together (`retro` is a fifth that borrows from `commodore`, see below): `commodore` (the orchestrator),
 `agent-teammates`, `run-preflight` and `target-evaluation`.
 
 `commodore` starts every run by working out its mission from what you point it at, and confirms it
@@ -78,6 +79,9 @@ and approve every reply before you leave, and the fixes and replies land on the 
 - **Install all four together.** `commodore` runs scripts from the other three by sibling path, so
   `npx skills add jbuffin/skills --skill commodore` alone leaves it broken. The plugin route always
   installs all four.
+- **`retro` uses `commodore`'s scripts when both are installed.** It publishes its report and inbox items through
+  `commodore/scripts/admiral-io.sh` by sibling path. Installed alone, it falls back to `cp` for the report and
+  writes its questions to `notes.md` instead of the inbox.
 - **macOS with zsh.** The scripts are zsh, and secrets live in the macOS Keychain (`security`).
 - **Claude Code with background sessions, Codex, or Copilot CLI.** These are the supported harnesses. The
   harness is detected from where the run starts. On Claude Code, teammates run as `claude --bg`
