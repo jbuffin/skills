@@ -6,7 +6,7 @@ Worktrees stay until the engineer says otherwise, and the final report lists the
 
 ## Single unit
 
-One unit, with one worktree, one branch and one draft PR.
+One unit, with one worktree, one branch and one PR, which ends ready.
 
 ```bash
 <team>/unit-worktree.sh <run> new <unit> <branch> [base]
@@ -16,7 +16,7 @@ Phase 1 still runs, just smaller. The manifest might be five lines and the team 
 
 ## Stack
 
-Several phases, passes or layers, or several related issues worked in order where each builds on the last. Each phase or issue is one unit with its own worktree, and the whole thing ships as a gh stack of draft PRs. Read the gh-stack skill first if it's installed, or `gh stack --help`.
+Several phases, passes or layers, or several related issues worked in order where each builds on the last. Each phase or issue is one unit with its own worktree, and the whole thing ships as a gh stack of PRs that end ready. Read the gh-stack skill first if it's installed, or `gh stack --help`.
 
 ```bash
 <team>/unit-worktree.sh <run> stack <base> u1=<branch> u2=<branch> u3=<branch>   # all planned units
@@ -47,6 +47,6 @@ A PR to finish or get green. The [PR-feedback mission](mission-pr-feedback.md) a
 
 If the branch is checked out in the engineer's own checkout, the script stops and asks them to switch off it, which they do before leaving. If it's checked out in another worktree, the script uses that worktree instead of taking the branch away from it; confirm nobody else is working there. Either way it fast-forwards the branch to the PR's head, and stops if the local branch has diverged, so nobody builds on a stale head. All units work in that one worktree, one implementer at a time.
 
-Pushing to the PR's branch is a gated action, so ask for it in the phase 1 batch.
+Push to the PR's branch only through `<team>/push-branch.sh`, which isn't asked about. Phase 1 still drafts the allow rule it needs.
 
 To get CI green, make each unit a group of failing jobs with the same cause. The test writer reproduces each failure locally first.
