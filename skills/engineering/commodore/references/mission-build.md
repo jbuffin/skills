@@ -6,14 +6,14 @@ Read this file before phase 1 in [`SKILL.md`](../SKILL.md). Phase 1 runs all six
 
 ## Autopilot mode
 
-In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), plan (phase 1 steps 1–4), draft the allow rules, among them one for `<team>/pr-ready.sh`, and list the secrets (step 5.1). Add none for `gh pr ready` or `gh pr merge`: in autopilot, Admiral's guard decides those. Then put the whole decision batch, the secrets and step 2's cut question in one question item, report `partial` and stop. Resume and the push approval before each push follow [Autopilot mode](../SKILL.md#autopilot-mode) (Resume, No unattended pushes). This holds until autopilot builds land. With autopilot off, nothing here applies.
+In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), plan (phase 1 steps 1–4), draft the allow rules, among them one for `<team>/pr-ready.sh`, and list the secrets (step 5.1). Add none for `gh pr ready` or `gh pr merge`: in autopilot, Admiral's guard decides those. Phase 1 doesn't stop for the decision batch: take the recommended default of every low-stakes call, record it, and run to the end. A missing Keychain secret, a security stop, a product or scope call (always high-stakes, [SKILL.md](../SKILL.md#autopilot-mode)) and "no security role skill" still stop the run with a question item, and the run resumes as [Autopilot mode](../SKILL.md#autopilot-mode) says (Resume). Pushes and marking ready are never asked about. With autopilot off, every call is asked as written, and phase 1 drafts allow rules for `<team>/pr-ready.sh <run>` and `gh pr ready` in every build run, autopilot or not, so an unattended run doesn't stall on a prompt at Phase 3 step 4.
 
 ## Mode, sized to the work
 
 | The work | Mode | Delivery |
 | --- | --- | --- |
-| One unit | single unit | one worktree, one draft PR |
-| Several phases or passes, or related issues worked in order where each builds on the last | stack | one worktree per unit, a gh stack of draft PRs |
+| One unit | single unit | one worktree, one PR (draft while the run works on it, ready at the end) |
+| Several phases or passes, or related issues worked in order where each builds on the last | stack | one worktree per unit, a gh stack of PRs (draft while the run works on them, ready at the end) |
 | Several issues that don't build on each other | independent units | one worktree and one PR each |
 | Fixes to an existing PR: the [PR-feedback mission](mission-pr-feedback.md)'s delivery, or a PR the engineer explicitly asked to build on | existing PR | one worktree on its branch, no new PR |
 
@@ -84,10 +84,10 @@ The run ends when the stop rule is observed on the target it names. Opening the 
    - Every claim in a PR body traces to a verified report.
    - Every unit's last verify-report verdict is `verified`, and CI is green, or each exception is named.
    - Every gap, carry-forward check and thing not checked is listed.
-   - Every gated action that wasn't approved (pushes, marking ready, merges) is still pending, not done. In autopilot mode, Admiral's guard allowing `gh pr ready` and `gh pr merge --auto` is the approval for marking ready and merges; each push still needs its `Push` answer.
+   - Every gated action that wasn't approved is still pending, not done. Nothing is merged except through auto-merge, which only autopilot mode requests and Admiral's guard allows.
 
    If any check fails, the run is partial. Say exactly which checks failed.
 3. Close every teammate, stop the watchdog and the CI watchers, and leave the target in the agreed state. List every worktree from `worktrees.tsv` with its branch and whether it's clean. Remove them only when the engineer says so.
-4. Leave the delivery the way the ground rules say. Every PR whose review left anything for a human has its round-cap comment. In autopilot mode, mark each unit's clean PR ready and enable auto-merge as [Autopilot mode](../SKILL.md#autopilot-mode) says (Marking ready); the rest stay draft.
+4. Leave the delivery the way the ground rules say. Every PR whose review left anything for a human has its round-cap comment. Then mark every PR the run opened ready, autopilot or not, a PR with `human` findings included (its round-cap comment is where the human review starts), as [Marking ready](../SKILL.md#marking-ready) says. The `pr-ready.sh` clean check decides only auto-merge.
 5. Write the final report: units and PRs, "no security review: no security role skill" when the run had no security reviewer, the findings table's `open` and `human` rows, when and where the stop rule was observed, the acceptance trace with evidence, what wasn't checked, misses (where one of your briefs or decisions was wrong), open questions, carry-forward checks, approvals pending, and the next safe action. End it with a `result:` line: `done` only when the gate passed, otherwise `partial` and why. [Ending a run](../SKILL.md#ending-a-run) writes it into `state.md` and publishes the Admiral report; the run can also end `failed`.
 6. Lessons go to the repo's own docs, as a proposed edit for the engineer to accept, whenever the run tripped over a missing or wrong instruction there.

@@ -34,7 +34,7 @@ A `diff` that touches agent config (`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`,
 
 ## Evidence
 
-A fix card's evidence is read-only: `file:line` links, and the read-only command with its output. The triager runs no tests. The test and lint results come later, from the implementer's verified proof, and go in the push-approval item and the replies.
+A fix card's evidence is read-only: `file:line` links, and the read-only command with its output. The triager runs no tests. The test and lint results come later, from the implementer's verified proof, and go in the findings item and the replies.
 
 ## CI checks
 
