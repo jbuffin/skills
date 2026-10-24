@@ -1,0 +1,54 @@
+{"v":1,"ts":"2026-09-01T08:00:00Z","ship":"juliet","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"retro"},"source":"github-2","panel":"prs-needs-review","order_id":"1","order_url":"https://github.com/example/fixture/pull/1","title":"Fixture order 1","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-01T08:20:00Z","ship":"juliet","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"retro done","retro":{"panel":"github-2/prs-needs-review","since":null,"until":"2026-09-01T00:00:00Z","pr":null}}}
+{"v":1,"ts":"2026-09-02T09:00:00Z","ship":"mike","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"90","order_url":"https://github.com/example/fixture/pull/90","title":"Fixture order 90","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-02T09:05:00Z","ship":"mike","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-02T09:08:00Z","ship":"mike","event":"underway","waited_s":180}
+{"v":1,"ts":"2026-09-02T09:30:00Z","ship":"mike","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"reviewed","assumptions":["default: older run"]}}
+{"v":1,"ts":"2026-09-08T08:00:00Z","ship":"kilo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"retro"},"source":"github-2","panel":"prs-needs-review","order_id":"2","order_url":"https://github.com/example/fixture/pull/2","title":"Fixture order 2","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-08T08:30:00Z","ship":"kilo","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"retro done","retro":{"panel":"github-2/prs-needs-review","since":"2026-09-01T00:00:00Z","until":"2026-09-08T00:00:00Z","pr":null}}}
+{"v":1,"ts":"2026-09-09T08:00:00Z","ship":"lima","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"retro"},"source":"github-2","panel":"issues-ready","order_id":"3","order_url":"https://github.com/example/fixture/pull/3","title":"Fixture order 3","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-09T08:30:00Z","ship":"lima","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"retro done","retro":{"panel":"github-2/issues-ready","since":null,"until":"2026-09-09T00:00:00Z","pr":null}}}
+{"v":1,"ts":"2026-09-09T10:00:00Z","ship":"echo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"issues-ready","order_id":"201","order_url":"https://github.com/example/fixture/pull/201","title":"Fixture order 201","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-09T10:05:00Z","ship":"echo","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-09T10:08:00Z","ship":"echo","event":"underway","waited_s":40}
+{"v":1,"ts":"2026-09-09T10:10:00Z","ship":"echo","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"triaged","assumptions":["default: other panel"]}}
+{"v":1,"ts":"2026-09-10T09:00:00Z","ship":"alpha","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"101","order_url":"https://github.com/example/fixture/pull/101","title":"Fixture order 101","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-10T09:05:00Z","ship":"alpha","event":"needs_you","reason":"stop"}
+{"v":1,"ts":"2026-09-10T09:06:00Z","ship":"alpha","event":"underway","waited_s":30}
+{"v":1,"ts":"2026-09-10T09:10:00Z","ship":"alpha","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-10T09:12:00Z","ship":"alpha","event":"underway","waited_s":90}
+{"v":1,"ts":"2026-09-10T09:20:00Z","ship":"alpha","event":"review_submitted","item":"rev-101","kind":"review","review_event":"APPROVE","edited":false}
+{"v":1,"ts":"2026-09-10T09:25:00Z","ship":"alpha","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":2,"needs_you_s":120,"report":{"version":1,"result":"done","why":"review submitted","assumptions":["asked: which base branch?","default: used main"]}}
+{"v":1,"ts":"2026-09-10T10:00:00Z","ship":"","event":"skipped","source":"github-2","panel":"prs-needs-review","order_id":"150","title":"Fixture order 150","reason":"at cap"}
+{"v":1,"ts":"2026-09-10T10:01:00Z","ship":"","event":"skipped","source":"github-2","panel":"issues-ready","order_id":"250","title":"Fixture order 250","reason":"at cap"}
+{"v":1,"ts":"2026-09-10T11:00:00Z","ship":"bravo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"102","order_url":"https://github.com/example/fixture/pull/102","title":"Fixture order 102","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-10T11:05:00Z","ship":"bravo","event":"needs_you","reason":"stop"}
+{"v":1,"ts":"2026-09-10T11:08:00Z","ship":"bravo","event":"underway","waited_s":150}
+{"v":1,"ts":"2026-09-10T11:10:00Z","ship":"bravo","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-10T11:14:00Z","ship":"bravo","event":"underway","waited_s":210}
+{"v":1,"ts":"2026-09-10T11:30:00Z","ship":"bravo","event":"review_submitted","item":"rev-102","kind":"review","review_event":"COMMENT","edited":true}
+{"v":1,"ts":"2026-09-10T11:35:00Z","ship":"bravo","event":"ended","exit_code":0,"signal":null,"duration_s":2100,"needs_you_count":2,"needs_you_s":360,"report":{"version":1,"result":"done","why":"review submitted after edit","assumptions":["default: skipped nits"]}}
+{"v":1,"ts":"2026-09-10T15:00:00Z","ship":"foxtrot","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"301","order_url":"https://github.com/example/fixture/pull/301","title":"Fixture order 301","dir":"/work/fixture","autopilot":false}
+{"v":1,"ts":"2026-09-10T15:05:00Z","ship":"foxtrot","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-10T15:06:00Z","ship":"foxtrot","event":"underway","waited_s":500}
+{"v":1,"ts":"2026-09-10T15:30:00Z","ship":"foxtrot","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":0,"needs_you_s":0,"report":{"version":1,"result":"done","why":"hand run"}}
+{"v":1,"ts":"2026-09-11T09:00:00Z","ship":"charlie","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"103","order_url":"https://github.com/example/fixture/pull/103","title":"Fixture order 103","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-11T09:05:00Z","ship":"charlie","event":"needs_you","reason":"stop"}
+{"v":1,"ts":"2026-09-11T09:06:00Z","ship":"charlie","event":"underway","waited_s":60}
+{"v":1,"ts":"2026-09-11T09:10:00Z","ship":"charlie","event":"needs_you","reason":"permission:Bash"}
+{"v":1,"ts":"2026-09-11T09:12:00Z","ship":"charlie","event":"underway","waited_s":120}
+{"v":1,"ts":"2026-09-11T09:20:00Z","ship":"charlie","event":"review_submitted","item":"rev-103","kind":"review","review_event":"COMMENT","edited":false}
+{"v":1,"ts":"2026-09-11T09:25:00Z","ship":"charlie","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":2,"needs_you_s":180,"report":{"version":1,"result":"done","why":"review submitted","assumptions":[]}}
+{"v":1,"ts":"2026-09-11T13:00:00Z","ship":"delta","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"104","order_url":"https://github.com/example/fixture/pull/104","title":"Fixture order 104","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-11T13:05:00Z","ship":"delta","event":"needs_you","reason":"stop"}
+{"v":1,"ts":"2026-09-11T13:06:00Z","ship":"delta","event":"underway","waited_s":45}
+{"v":1,"ts":"2026-09-11T13:10:00Z","ship":"delta","event":"answered","item":"q-104","kind":"question"}
+{"v":1,"ts":"2026-09-11T13:15:00Z","ship":"delta","event":"guard_denied","rule":"Bash(gh pr merge:*)","tool":"Bash"}
+{"v":1,"ts":"2026-09-11T13:20:00Z","ship":"delta","event":"review_discarded","item":"rev-104","kind":"review","external":true}
+{"v":1,"ts":"2026-09-11T13:25:00Z","ship":"delta","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":1,"needs_you_s":45,"report":{"version":1,"result":"partial","why":"waiting on the author","assumptions":["asked: who owns the follow-up?"],"resume":"/commodore resume review-104"}}
+{"v":1,"ts":"2026-09-12T09:00:00Z","ship":"echo","event":"launched","fleet":"main","harness":"claude","skill":{"kind":"skill","name":"commodore"},"source":"github-2","panel":"prs-needs-review","order_id":"105","order_url":"https://github.com/example/fixture/pull/105","title":"Fixture order 105","dir":"/work/fixture","autopilot":true}
+{"v":1,"ts":"2026-09-12T09:05:00Z","ship":"echo","event":"needs_you","reason":"stop"}
+{"v":1,"ts":"2026-09-12T09:06:00Z","ship":"echo","event":"underway","waited_s":75}
+{"v":1,"ts":"2026-09-12T09:20:00Z","ship":"echo","event":"review_submitted","item":"rev-105","kind":"review","review_event":"REQUEST_CHANGES","edited":false}
+{"v":1,"ts":"2026-09-12T09:25:00Z","ship":"echo","event":"ended","exit_code":0,"signal":null,"duration_s":1500,"needs_you_count":1,"needs_you_s":75,"report":{"version":1,"result":"done","why":"review submitted","assumptions":["asked: scope of review?"]}}
+{"v":1,"ts":"2026-09-12T09:30:00Z","ship":"echo","event":"dismissed"}
