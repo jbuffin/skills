@@ -252,7 +252,14 @@ class MixedCase(TempDirCase):
         self.assertEqual(raw["result_split"], plain["result_split"])
 
     def test_text_section_lists_each_category_with_counts_and_a_last_total_row(self):
-        lines = run_text("--units", "5", self.path).splitlines()
+        all_lines = run_text("--units", "5", self.path).splitlines()
+        header = next(i for i, line in enumerate(all_lines) if "tool calls by category" in line)
+        total_row = next(i for i, line in enumerate(all_lines) if i > header and re.search(r"(?i)\btotal\b", line))
+        lines = all_lines[header + 1 : total_row]  # the section's rows only, so no earlier table can match
+
+        def row_index(label):
+            return next(i for i, line in enumerate(lines) if line.split(None, 2)[-1] == label)
+
         expected = [  # label, calls, per unit, in largest-first order
             ("Edit/Write repo, worktree or elsewhere", "3", "0.6"),
             ("Edit/Write state.md", "2", "0.4"),
@@ -260,15 +267,14 @@ class MixedCase(TempDirCase):
             ("other", "3", "0.6"),
         ]
         for label, calls, per_unit in expected:
-            row = next(line for line in lines if label in line)
+            row = lines[row_index(label)]
             self.assertRegex(row, rf"\b{calls}\b")
             self.assertRegex(row, rf"\b{re.escape(per_unit)}\b")
         labels = [STATE, STATE_MD, PROMPTS, RUN_DIR, REPO_FILES, SCRIPTS, "bash: git", "bash: gh", "other"]
-        positions = [next(i for i, line in enumerate(lines) if label in line) for label in labels]
-        total_row = next(i for i, line in enumerate(lines) if re.search(r"(?i)\btotal\b", line))
-        self.assertTrue(all(p < total_row for p in positions))
-        self.assertRegex(lines[total_row], r"\b20\b")
-        self.assertRegex(lines[total_row], r"\b4\.0\b")
+        for label in labels:
+            row_index(label)  # raises StopIteration if a category is missing from the section
+        self.assertRegex(all_lines[total_row], r"\b20\b")
+        self.assertRegex(all_lines[total_row], r"\b4\.0\b")
 
 
 class BashFirstCommandCase(TempDirCase):
