@@ -260,7 +260,7 @@ class MixedCase(TempDirCase):
         def row_index(label):
             return next(i for i, line in enumerate(lines) if line.split(None, 2)[-1] == label)
 
-        expected = [  # label, calls, per unit, in largest-first order
+        expected = [  # label, calls, per unit
             ("Edit/Write repo, worktree or elsewhere", "3", "0.6"),
             ("Edit/Write state.md", "2", "0.4"),
             ("bash: git", "2", "0.4"),
@@ -572,6 +572,96 @@ class ExistingOutputCase(TempDirCase):
         between = [line for line in lines[len(OLD_TEXT_HEAD) : first_tail] if line.strip()]
         self.assertTrue(any("bash: git" in line for line in between), "no category section before handoff")
         self.assertTrue(any("to result" in line for line in between), "no result split block before handoff")
+
+
+WRAPPER_TABLE = [
+    ("time -p make", "bash: make"),
+    ("sudo -u bob make", "bash: make"),
+    ("env -i ls", "bash: ls"),
+]
+UNSAFE_NAMES = [
+    '"ghp_SECRET token here" x',
+    '/a/b/"c d e"',
+    "a" * 41,
+    "ls\x07",
+    "\x1b[2Jfake",
+]
+
+
+def usage_less(session, seconds, *tools):
+    """Append an assistant message that carries tool_use blocks but no `usage`, after the last real API call."""
+    entry = session.entry("nousage", seconds, session.blocks(tools))
+    del entry["message"]["usage"]
+    session.lines.append(entry)
+
+
+class BashNameCase(TempDirCase):
+    def test_wrapper_flags_are_skipped(self):
+        for command, category in WRAPPER_TABLE:
+            with self.subTest(command=command):
+                out = run_json(one_call(self.tmp, bash(command)))
+                self.assertEqual(counts(out), {category: 1})
+
+    def test_a_name_that_is_not_plain_shows_as_a_question_mark_in_json_and_text(self):
+        for command in UNSAFE_NAMES:
+            with self.subTest(command=command):
+                path = one_call(self.tmp, bash(command))
+                self.assertEqual(counts(run_json(path)), {"bash: ?": 1})
+                text = run_text(path)
+                self.assertTrue(any(line.endswith("bash: ?") for line in text.splitlines()))
+                for leaked in ("ghp_SECRET", "c d e", "\x07", "\x1b"):
+                    self.assertNotIn(leaked, text)
+
+    def test_a_forty_character_name_is_still_shown(self):
+        self.assertEqual(counts(run_json(one_call(self.tmp, bash("a" * 40)))), {"bash: " + "a" * 40: 1})
+
+
+class UsageLessMessageCase(TempDirCase):
+    def test_a_trailing_message_without_usage_counts_and_does_not_crash(self):
+        s = Session(self.tmp, "trail.jsonl")
+        s.call(0, bash("git status"))
+        s.call(60, bash("git log"))
+        usage_less(s, 120, bash("gh pr view 1"))
+        out = run_json("--sessions", s.save())
+        self.assertEqual(counts(out), {"bash: git": 2, "bash: gh": 1})
+        split = out["result_split"]
+        self.assertEqual((split["to_result"]["tool_calls"], split["after_result"]["tool_calls"]), (3, 0))
+        self.assertEqual(len(split["sessions_without_result"]), 1)
+        self.assertEqual(out["per_session"][0]["has_result"], False)
+
+    def test_a_result_write_in_a_trailing_message_splits_at_the_last_real_call(self):
+        s = Session(self.tmp, "trailres.jsonl")
+        s.call(0, bash("git status"))
+        s.call(60, bash("git log"))
+        usage_less(s, 120, bash(f"{STATE_SCRIPT} /r mode result done"))
+        split = run_json(s.save())["result_split"]
+        self.assertEqual((split["to_result"]["tool_calls"], split["after_result"]["tool_calls"]), (3, 0))
+        self.assertEqual(split["to_result"]["active_hours"], 0.02)  # 60 s
+        self.assertEqual(split["sessions_without_result"], [])
+
+
+class TimeAndWordingCase(TempDirCase):
+    def test_fractional_seconds_count_toward_the_idle_cap(self):
+        s = Session(self.tmp, "frac.jsonl")
+        s.call(0, bash("git status"))
+        s.call(600, bash("git log"))
+        s.lines[-2]["timestamp"] = "2026-10-01T10:00:00.100Z"
+        s.lines[-1]["timestamp"] = "2026-10-01T10:10:00.900Z"  # 600.8 s later: idle
+        split = run_json(s.save())["result_split"]
+        self.assertEqual(split["to_result"]["active_hours"], 0.0)
+
+    def test_the_summary_line_is_printed_even_when_every_session_has_a_result(self):
+        s = Session(self.tmp, "ok.jsonl")
+        s.call(0, bash(f"{STATE_SCRIPT} /r mode result done"))
+        text = run_text(s.save())
+        self.assertIn("0 sessions without a result: line, counted as to result", text)
+        self.assertIn("after result:", text)
+        self.assertIn("0 tool calls", text.split("after result:")[1])
+
+    def test_a_count_of_one_is_singular(self):
+        text = run_text(one_call(self.tmp, bash("git status")))
+        self.assertIn("1 session without a result: line", text)
+        self.assertRegex(text, r"1 tool call(?!s)")
 
 
 class HelpTextCase(unittest.TestCase):

@@ -22,7 +22,9 @@ threshold, resetting to the session's first-call context plus RESUME_TOKENS for 
 Tool calls by category counts the coordinator's own tool_use blocks (sub-agent traffic is skipped), once per id, in
 the categories state-set.sh, Edit/Write state.md, Write prompts/, Edit/Write run directory, Edit/Write repo,
 worktree or elsewhere, commodore scripts, `bash: <first command>`, Read, ToolSearch and other. A Bash call is named
-by its first command, looking past `cd x &&`, `VAR=1`, `env`, `time` and subshell parentheses. The section lists
+by its first command, looking past `cd x &&`, `VAR=1`, the wrappers `env`, `time`, `command` and `sudo` (with their
+flags) and subshell parentheses; a name that is not plain (letters, digits and . _ + -) shows as
+`bash: ?`. The section lists
 every non-zero category, largest first, with the total last, and per unit with the same unit count as calls per
 unit (counts only when units are unknown). --json adds it as `tool_calls`. --raw does not change it.
 
@@ -64,6 +66,8 @@ MIN_SHARE_SHOWN = 0.002
 ACTIVE_GAP_CAP = 600  # seconds; a longer gap between API calls is idle time
 STATE_SET = "state-set.sh"
 WRAPPERS = ("time", "env", "command", "sudo")
+SUDO_VALUE_FLAGS = ("-u", "-g")
+COMMAND_NAME = re.compile(r"[A-Za-z0-9._+-]{1,40}")  # anything else is shown as `bash: ?`
 ENV_ASSIGN = re.compile(r"[A-Za-z_]\w*=")
 RESULT_LINE = re.compile(r"^[ \t]*result:.*$", re.M)
 RUN_DIR_PATH = re.compile(r"/teams/[^/]+/")
@@ -255,7 +259,8 @@ def find_run(state_paths):
 
 
 def parse_bash(command):
-    """Return the first command's basename and its arguments, looking past cd, VAR=value, env, time and subshells."""
+    """Return the first command's basename and its arguments, looking past cd, VAR=value, the wrappers env, time,
+    command and sudo (and their flags) and subshells."""
     line = next((ln.strip() for ln in command.split("\n") if ln.strip() and not ln.strip().startswith("#")), "")
     try:
         lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
@@ -266,7 +271,11 @@ def parse_bash(command):
     i = 0
     while i < len(toks):
         t = toks[i]
-        if t in ("(", "{") or t in WRAPPERS or ENV_ASSIGN.match(t):
+        if t in WRAPPERS:
+            i += 1
+            while i < len(toks) and toks[i].startswith("-"):
+                i += 2 if t == "sudo" and toks[i] in SUDO_VALUE_FLAGS else 1
+        elif t in ("(", "{") or ENV_ASSIGN.match(t):
             i += 1
         elif t == "cd" and i + 2 < len(toks) and toks[i + 2] in ("&&", ";"):
             i += 3
@@ -300,7 +309,8 @@ def describe_tool_call(name, inp):
         cmd, args = parse_bash(inp.get("command", ""))
         if cmd == STATE_SET:
             return STATE_SET, writes_result_via_state_set(args)
-        return (CAT_SCRIPTS if SCRIPTS.fullmatch(cmd) else "bash: " + cmd), False
+        plain = not cmd or COMMAND_NAME.fullmatch(cmd)
+        return (CAT_SCRIPTS if SCRIPTS.fullmatch(cmd) else "bash: " + (cmd if plain else "?")), False
     if name in ("Edit", "Write"):
         path = inp.get("file_path", "")
         if path.endswith("/state.md"):
@@ -317,7 +327,9 @@ def describe_tool_call(name, inp):
 
 def parse_time(stamp):
     try:
-        return datetime.fromisoformat(re.sub(r"\.\d+", "", stamp).replace("Z", "+00:00")).timestamp()
+        return datetime.fromisoformat(
+            re.sub(r"\.(\d+)", lambda m: "." + m.group(1)[:6].ljust(6, "0"), stamp).replace("Z", "+00:00")
+        ).timestamp()
     except (TypeError, ValueError):
         return None
 
@@ -325,7 +337,7 @@ def parse_time(stamp):
 def split_at_result(times, uses):
     """Split a session's active seconds and tool calls at its last result write (everything is "to result" if none)."""
     last = max((i for i, _, writes in uses if writes), default=None)
-    cut = len(times) - 1 if last is None else last
+    cut = len(times) - 1 if last is None else min(last, len(times) - 1)
 
     def active(lo, hi):
         gaps = (times[i] - times[i - 1] for i in range(max(lo, 1), hi + 1) if None not in (times[i], times[i - 1]))
@@ -335,8 +347,8 @@ def split_at_result(times, uses):
         "has_result": last is not None,
         "to_secs": active(0, cut),
         "after_secs": active(cut + 1, len(times) - 1),
-        "to_calls": sum(1 for i, _, _ in uses if i <= cut),
-        "after_calls": sum(1 for i, _, _ in uses if i > cut),
+        "to_calls": sum(1 for i, _, _ in uses if cut < 0 or i <= cut),
+        "after_calls": sum(1 for i, _, _ in uses if 0 <= cut < i),
     }
 
 
@@ -377,7 +389,7 @@ def read_calls(path):
                         if b.get("id") not in seen_tools:
                             seen_tools.add(b.get("id"))
                             cat, writes = describe_tool_call(b.get("name", "?"), b.get("input", {}))
-                            uses.append((call_of.setdefault(msg.get("id"), len(calls)), cat, writes))
+                            uses.append((call_of.get(msg.get("id"), max(len(calls) - 1, 0)), cat, writes))
             elif kind == "user":
                 pending += user_items(e, tool_cat)
             elif kind == "attachment":
@@ -541,14 +553,13 @@ def print_result_split(split):
     for label, key in (("to result", "to_result"), ("after result", "after_result")):
         side = split[key]
         hours = f"{side['active_hours']:.2f} h active"
-        calls = f"{side['tool_calls']} tool calls"
+        calls = f"{side['tool_calls']} tool call{'' if side['tool_calls'] == 1 else 's'}"
         if side["active_hours_per_unit"] is not None:
             hours += f" ({side['active_hours_per_unit']:.2f} per unit)"
             calls += f" ({side['tool_calls_per_unit']:.1f} per unit)"
         print(f"{label + ':':<13} {hours}, {calls}")
     missing = len(split["sessions_without_result"])
-    if missing:
-        print(f"{missing} sessions without a result: line, counted as to result")
+    print(f"{missing} session{'' if missing == 1 else 's'} without a result: line, counted as to result")
 
 
 def print_text(out):
