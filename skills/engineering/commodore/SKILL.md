@@ -85,10 +85,10 @@ Everything for a run lives in one run directory outside the source tree, so it s
 
 After a compaction, also re-read the current phase of the mission's procedure file (the mission table below names it): a compaction summary drops steps it doesn't name, such as how to wait on CI. Ship and wait on CI only with the commands on `state.md`'s `ship:` line; never write your own `gh run watch` or `sleep` loop.
 
-Change its structured parts only with `<team>/state-set.sh`, one field per call. It prints nothing when it works.
+Change its structured parts only with `<team>/state-set.sh`. It prints nothing when it works. At each milestone (a unit starts, a review round is done, a unit ships, a unit closes, a phase changes) update `state.md` in one batched call per section, not one call per field. A `--set` call is refused whole when any field in it is bad, and leaves `state.md` as it was.
 
-- The `key: value` lines under `## Mode, phase, current unit`: `state-set.sh <run> mode <key> <value>`.
-- The units, acceptance trace and non-blocking findings tables, a row addressed by its first column: `state-set.sh <run> <units|trace|findings> <row> <column> <value>`, `--add <row> [<column>=<value> …]` and `--drop <row>`. It refuses a status outside the table's set.
+- The `key: value` lines under `## Mode, phase, current unit`: `state-set.sh <run> mode <key> <value>`, or several keys in one call, `state-set.sh <run> mode --set <key>=<value> [<key>=<value> …]`.
+- The units, acceptance trace and non-blocking findings tables, a row addressed by its first column: `state-set.sh <run> <units|trace|findings> <row> <column> <value>` for one field, or `state-set.sh <run> <units|trace|findings> --set <row> <column>=<value> [<column>=<value> …] [--set <row> <column>=<value> …]` for several fields of one table in one call, across as many rows as you like. It refuses a status outside the table's set. `--add <row> [<column>=<value> …]` and `--drop <row>` stay one row per call. One `--set` call edits one section, so a milestone that touches two (a unit starts: `mode` and `units`) is one call per section.
 
 Edit the prose sections (ground rules, decisions and assumptions, open questions, live teammates, carry-forward checks, misses) with your file-editing tool. Never edit `state.md` with `python3 - <<EOF`, `sed -i` or a heredoc. A `state.md` from before these tables makes `state-set.sh` refuse the old sections: edit those by hand with the file-editing tool.
 
