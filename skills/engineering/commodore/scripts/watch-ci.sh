@@ -8,6 +8,8 @@
 RUN=${1:A}; source $RUN/team.env
 B=$2; WF=${3:-$CI_WORKFLOW}; REPO=${REPO:-$WORKTREE}
 SHA=$(git -C $REPO rev-parse --verify -q $B) || { echo "branch $B not found in $REPO"; exit 1; }
+# gh picks its repo from the working directory, so run it from the target repo, not wherever the coordinator started
+cd $REPO || { echo "can't cd to $REPO"; exit 1; }
 ERRF=$(mktemp); trap 'rm -f $ERRF' EXIT; ERR=
 for i in {1..30}; do
   ID=$(gh run list --branch $B --workflow $WF --json databaseId,headSha -q "[.[] | select(.headSha==\"$SHA\")][0].databaseId" 2>$ERRF) \
