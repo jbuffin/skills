@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Break down where a commodore coordinator's context goes, from its Claude Code session transcripts.
+"""Break down where a commodore coordinator's context goes, and its tool calls by category and the split at
+the run's result, from its Claude Code session transcripts.
 
 usage: coordinator-tokens.py [--days N] [--min-calls N] [--units N] [--raw] [--sessions] [--simulate-handoff]
                              [--json] [transcript.jsonl | projects-dir ...]
@@ -18,6 +19,24 @@ directory is the one whose state.md its tool calls name most, and its units are 
 
 --simulate-handoff replays each session as if the coordinator restarted fresh whenever its context passed a
 threshold, resetting to the session's first-call context plus RESUME_TOKENS for re-reading state and references.
+
+Tool calls by category counts the coordinator's own tool_use blocks (sub-agent traffic is skipped), once per id, in
+the categories state-set.sh, Edit/Write state.md, Write prompts/, Edit/Write run directory, Edit/Write repo,
+worktree or elsewhere, commodore scripts, `bash: <first command>`, Read, ToolSearch and other. A Bash call is named
+by its first command, looking past blank and comment lines, `cd x &&`, `VAR=1` (and the `;` or `&&` after it), the
+wrappers `env`, `time`, `command` and `sudo` (with their flags) and subshell parentheses; a name that is not plain
+(letters, digits and . _ + -) shows as `bash: ?`. The section lists every non-zero category, largest first, with
+the total last, and per unit with the same unit count as calls per
+unit (counts only when units are unknown). --json adds it as `tool_calls`. --raw does not change it.
+
+The result split cuts each session at its last call that writes the run's `result:` line: a `state-set.sh <run> mode
+result <value>` call (or `mode --set result=<value>`), or an Edit or Write of a state.md that adds a `result:` line.
+Active time is the sum of gaps of ACTIVE_GAP_CAP seconds or less between consecutive API calls, and a gap belongs to
+the side its later call falls on. Active hours and tool calls, in total and per unit, are shown "to result" and
+"after result"; --json adds them as `result_split`, and --sessions adds `has_result` per session. A session with no
+`result:` write counts as "to result" and is flagged "no result". The split is per session: a session that ends before
+its run's result (compaction, restart) is flagged "no result", and a resumed session that only does follow-up work
+after an earlier session wrote the result counts as "to result".
 """
 
 import argparse
@@ -26,8 +45,10 @@ import glob
 import json
 import os
 import re
+import shlex
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 COORD = re.compile(r"command-name>/[^<]*\b(commodore|agent-team[\w-]*)</command-name>")
@@ -43,6 +64,20 @@ STATE_PATH = re.compile(r"[~\w/.$-]*/teams/[\w.-]+/state\.md")
 HANDOFF_THRESHOLDS = (150_000, 200_000, 300_000)
 MIN_TRANSCRIPT_BYTES = 200_000
 MIN_SHARE_SHOWN = 0.002
+ACTIVE_GAP_CAP = 600  # seconds; a longer gap between API calls is idle time
+STATE_SET = "state-set.sh"
+WRAPPERS = ("time", "env", "command", "sudo")
+SUDO_VALUE_FLAGS = ("-u", "-g")
+COMMAND_NAME = re.compile(r"[A-Za-z0-9._+-]{1,40}")  # anything else is shown as `bash: ?`
+ENV_ASSIGN = re.compile(r"[A-Za-z_]\w*=")
+RESULT_LINE = re.compile(r"^[ \t]*result:.*$", re.M)
+RUN_DIR_PATH = re.compile(r"/teams/[^/]+/")
+PROMPTS_PATH = re.compile(r"/teams/[^/]+/prompts/")
+CAT_STATE_MD = "Edit/Write state.md"
+CAT_PROMPTS = "Write prompts/ (job files)"
+CAT_RUN_DIR = "Edit/Write run directory"
+CAT_REPO = "Edit/Write repo, worktree or elsewhere"
+CAT_SCRIPTS = "commodore scripts"
 
 # Raw categories collapse into these groups, first match wins.
 GROUPS = [
@@ -224,9 +259,109 @@ def find_run(state_paths):
     return None
 
 
+def parse_bash(command):
+    """Return the first command's basename and its arguments. Looks past comments, blank lines, line continuations,
+    cd x &&, VAR=value, the wrappers env, time, command and sudo (and their flags), subshell parentheses and the ; or
+    && that follows only such tokens. A line that holds nothing else is passed over for the next one."""
+    lines = [ln.strip() for ln in command.replace("\\\n", " ").split("\n")]
+    for line in (ln for ln in lines if ln and not ln.startswith("#")):
+        try:
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            toks = list(lexer)
+        except ValueError:
+            toks = line.replace("(", " ( ").split()
+        i = 0
+        while i < len(toks):
+            t = toks[i]
+            if t in WRAPPERS:
+                i += 1
+                while i < len(toks) and toks[i].startswith("-"):
+                    i += 2 if t == "sudo" and toks[i] in SUDO_VALUE_FLAGS else 1
+            elif t in ("(", "{", ";", "&&") or ENV_ASSIGN.match(t):
+                i += 1
+            elif t == "cd" and i + 2 < len(toks) and toks[i + 2] in ("&&", ";"):
+                i += 3
+            else:
+                break
+        rest = toks[i:]
+        name = re.split(r"[|;&]", rest[0])[0] if rest else ""
+        if name:
+            args = []
+            for t in rest[1:]:
+                if re.match(r"^[|;&]+$", t):
+                    break
+                args.append(t)
+            return os.path.basename(name), args
+    return "", []
+
+
+def has_new_result_line(old, new):
+    return bool(set(RESULT_LINE.findall(new)) - set(RESULT_LINE.findall(old)))
+
+
+def writes_result_via_state_set(args):
+    """True for `<run> mode result <value>` and the batch form `<run> mode --set result=<value> ...`."""
+    run_mode, field, rest = args[1:2], args[2:3], args[3:]
+    if run_mode != ["mode"] or not field:
+        return False
+    return field[0] == "result" or (field[0] == "--set" and any(a.startswith("result=") for a in rest))
+
+
+def describe_tool_call(name, inp):
+    """Return the tool call's category and whether it writes the run's `result:` line."""
+    if name == "Bash":
+        cmd, args = parse_bash(inp.get("command", ""))
+        if cmd == STATE_SET:
+            return STATE_SET, writes_result_via_state_set(args)
+        plain = not cmd or COMMAND_NAME.fullmatch(cmd)
+        return (CAT_SCRIPTS if SCRIPTS.fullmatch(cmd) else "bash: " + (cmd if plain else "?")), False
+    if name in ("Edit", "Write"):
+        path = inp.get("file_path", "")
+        if path.endswith("/state.md"):
+            if name == "Edit":
+                writes = has_new_result_line(inp.get("old_string", ""), inp.get("new_string", ""))
+            else:
+                writes = has_new_result_line("", inp.get("content", ""))
+            return CAT_STATE_MD, writes
+        if name == "Write" and PROMPTS_PATH.search(path):
+            return CAT_PROMPTS, False
+        return (CAT_RUN_DIR if RUN_DIR_PATH.search(path) else CAT_REPO), False
+    return (name if name in ("Read", "ToolSearch") else "other"), False
+
+
+def parse_time(stamp):
+    try:
+        return datetime.fromisoformat(
+            re.sub(r"\.(\d+)", lambda m: "." + m.group(1)[:6].ljust(6, "0"), stamp).replace("Z", "+00:00")
+        ).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def split_at_result(times, uses):
+    """Split a session's active seconds and tool calls at its last result write (everything is "to result" if none)."""
+    last = max((i for i, _, writes in uses if writes), default=None)
+    cut = len(times) - 1 if last is None else min(last, len(times) - 1)
+
+    def active(lo, hi):
+        gaps = (times[i] - times[i - 1] for i in range(max(lo, 1), hi + 1) if None not in (times[i], times[i - 1]))
+        return sum(g for g in gaps if 0 <= g <= ACTIVE_GAP_CAP)
+
+    return {
+        "has_result": last is not None,
+        "to_secs": active(0, cut),
+        "after_secs": active(cut + 1, len(times) - 1),
+        "to_calls": sum(1 for i, _, _ in uses if cut < 0 or i <= cut),
+        "after_calls": sum(1 for i, _, _ in uses if 0 <= cut < i),
+    }
+
+
 def read_calls(path):
-    """Return the session's model, API calls in order as (context_tokens, items_added_before_it, usage), and run."""
+    """Return the session's model, API calls in order as (context_tokens, items_added_before_it, usage), run, and
+    the API call times plus its tool calls as (call index, category, writes result)."""
     tool_cat, pending, calls, seen = {}, [], [], set()
+    times, uses, seen_tools, call_of = [], [], set(), {}
     state_paths = collections.Counter()
     model = None
     with open(path, errors="replace") as f:
@@ -249,16 +384,22 @@ def read_calls(path):
                         for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
                     )
                     calls.append((ctx, pending, usage))
+                    times.append(parse_time(e.get("timestamp")))
+                    call_of[msg.get("id")] = len(calls) - 1
                     pending = []
                 pending += assistant_items(msg, tool_cat)
                 for b in msg.get("content") or []:
                     if b.get("type") == "tool_use":
                         state_paths.update(STATE_PATH.findall(json.dumps(b.get("input", {}))))
+                        if b.get("id") not in seen_tools:
+                            seen_tools.add(b.get("id"))
+                            cat, writes = describe_tool_call(b.get("name", "?"), b.get("input", {}))
+                            uses.append((call_of.get(msg.get("id"), max(len(calls) - 1, 0)), cat, writes))
             elif kind == "user":
                 pending += user_items(e, tool_cat)
             elif kind == "attachment":
                 pending += attachment_items(e)
-    return model, calls, find_run(state_paths)
+    return model, calls, find_run(state_paths), times, uses
 
 
 def attribute(calls):
@@ -322,6 +463,43 @@ def find_transcripts(paths, days):
     return files
 
 
+def per_unit(value, units, digits):
+    return round(value / units, digits) if units else None
+
+
+def tool_call_section(sessions, units):
+    counts = collections.Counter()
+    for s in sessions:
+        counts.update(s["tool_counts"])
+    total = sum(counts.values())
+    return {
+        "total": total,
+        "per_unit": per_unit(total, units, 1),
+        "categories": [
+            {"category": k, "calls": n, "per_unit": per_unit(n, units, 1)} for k, n in counts.most_common() if n
+        ],
+    }
+
+
+def result_split_section(sessions, units):
+    def side(secs, calls):
+        hours = secs / 3600
+        return {
+            "active_hours": round(hours, 2),
+            "active_hours_per_unit": per_unit(hours, units, 2),
+            "tool_calls": calls,
+            "tool_calls_per_unit": per_unit(calls, units, 1),
+        }
+
+    return {
+        "to_result": side(sum(s["split"]["to_secs"] for s in sessions), sum(s["split"]["to_calls"] for s in sessions)),
+        "after_result": side(
+            sum(s["split"]["after_secs"] for s in sessions), sum(s["split"]["after_calls"] for s in sessions)
+        ),
+        "sessions_without_result": [s["path"] for s in sessions if not s["split"]["has_result"]],
+    }
+
+
 def report(sessions, args):
     carry, added = collections.Counter(), collections.Counter()
     for s in sessions:
@@ -346,6 +524,8 @@ def report(sessions, args):
             {"source": k, "carry": round(v), "share": round(v / total, 4), "added": round(added[k])}
             for k, v in carry.most_common()
         ],
+        "tool_calls": tool_call_section(sessions, units),
+        "result_split": result_split_section(sessions, units),
     }
     if args.simulate_handoff:
         out["handoff"] = []
@@ -357,8 +537,34 @@ def report(sessions, args):
             )
     if args.sessions:
         keys = ("path", "model", "calls", "peak", "compactions", "cache_read", "run", "units")
-        out["per_session"] = [{k: s[k] for k in keys} for s in sessions]
+        out["per_session"] = [{**{k: s[k] for k in keys}, "has_result": s["split"]["has_result"]} for s in sessions]
     return out
+
+
+def print_tool_calls(tc):
+    known = tc["per_unit"] is not None
+    print(
+        f"\n{'calls':>6}  {'per unit':>8}  tool calls by category"
+        if known
+        else f"\n{'calls':>6}  tool calls by category"
+    )
+    for row in [*tc["categories"], {"category": "total", "calls": tc["total"], "per_unit": tc["per_unit"]}]:
+        column = f"{row['per_unit']:8.1f}  " if known else ""
+        print(f"{row['calls']:6}  {column}{row['category']}")
+
+
+def print_result_split(split):
+    print()
+    for label, key in (("to result", "to_result"), ("after result", "after_result")):
+        side = split[key]
+        hours = f"{side['active_hours']:.2f} h active"
+        calls = f"{side['tool_calls']} tool call{'' if side['tool_calls'] == 1 else 's'}"
+        if side["active_hours_per_unit"] is not None:
+            hours += f" ({side['active_hours_per_unit']:.2f} per unit)"
+            calls += f" ({side['tool_calls_per_unit']:.1f} per unit)"
+        print(f"{label + ':':<13} {hours}, {calls}")
+    missing = len(split["sessions_without_result"])
+    print(f"{missing} session{'' if missing == 1 else 's'} without a result: line, counted as to result")
 
 
 def print_text(out):
@@ -378,6 +584,8 @@ def print_text(out):
         if row["share"] < MIN_SHARE_SHOWN:
             break
         print(f"{row['carry'] / 1e6:8.1f}M {row['share']:6.1%} {row['added'] / 1e3:8.1f}k  {row['source']}")
+    print_tool_calls(out["tool_calls"])
+    print_result_split(out["result_split"])
     for h in out.get("handoff", []):
         print(
             f"handoff above {h['threshold'] // 1000}k: {h['saving']:.0%} fewer input tokens, {h['handoffs']} handoffs"
@@ -385,7 +593,8 @@ def print_text(out):
     for s in out.get("per_session", []):
         units = f"{s['units']} units" if s["units"] is not None else "? units"
         peak = f"peak {s['peak'] / 1e3:4.0f}k"
-        print(f"{s['calls']:5} calls  {peak}  {s['compactions']} compactions  {units:>8}  {s['path']}")
+        flag = "" if s["has_result"] else "no result  "
+        print(f"{s['calls']:5} calls  {peak}  {s['compactions']} compactions  {units:>8}  {flag}{s['path']}")
 
 
 def main():
@@ -402,7 +611,7 @@ def main():
 
     sessions = []
     for path in find_transcripts(args.paths, args.days):
-        model, calls, run = read_calls(path)
+        model, calls, run, times, uses = read_calls(path)
         if len(calls) < args.min_calls:
             continue
         added, carry, compactions = attribute(calls)
@@ -417,6 +626,8 @@ def main():
                 "added": added,
                 "carry": carry,
                 "series": calls,
+                "tool_counts": collections.Counter(cat for _, cat, _ in uses),
+                "split": split_at_result(times, uses),
                 "run": run and run.replace(str(Path.home()), "~"),
                 "units": run and count_units(os.path.join(run, "state.md")),
             }
