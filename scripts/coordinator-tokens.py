@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Break down where a commodore coordinator's context goes, and its tool calls by category and around the run's result.
+"""Break down where a commodore coordinator's context goes, and its tool calls by category and the split at
+the run's result, from its Claude Code session transcripts.
 
 usage: coordinator-tokens.py [--days N] [--min-calls N] [--units N] [--raw] [--sessions] [--simulate-handoff]
                              [--json] [transcript.jsonl | projects-dir ...]
@@ -22,10 +23,10 @@ threshold, resetting to the session's first-call context plus RESUME_TOKENS for 
 Tool calls by category counts the coordinator's own tool_use blocks (sub-agent traffic is skipped), once per id, in
 the categories state-set.sh, Edit/Write state.md, Write prompts/, Edit/Write run directory, Edit/Write repo,
 worktree or elsewhere, commodore scripts, `bash: <first command>`, Read, ToolSearch and other. A Bash call is named
-by its first command, looking past `cd x &&`, `VAR=1`, the wrappers `env`, `time`, `command` and `sudo` (with their
-flags) and subshell parentheses; a name that is not plain (letters, digits and . _ + -) shows as
-`bash: ?`. The section lists
-every non-zero category, largest first, with the total last, and per unit with the same unit count as calls per
+by its first command, looking past blank and comment lines, `cd x &&`, `VAR=1` (and the `;` or `&&` after it), the
+wrappers `env`, `time`, `command` and `sudo` (with their flags) and subshell parentheses; a name that is not plain
+(letters, digits and . _ + -) shows as `bash: ?`. The section lists every non-zero category, largest first, with
+the total last, and per unit with the same unit count as calls per
 unit (counts only when units are unknown). --json adds it as `tool_calls`. --raw does not change it.
 
 The result split cuts each session at its last call that writes the run's `result:` line: a `state-set.sh <run> mode
@@ -259,36 +260,40 @@ def find_run(state_paths):
 
 
 def parse_bash(command):
-    """Return the first command's basename and its arguments, looking past cd, VAR=value, the wrappers env, time,
-    command and sudo (and their flags) and subshells."""
-    line = next((ln.strip() for ln in command.split("\n") if ln.strip() and not ln.strip().startswith("#")), "")
-    try:
-        lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
-        toks = list(lexer)
-    except ValueError:
-        toks = line.replace("(", " ( ").split()
-    i = 0
-    while i < len(toks):
-        t = toks[i]
-        if t in WRAPPERS:
-            i += 1
-            while i < len(toks) and toks[i].startswith("-"):
-                i += 2 if t == "sudo" and toks[i] in SUDO_VALUE_FLAGS else 1
-        elif t in ("(", "{") or ENV_ASSIGN.match(t):
-            i += 1
-        elif t == "cd" and i + 2 < len(toks) and toks[i + 2] in ("&&", ";"):
-            i += 3
-        else:
-            break
-    rest = toks[i:]
-    name = re.split(r"[|;&]", rest[0])[0] if rest else ""
-    args = []
-    for t in rest[1:]:
-        if re.match(r"^[|;&]+$", t):
-            break
-        args.append(t)
-    return os.path.basename(name), args
+    """Return the first command's basename and its arguments. Looks past comments, blank lines, line continuations,
+    cd x &&, VAR=value, the wrappers env, time, command and sudo (and their flags), subshell parentheses and the ; or
+    && that follows only such tokens. A line that holds nothing else is passed over for the next one."""
+    lines = [ln.strip() for ln in command.replace("\\\n", " ").split("\n")]
+    for line in (ln for ln in lines if ln and not ln.startswith("#")):
+        try:
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            toks = list(lexer)
+        except ValueError:
+            toks = line.replace("(", " ( ").split()
+        i = 0
+        while i < len(toks):
+            t = toks[i]
+            if t in WRAPPERS:
+                i += 1
+                while i < len(toks) and toks[i].startswith("-"):
+                    i += 2 if t == "sudo" and toks[i] in SUDO_VALUE_FLAGS else 1
+            elif t in ("(", "{", ";", "&&") or ENV_ASSIGN.match(t):
+                i += 1
+            elif t == "cd" and i + 2 < len(toks) and toks[i + 2] in ("&&", ";"):
+                i += 3
+            else:
+                break
+        rest = toks[i:]
+        name = re.split(r"[|;&]", rest[0])[0] if rest else ""
+        if name:
+            args = []
+            for t in rest[1:]:
+                if re.match(r"^[|;&]+$", t):
+                    break
+                args.append(t)
+            return os.path.basename(name), args
+    return "", []
 
 
 def has_new_result_line(old, new):

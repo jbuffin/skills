@@ -595,7 +595,33 @@ def usage_less(session, seconds, *tools):
     session.lines.append(entry)
 
 
+ASSIGNMENT_TABLE = [
+    ("A=1; git status", "bash: git"),
+    ("A=1 B=2 && make", "bash: make"),
+    ("X=1;Y=2; ls", "bash: ls"),
+    ("A=1\ngit log", "bash: git"),
+    ("# note\nA=1\n\nls", "bash: ls"),
+    ("A=1 \\\n  make", "bash: make"),
+    ("A=1 | tail", "bash: "),  # pinned: a pipe is not skipped, so the name stays empty
+    ("A=1", "bash: "),
+    ("# only a comment", "bash: "),
+]
+
+
 class BashNameCase(TempDirCase):
+    def test_assignments_are_passed_over_to_the_command_after_them(self):
+        for command, category in ASSIGNMENT_TABLE:
+            with self.subTest(command=command):
+                self.assertEqual(counts(run_json(one_call(self.tmp, bash(command)))), {category: 1})
+
+    def test_a_result_write_after_an_assignment_is_still_a_result_write(self):
+        s = Session(self.tmp, "assign.jsonl")
+        s.call(0, bash("A=1; /x/state-set.sh /r mode result done"))
+        s.call(60, bash("git status"))
+        out = run_json(s.save())
+        self.assertEqual(counts(out), {STATE: 1, "bash: git": 1})
+        self.assertEqual(out["result_split"]["after_result"]["tool_calls"], 1)
+
     def test_wrapper_flags_are_skipped(self):
         for command, category in WRAPPER_TABLE:
             with self.subTest(command=command):
