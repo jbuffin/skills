@@ -1,0 +1,6 @@
+#!/bin/zsh
+# usage: list-skills <team-dir> ...   (see ../CONTRACT.md)
+# Runs the run harness's own list-skills: the crew boats run that harness, in the coordinator's environment.
+[[ -d $1 ]] || { sed -n 2p $0; exit 5; }
+source ${0:A:h}/lib.zsh
+exec $(harness_driver $1)/list-skills "$@"

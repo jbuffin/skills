@@ -8,15 +8,23 @@
 #   PERMISSION_MODE  teammate permission mode (default auto); same class as the coordinator, or messages are held
 #   VIEWER           none | cmux | tmux; optional panes that attach to a teammate; closing one never stops it
 #   HARNESS          the harness the run was started from (default claude); selects scripts/drivers/<HARNESS>
+#   ADMIRAL_SHIP     the Admiral ship the run lives in; non-empty selects the admiral driver (claude harness only), from the
+#                    caller's environment or team.env. The caller's environment wins. Pin it in team.env to keep a run on its ship
 #   REPO             a checkout teammates must never start in
 #   STALL_MIN        minutes a working teammate may go without writing to its transcript before STALL (default 10)
 # HARNESS comes from team.env alone, never from the caller's environment.
 unset HARNESS
+ADMIRAL_SHIP_ENV=$ADMIRAL_SHIP   # what the caller's environment holds; an autopilot caller may pass --ship only for that
 [[ -f $D/team.env ]] && source $D/team.env
+[[ -n $ADMIRAL_SHIP_ENV ]] && ADMIRAL_SHIP=$ADMIRAL_SHIP_ENV
 : ${MODEL:=sonnet}; : ${ADVISOR:=opus}; : ${STALL_MIN:=10}; : ${PERMISSION_MODE:=auto}; : ${VIEWER:=none}
 : ${HARNESS:=claude}   # a team.env from before drivers has no HARNESS line; every earlier run was Claude
 [[ $HARNESS =~ '^[a-z0-9-]+$' ]] || { echo "invalid HARNESS '$HARNESS' in $D/team.env: use lowercase letters, digits and '-'"; exit 5; }
 DRIVER=${0:A:h}/drivers/$HARNESS
+HARNESS_DRIVER=$DRIVER   # the run harness's own driver; the admiral driver defers to it
+# Inside an Admiral ship the host driver launches, messages, watches and stops teammates. Only the claude harness has one so
+# far; the others keep drivers/$HARNESS there.
+[[ -n $ADMIRAL_SHIP && $HARNESS == claude ]] && DRIVER=${0:A:h}/drivers/admiral
 : ${CMUX:=${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}}
 REG=$D/teammates.tsv     # name id tasked-epoch|closed viewer-ref|- workdir
 mkdir -p $D/reports; [[ -e $REG ]] || touch $REG 2>/dev/null   # quiet in a writer's sandbox, which can't write here

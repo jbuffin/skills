@@ -1,0 +1,34 @@
+#!/bin/zsh
+# usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see ../CONTRACT.md)
+# Starts the teammate as an Admiral crew boat running the claude harness. TEAMMATE_ROLE, when set, becomes --role.
+# Admiral exits map to the contract's: 5 and 2 (name in use, usage, not in a ship) to 5, anything else to 1. Never exits 2:
+# there is no background-session fallback inside a ship.
+[[ $# -eq 6 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+ROLE=$TEAMMATE_ROLE
+[[ $NAME =~ '^[a-z0-9-]+$' ]] || { echo "invalid teammate name '$NAME': Admiral accepts $NAME_RULE only"; exit 5; }
+[[ -z $ROLE || $ROLE =~ '^[a-z0-9-]+$' ]] || { echo "invalid role '$ROLE': Admiral accepts $NAME_RULE only"; exit 5; }
+command -v admiral >/dev/null || { echo "admiral is not on PATH"; exit 1; }
+crew_takes_arg || { echo "$OLD_ADMIRAL"; exit 5; }
+
+# Admiral puts the last --arg right before the prompt, and --disallowedTools takes several values, so --model always follows it.
+ARGS=()
+[[ -n $RO ]] && ARGS+=(--arg --disallowedTools --arg "Edit(/$W/**)" --arg "NotebookEdit(/$W/**)")
+[[ $ADVISOR != none ]] && ARGS+=(--arg --advisor --arg $ADVISOR)
+ARGS+=(--arg --model --arg $CHOSEN)
+# Under autopilot the boat inherits the dock's mode: Admiral refuses any looser one, and the default (auto) would block every launch.
+[[ $ADMIRAL_AUTOPILOT != 1 ]] && ARGS+=(--arg --permission-mode --arg $PERMISSION_MODE)
+ROLE_ARG=(); [[ -n $ROLE ]] && ROLE_ARG=(--role $ROLE)
+
+OUT=$(admiral crew launch --name $NAME --dir $W --harness claude $SHIP_ARG $ROLE_ARG $ARGS \
+  -- "You are teammate $NAME. Read $P and do exactly what it says." 2>&1)
+RC=$?
+if (( RC != 0 )); then
+  print -r -- "$OUT"
+  (( RC == 5 || RC == 2 )) && exit 5
+  exit 1
+fi
+echo "$NAME -"
+echo "  board: admiral attach ${ADMIRAL_SHIP} $NAME   ·   list: admiral crew list --ship ${ADMIRAL_SHIP}   ·   output: teammate-tail.sh"

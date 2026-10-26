@@ -9,7 +9,8 @@
 # --read-only keeps the teammate from editing files in <workdir> (a reviewer, a brief checker); how strictly, how it
 # gets its report out, the advisor and what exit 2 (no background session) means depend on the harness: see
 # references/harness-<harness>.md.
-# With --role, EFFORT_<ROLE> from team.env goes to the driver's launch as TEAMMATE_EFFORT (empty otherwise).
+# With --role, EFFORT_<ROLE> from team.env goes to the driver's launch as TEAMMATE_EFFORT (empty otherwise), and the role
+# itself as TEAMMATE_ROLE (empty without --role); the admiral driver names the crew boat's role with it.
 SELF=${0:A}
 usage() { sed -n 2,12p $SELF; exit 5; }
 RO=; MODEL_OPT=; ROLE=
@@ -51,7 +52,7 @@ TOP=$(git -C $W rev-parse --show-toplevel 2>/dev/null)
 [[ -n $REPO && ${${TOP:-$W}:A} == ${REPO:A} ]] && { echo "refusing to start $NAME in the repository's own checkout ($REPO); give it a worktree"; exit 5; }
 [[ -f $P ]] || { echo "missing prompt file $P"; exit 5; }
 # The driver starts the session (and any viewer pane). Success prints "<id> <viewer|->", then the lines to show after "launched".
-OUT=$(export TEAMMATE_EFFORT=$EFFORT; drv launch $D $NAME $W $CHOSEN $P ${RO:-0})
+OUT=$(export TEAMMATE_EFFORT=$EFFORT TEAMMATE_ROLE=$ROLE; drv launch $D $NAME $W $CHOSEN $P ${RO:-0})
 RC=$?
 (( RC == 9 )) && exit 5   # the driver has no launch operation; drv already said so on stderr
 (( RC != 0 )) && { print -r -- "$OUT"; exit $RC; }

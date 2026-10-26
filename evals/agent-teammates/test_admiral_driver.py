@@ -249,6 +249,7 @@ class TestLaunchExitCodes(LaunchCase):
                 self.assertEqual(len([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]]), 1)
                 self.assertNotIn("NO_BG", done.text)
                 self.assertNotEqual(done.code, 2)
+                (self.w.ctl / "admiral.log").unlink()
 
     def test_old_admiral_without_arg_refuses_with_5_and_names_the_version(self):
         self.w.ctl_write("usage.txt", USAGE_OLD)

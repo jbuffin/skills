@@ -1,0 +1,13 @@
+#!/bin/zsh
+# usage: stop <team-dir> <session-id>   (see ../CONTRACT.md)
+# Closes the crew boat when `crew list` shows it. Exits 0 only if it was underway or needs_you; an anchored boat is still
+# closed but exits 1, and a boat that isn't listed exits 1 with nothing closed.
+[[ $# -eq 2 ]] || { sed -n 2,4p $0; exit 5; }
+D=${1:A}; ID=$2
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || exit 1
+state=$(print -r -- "$listing" | jq -r --arg n $ID '.[] | select(.name == $n) | .state // ""' 2>/dev/null) || exit 1
+[[ -n $state ]] || exit 1
+admiral crew close $ID $SHIP_ARG >/dev/null 2>&1 || exit 1
+[[ $state != anchored ]]
