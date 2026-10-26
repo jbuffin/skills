@@ -4,7 +4,7 @@ Inside an Admiral ship (`ADMIRAL_SHIP` set), the admiral driver launches a Codex
 
 ## Considered options
 
-- **Every teammate is a crew boat, read-only ones too**: rejected. Interactive Codex has no `--ignore-rules` (it is an `exec` flag), so the user's git allow rules would apply to a read-only boat, and an allow rule runs its command outside the sandbox. A read-only Copilot boat can't write its report without a permission prompt. Headless keeps today's read-only guarantee and report path.
+- **Every teammate is a crew boat, read-only ones too**: rejected. Interactive Codex has no `--ignore-rules` (it is an `exec` flag), so the user's git allow rules would apply to a read-only teammate run as a boat, and an allow rule runs its command outside the sandbox. A read-only Copilot teammate run as a boat can't write its report without a permission prompt. Headless keeps today's read-only guarantee and report path.
 - **Keep Codex and Copilot headless everywhere**: rejected. Inside a ship the engineer wants Admiral as the viewer and live re-tasking, and #115 asks for "every harness".
 - **Select the driver per harness in `team-env.zsh` alone**: rejected. The choice is per teammate (writer or read-only), so the routing lives in `drivers/admiral`: `launch` records a handed-over teammate's id in `<team-dir>/admiral-delegated`, and `send`, `stop`, `status` and `tail` check that file first.
 
