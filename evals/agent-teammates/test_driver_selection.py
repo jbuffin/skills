@@ -9,11 +9,12 @@ Run from the repo root: python3 -m unittest evals/agent-teammates/test_driver_se
 """
 
 import sys
+import time
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from admiral_world import SCRIPTS, SHIP, WorldCase
+from admiral_world import SCRIPTS, SHIP, WorldCase, boat, rfc3339
 
 LAUNCH = SCRIPTS / "launch-teammate.sh"
 RETASK = SCRIPTS / "retask.sh"
@@ -89,22 +90,66 @@ class TestOutsideAdmiral(SelectionCase):
 
 
 class TestOtherHarnessesInsideAdmiral(SelectionCase):
-    """decision 6: until u2, a HARNESS other than claude keeps drivers/<HARNESS> inside Admiral."""
+    """u2 overturns u1's decision 6: inside a ship the admiral driver is chosen for every HARNESS (decision 3), except
+    under ADMIRAL_AUTOPILOT=1 with a harness other than claude (decision 2), which keeps drivers/<HARNESS>."""
 
-    def test_codex_keeps_its_own_driver(self):
+    def test_codex_selects_the_admiral_driver(self):
         self.w.write_team_env(harness="codex", extra=[f"ADMIRAL_SHIP={SHIP}"])
-        done = self.retask()
-        self.assertNotEqual(done.code, OK)
-        self.assertIn("codex", done.text.lower())
-        self.assertEqual(self.sent_through_admiral(), [])
-        self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
+        self.assertAdmiral(self.retask())
 
-    def test_copilot_keeps_its_own_driver(self):
+    def test_copilot_selects_the_admiral_driver(self):
         self.w.write_team_env(harness="copilot")
-        done = self.retask()
-        self.assertNotEqual(done.code, OK)
-        self.assertIn("copilot", done.text.lower())
-        self.assertEqual(self.w.admiral(), [])
+        self.assertAdmiral(self.retask())
+
+    def test_a_ship_from_team_env_alone_selects_it_for_codex(self):
+        self.w.write_team_env(harness="codex", extra=[f"ADMIRAL_SHIP={SHIP}"])
+        self.assertAdmiral(self.retask(ship=None))
+
+    def forget_admiral_calls(self):
+        (self.w.ctl / "admiral.log").unlink(missing_ok=True)
+
+    def test_codex_and_copilot_outside_a_ship_keep_their_own_driver(self):
+        for harness in ("codex", "copilot"):
+            with self.subTest(harness=harness):
+                self.w.write_team_env(harness=harness)
+                self.assertAdmiral(self.retask())  # inside the ship the same team goes through Admiral
+                self.forget_admiral_calls()
+                done = self.retask(ship=None)
+                self.assertNotEqual(done.code, OK)
+                self.assertIn(harness, done.text.lower())
+                self.assertEqual(self.w.admiral(), [])
+
+    def test_autopilot_keeps_the_harness_driver_for_codex_and_copilot(self):
+        for harness in ("codex", "copilot"):
+            with self.subTest(harness=harness):
+                self.w.write_team_env(harness=harness)
+                self.assertAdmiral(self.retask())  # without autopilot the same team goes through Admiral
+                self.forget_admiral_calls()
+                done = self.retask(ADMIRAL_AUTOPILOT="1")
+                # the harness driver has no session for alpha, which is how the choice shows
+                self.assertNotEqual(done.code, OK)
+                self.assertIn(harness, done.text.lower())
+                self.assertEqual(self.w.admiral(), [])
+
+    def test_autopilot_launch_runs_the_harness_driver_not_a_crew_boat(self):
+        for harness in ("codex", "copilot"):
+            with self.subTest(harness=harness):
+                self.w.write_team_env(harness=harness)
+                self.w.prompt("beta")
+                self.w.prompt("gamma")
+                self.w.boats(boat("beta", last_activity=rfc3339(time.time())))
+                opts = ("--role", "test-writer", self.w.team, "beta", self.w.work)
+                done = self.w.run(LAUNCH, *opts)
+                self.assertEqual(done.code, OK, done.text)
+                self.assertEqual(len(self.w.crew_calls("launch")), 1, "without autopilot a writer is a crew boat")
+                self.forget_admiral_calls()
+                done = self.w.run(LAUNCH, *opts[:2], self.w.team, "gamma", self.w.work, ADMIRAL_AUTOPILOT="1")
+                self.assertEqual(self.w.crew_calls("launch"), [])
+                self.assertEqual(done.code, OK, done.text)
+                self.assertTrue(self.w.wait_finished(harness), done.text)
+                self.assertEqual(len(self.w.calls(harness)), 1)
+                (self.w.ctl / f"{harness}.finished").unlink()
+                (self.w.ctl / f"{harness}.log").unlink()
 
 
 if __name__ == "__main__":
