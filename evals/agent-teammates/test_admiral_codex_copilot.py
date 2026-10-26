@@ -241,10 +241,10 @@ class TestCopilotWriterLaunch(LaunchCase):
 
     def test_the_writer_flags_without_an_effort(self):
         self.w.write_team_env(harness="copilot", extra=["MODEL_TEST_WRITER=gpt-5.5"])
-        args, groups, order = self.groups()
+        args, groups, _ = self.groups()
         self.assertEqual(
-            sorted(order),
-            sorted(["--add-dir", "--allow-all-tools", "--available-tools", "--deny-tool", "--model", "--no-ask-user"]),
+            sorted(groups),
+            ["--add-dir", "--allow-all-tools", "--available-tools", "--deny-tool", "--model", "--no-ask-user"],
         )
         self.assertEqual(groups["--no-ask-user"], [[]])
         self.assertEqual(groups["--allow-all-tools"], [[]])
@@ -353,6 +353,8 @@ class ReadOnlyDelegation:
         self.w.write_team_env(harness=self.harness, extra=["MODEL_REVIEWER=gpt-5.5", "EFFORT_REVIEWER=high"])
         self.w.prompt("alpha")
         self.w.boats()
+        # a fake kept alive by <tool>.sleep must not outlive a test that failed before it stopped the teammate
+        self.addCleanup(lambda: self.w.run(CLOSE, self.w.team, "alpha"))
 
     # per-harness knowledge
     def assert_headless_argv(self, argv):
@@ -670,6 +672,13 @@ class RawTail:
         self.assertEqual(done.code, OK, done.text)
         self.assertEqual(done.out.splitlines()[1:], [long[: self.CUT], short])
         self.assertEqual(len(done.out.splitlines()[1]), self.CUT)
+
+    def test_the_cut_counts_characters_not_bytes(self):
+        long = "é" * 400
+        path = self.transcript([long])
+        done = self.tail(path, 1)
+        self.assertEqual(done.code, OK, done.text)
+        self.assertEqual(done.out.splitlines()[1:], [long[: self.CUT]])
 
     def test_n_larger_than_the_file_prints_every_line(self):
         path = self.transcript(["one", "two"])

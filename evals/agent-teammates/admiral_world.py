@@ -123,22 +123,22 @@ with open(os.path.join(ctl, "codex.log"), "a") as log:
 if args[:1] == ["exec"]:
     resume = args[1:2] == ["resume"]
     thread = args[-2] if resume else read("codex.thread") or str(uuid.uuid4())
-    print(json.dumps({{"type": "thread.started", "thread_id": thread}}), flush=True)
+    print(json.dumps({{"type": "thread.started", "thread_id": thread}}, separators=(",", ":")), flush=True)
     delay = float(read("codex.sleep", "0") or 0)
     if delay:
         time.sleep(delay)
     msg = {{"type": "agent_message", "text": "codex report text"}}
-    print(json.dumps({{"type": "item.completed", "item": msg}}), flush=True)
+    print(json.dumps({{"type": "item.completed", "item": msg}}, separators=(",", ":")), flush=True)
     if "-o" in args:
         with open(args[args.index("-o") + 1], "w") as out:
             out.write("codex report text\\n")
-    print(json.dumps({{"type": "turn.completed"}}), flush=True)
+    print(json.dumps({{"type": "turn.completed"}}, separators=(",", ":")), flush=True)
 with open(os.path.join(ctl, "codex.finished"), "a") as done:
     done.write("1\\n")
 """
 
 FAKE_COPILOT = """#!{python}
-import json, os, sys, time
+import json, os, shlex, subprocess, sys, time
 ctl = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ctl")
 def read(name, default=""):
     try:
@@ -151,6 +151,10 @@ with open(os.path.join(ctl, "copilot.log"), "a") as log:
 delay = float(read("copilot.sleep", "0") or 0)
 if delay:
     time.sleep(delay)
+# the preflight's writer turn asks for one command to be run: "... the single word DONE: <command>"
+prompt = args[args.index("-p") + 1] if "-p" in args else ""
+if "the single word DONE: " in prompt:
+    subprocess.run(shlex.split(prompt.split("the single word DONE: ", 1)[1]), check=False)
 print("copilot report text")
 with open(os.path.join(ctl, "copilot.finished"), "a") as done:
     done.write("1\\n")
