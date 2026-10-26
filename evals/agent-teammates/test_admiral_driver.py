@@ -296,6 +296,24 @@ class TestLaunchWait(LaunchCase):
         done = self.launch("--role", "test-writer")
         self.assertEqual(done.code, USAGE, done.text)
 
+    def test_a_launch_wait_that_is_not_whole_seconds_exits_5_before_any_launch(self):
+        for bad in ("abc", "1.5", "-3"):
+            with self.subTest(wait=bad):
+                self.w.write_team_env(extra=[f"LAUNCH_WAIT={bad}"])
+                done = self.launch("--role", "test-writer")
+                self.assertEqual(done.code, USAGE, done.text)
+                self.assertIn("LAUNCH_WAIT", done.text)
+                self.assertEqual(self.w.admiral(), [])
+
+    def test_a_launch_poll_that_is_not_a_non_negative_number_exits_5_before_any_launch(self):
+        for bad in ("abc", "-1", "1.", ".5"):
+            with self.subTest(poll=bad):
+                self.w.write_team_env(extra=[f"LAUNCH_POLL={bad}"])
+                done = self.launch("--role", "test-writer")
+                self.assertEqual(done.code, USAGE, done.text)
+                self.assertIn("LAUNCH_POLL", done.text)
+                self.assertEqual(self.w.admiral(), [])
+
     def test_a_boat_that_exits_during_startup_closes_and_exits_1(self):
         self.w.boats(boat("alpha", "anchored"))
         done = self.launch("--role", "test-writer", LAUNCH_POLL="0")

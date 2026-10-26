@@ -24,3 +24,16 @@ harness_driver() {
   [[ $h == admiral ]] && { echo "admiral is a host driver, not a harness: set HARNESS to the harness and ADMIRAL_SHIP to the ship" >&2; return 5; }
   print -r -- $DRIVERS/$h
 }
+# delegated <id> [listing]: 0 when <id> is a read-only Codex/Copilot teammate that launch handed to the harness driver
+# (headless, so no crew boat). Needs team-env.zsh sourced. The id must be in <team>/admiral-delegated, have a registry row,
+# and not be an open crew boat's name in `crew list --json` (pass the listing when the caller already holds one). The checks
+# after the file are there because a Copilot writer can write the team dir (--add-dir <team-dir>): it could put a live boat's
+# name in the file and steer `stop` or `send` away from that boat. A listing that fails counts as not delegated.
+delegated() {
+  [[ -f $D/admiral-delegated ]] && grep -qxF -- $1 $D/admiral-delegated || return 1
+  awk -v i=$1 '$2 == i {f = 1} END {exit !f}' $REG || return 1
+  local listing=$2
+  [[ -n $listing ]] || listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || return 1
+  [[ -n $listing ]] || return 1
+  [[ -z $(print -r -- $listing | jq -r --arg n $1 '.[] | select(.name == $n) | .name' 2>/dev/null) ]]
+}

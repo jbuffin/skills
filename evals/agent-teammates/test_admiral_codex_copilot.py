@@ -303,7 +303,7 @@ class WritersAreCrewBoats:
     def setUp(self):
         super().setUp()
         self.w.write_team_env(harness=self.harness)
-        self.w.register("alpha", epoch=1000)
+        self.w.register("alpha")
 
     def test_retask_sends_a_pointer_through_crew_send(self):
         msg = self.w.message("a long job\n")

@@ -1,11 +1,13 @@
 #!/bin/zsh
 # usage: send <team-dir> <session-id> <message-file>   (see ../CONTRACT.md)
 # Types a pointer to the message file into the crew boat. The pointer goes on stdin, never the command line. Admiral's exit 4
-# (anchored) becomes 1, because retask.sh's own exit 4 means SEND=tool.
+# (anchored) becomes 1, because retask.sh's own exit 4 means SEND=tool. A read-only Codex/Copilot teammate (`delegated`, in
+# lib.zsh) is no crew boat: its harness driver's send runs instead.
 [[ $# -eq 3 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; ID=$2; M=${3:A}
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
+delegated $ID && exec $HARNESS_DRIVER/send "$@"
 command -v admiral >/dev/null || { echo "admiral is not on PATH"; exit 1; }
 print -r -- "You are teammate $ID. Read $M and do exactly what it says." | admiral crew send $ID $SHIP_ARG
 rc=$?

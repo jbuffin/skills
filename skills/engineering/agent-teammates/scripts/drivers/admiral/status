@@ -2,13 +2,17 @@
 # usage: status <team-dir>   (see ../CONTRACT.md)
 # One line per teammate the registry holds an open row for: underway is working, needs_you is blocked, anchored is stopped, and
 # a boat absent from `crew list` is missing. Boats the run didn't register are not printed (a ship holds other boats too).
-# The epoch is last_activity, `-` until the boat's first hook.
+# The epoch is last_activity, `-` until the boat's first hook. A read-only Codex/Copilot teammate (`delegated`, in lib.zsh) is
+# no crew boat: its line comes from the harness driver's status, after the boats', and it is never missing.
 [[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
 ids=(${(f)"$(awk '{last[$1]=$0} END {for (n in last) {split(last[n], f, " "); if (f[3] != "closed") print f[2]}}' $REG | sort -u)"})
 listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || exit 3
+# Split the ids; the listing is passed on so `delegated` doesn't ask Admiral again.
+boats=(); held=()
+for i in $ids; do delegated $i $listing && held+=($i) || boats+=($i); done
 # RFC 3339 by hand: the system python is 3.9, whose fromisoformat takes neither Z nor Go's nanosecond fractions.
 rows=$(print -r -- "$listing" | /usr/bin/python3 -c 'import calendar, json, re, sys, time
 STATES = {"underway": "working", "needs_you": "blocked", "anchored": "stopped"}
@@ -24,6 +28,10 @@ except Exception:
     sys.exit(3)
 for i in sys.argv[1:]:
     b = boats.get(i)
-    print(i, "-", STATES.get(b.get("state"), b.get("state") or "-") if b else "missing", epoch(b.get("last_activity")) if b else "-")' $ids) || exit 3
+    print(i, "-", STATES.get(b.get("state"), b.get("state") or "-") if b else "missing", epoch(b.get("last_activity")) if b else "-")' $boats) || exit 3
 [[ -n $rows ]] && print -r -- "$rows"
+if (( $#held )); then
+  all=$($HARNESS_DRIVER/status $D) || exit 3
+  print -r -- "$all" | awk -v ids="${held// /|}" 'BEGIN {n = split(ids, a, "|"); for (i = 1; i <= n; i++) want[a[i]] = 1} $1 in want'
+fi
 exit 0

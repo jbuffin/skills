@@ -1,6 +1,8 @@
 #!/bin/zsh
 # usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see ../CONTRACT.md)
-# Starts the teammate as an Admiral crew boat running the claude harness. TEAMMATE_ROLE, when set, becomes --role.
+# Starts the teammate as an Admiral crew boat running the run harness (HARNESS: claude, codex or copilot). TEAMMATE_ROLE, when
+# set, becomes --role. A read-only Codex or Copilot teammate is no crew boat: it is handed to that harness's own driver first
+# (headless, so its read-only guarantee holds) and its id goes into <team>/admiral-delegated, for send, stop, status and tail.
 # Admiral exits map to the contract's: 5 and 2 (name in use, usage, not in a ship) to 5, anything else to 1. Never exits 2:
 # there is no background-session fallback inside a ship.
 # Success waits for the boat's first hook (last_activity in `crew list`), up to LAUNCH_WAIT seconds, polling every LAUNCH_POLL. A
@@ -11,21 +13,57 @@ D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
 ROLE=$TEAMMATE_ROLE
+# The hand-off comes before every Admiral rule and call: such a teammate is exactly what it is on main, and needs no admiral.
+if [[ -n $RO && $HARNESS != claude ]]; then
+  OUT=$($HARNESS_DRIVER/launch "$@")
+  RC=$?
+  print -r -- "$OUT"
+  first=${OUT%%$'\n'*}
+  (( RC == 0 )) && print -r -- ${first%% *} >> $D/admiral-delegated
+  exit $RC
+fi
+[[ $LAUNCH_WAIT == <-> ]] || { echo "invalid LAUNCH_WAIT '$LAUNCH_WAIT': use whole seconds (set in team.env or the environment; team.env wins)"; exit 5; }
+[[ $LAUNCH_POLL =~ '^[0-9]+(\.[0-9]+)?$' ]] || { echo "invalid LAUNCH_POLL '$LAUNCH_POLL': use a non-negative number of seconds (set in team.env or the environment; team.env wins)"; exit 5; }
 [[ $NAME =~ '^[a-z0-9][a-z0-9-]*$' ]] || { echo "invalid teammate name '$NAME': Admiral accepts $NAME_RULE only"; exit 5; }
 [[ -z $ROLE || $ROLE =~ '^[a-z0-9][a-z0-9-]*$' ]] || { echo "invalid role '$ROLE': Admiral accepts $NAME_RULE only"; exit 5; }
 command -v admiral >/dev/null || { echo "admiral is not on PATH"; exit 1; }
 crew_takes_arg || { echo "$OLD_ADMIRAL"; exit 5; }
 
-# Admiral puts the last --arg right before the prompt, and --disallowedTools takes several values, so --model always follows it.
+# Admiral puts the last --arg right before the prompt, so each harness's list ends on a single-value flag: a flag that takes
+# several values (claude --disallowedTools, copilot --available-tools and --deny-tool) would read the prompt as one of them.
 ARGS=()
-[[ -n $RO ]] && ARGS+=(--arg --disallowedTools --arg "Edit(/$W/**)" --arg "NotebookEdit(/$W/**)")
-[[ $ADVISOR != none ]] && ARGS+=(--arg --advisor --arg $ADVISOR)
-ARGS+=(--arg --model --arg $CHOSEN)
-# Under autopilot the boat inherits the dock's mode: Admiral refuses any looser one, and the default (auto) would block every launch.
-[[ $ADMIRAL_AUTOPILOT != 1 ]] && ARGS+=(--arg --permission-mode --arg $PERMISSION_MODE)
+case $HARNESS in
+  claude)
+    [[ -n $RO ]] && ARGS+=(--arg --disallowedTools --arg "Edit(/$W/**)" --arg "NotebookEdit(/$W/**)")
+    [[ $ADVISOR != none ]] && ARGS+=(--arg --advisor --arg $ADVISOR)
+    ARGS+=(--arg --model --arg $CHOSEN)
+    # Under autopilot the boat inherits the dock's mode: Admiral refuses any looser one, and the default (auto) would block every launch.
+    [[ $ADMIRAL_AUTOPILOT != 1 ]] && ARGS+=(--arg --permission-mode --arg $PERMISSION_MODE) ;;
+  codex)
+    # The interactive flags (`codex --help`), not exec's. No trust or -C override: the dock's startup prompts are settled once.
+    source $DRIVERS/codex/lib.zsh
+    RAW=(-s workspace-write -c sandbox_workspace_write.network_access=true --add-dir $D/reports -m $CHOSEN)
+    [[ -n $TEAMMATE_EFFORT ]] && RAW+=(-c "model_reasoning_effort=$(toml_str $TEAMMATE_EFFORT)")
+    # -a never: the boat has no one to answer an approval prompt; the sandbox still denies writes outside the workspace.
+    RAW+=(-a never)
+    ;;
+  copilot)
+    # The writer flags of drivers/copilot (cp_flags) that the interactive command takes. No -p, -s, --session-id or --trust-folder.
+    source $DRIVERS/copilot/lib.zsh
+    cp_extra_dirs $D/team.env
+    RAW=(--no-ask-user --allow-all-tools)
+    [[ -n $TEAMMATE_EFFORT ]] && RAW+=(--reasoning-effort $TEAMMATE_EFFORT)
+    for d in $D ${CP_EXTRA:#$D}; do RAW+=(--add-dir $d); done
+    RAW+=(--available-tools bash view edit create glob grep
+      --deny-tool 'shell(git push:*)' 'shell(gh pr merge:*)' 'shell(gh pr create:*)' 'shell(gh api:*)' 'shell(gh issue:*)'
+      --model $CHOSEN)
+    ;;
+  *) echo "Admiral crew boats run claude, codex or copilot; HARNESS is '$HARNESS'"; exit 5 ;;
+esac
+for a in $RAW; do ARGS+=(--arg $a); done
 ROLE_ARG=(); [[ -n $ROLE ]] && ROLE_ARG=(--role $ROLE)
 
-OUT=$(admiral crew launch --name $NAME --dir $W --harness claude $SHIP_ARG $ROLE_ARG $ARGS \
+OUT=$(admiral crew launch --name $NAME --dir $W --harness $HARNESS $SHIP_ARG $ROLE_ARG $ARGS \
   -- "You are teammate $NAME. Read $P and do exactly what it says." 2>&1)
 RC=$?
 if (( RC != 0 )); then
