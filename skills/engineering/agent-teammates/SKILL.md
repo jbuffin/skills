@@ -27,8 +27,8 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
   | `ADVISOR` | the harness reference | the advisor model every teammate launches with, where the harness has an advisor; `none` turns it off. The reference gives the pairing rules |
   | `PERMISSION_MODE` | the harness reference | the teammates' permission mode |
   | `STALL_MIN` | 10 | the quiet minutes before STALL |
-  | `VIEWER` | none | opens a viewer pane per teammate, on a harness that supports it; the reference lists the values. Ignored inside an Admiral ship with `HARNESS=claude` |
-  | `ADMIRAL_SHIP` | unset | the Admiral ship the run lives in; non-empty selects the admiral driver with `HARNESS=claude` (see "Inside an Admiral ship"). Pin it here to keep a run on its ship across resumes; the caller's `ADMIRAL_SHIP` wins over this line |
+  | `VIEWER` | none | opens a viewer pane per teammate, on a harness that supports it; the reference lists the values. Ignored inside an Admiral ship |
+  | `ADMIRAL_SHIP` | unset | the Admiral ship the run lives in; non-empty selects the admiral driver for every harness (except Codex and Copilot under `ADMIRAL_AUTOPILOT=1`; see "Inside an Admiral ship"). Pin it here to keep a run on its ship across resumes; the caller's `ADMIRAL_SHIP` wins over this line |
   | `REPO` | unset | the engineer's checkout, inside which no teammate starts |
 
 - `worktrees.tsv` lists `unit branch path`, so a unit name can stand in for a directory.
@@ -39,7 +39,7 @@ Make every call **bare**: one command, run directly by its literal absolute path
 
 ## The teammate contract
 
-Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING` (the driver contract is `scripts/drivers/CONTRACT.md`). When you paste the contract, keep only the variant lines for the run's `LIVE_MESSAGING` value. When the preflight prints `ADVISOR n/a`, drop the advisor line and the "with an advisor" variant of the unresolved-problem line. For a read-only role, keep the read-only exception.
+Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING` (the driver contract is `scripts/drivers/CONTRACT.md`). When you paste the contract, keep only the variant lines for the run's `LIVE_MESSAGING` value. Inside an Admiral ship the variant is per teammate: writers (crew boats, on every harness) get the `LIVE_MESSAGING=1` lines, and a read-only Codex or Copilot teammate, which runs headless, gets the `LIVE_MESSAGING=0` lines, so its STALL handling is the `LIVE_MESSAGING=0` one too. When the preflight prints `ADVISOR n/a`, drop the advisor line and the "with an advisor" variant of the unresolved-problem line. For a read-only role, keep the read-only exception.
 
 - Wait inside a Bash command whenever you're waiting on a build, a deploy, a token expiry or a device: `until <condition>; do sleep 30; done` with a long timeout, then carry on. Ending your turn to wait means nothing wakes you.
 - Write the report, then the marker. When you're finished, write `<team-dir>/reports/<name>.md`, then create `<team-dir>/reports/<name>.done`, in that order. Every role writes both, except a read-only teammate on Codex or Copilot (`--read-only` with `HARNESS=codex` or `copilot`): it can't write files, so its final message is its report, and the driver writes the report and marker after a completed turn. Then:
@@ -62,7 +62,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 
 ## Inside an Admiral ship
 
-When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, and `HARNESS` is `claude`, the scripts use the admiral **host driver** (`scripts/drivers/admiral/`) instead of `drivers/claude`. A teammate is then an Admiral crew boat, launched with `admiral crew launch`, and Admiral decides how it is launched, messaged, watched and stopped. Every script and its arguments stay the same. Other harnesses keep their own driver for now. `references/harness-claude.md` has the Claude settings and the Admiral limits ("Inside an Admiral ship"). What changes for you:
+When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, the scripts use the admiral **host driver** (`scripts/drivers/admiral/`) instead of `drivers/<HARNESS>`. A teammate is then an Admiral crew boat, launched with `admiral crew launch --harness <HARNESS>`, and Admiral decides how it is launched, messaged, watched and stopped. Every script and its arguments stay the same. Two cases keep the harness's own driver: under `ADMIRAL_AUTOPILOT=1` Admiral refuses Codex and Copilot boats, so those harnesses run headless as outside a ship, and a `--read-only` Codex or Copilot teammate always runs headless (the admiral driver hands it to `drivers/<HARNESS>` and routes its `retask.sh`, `close-teammate.sh`, `watch-teammates.sh` and `teammate-tail.sh` calls there by id). Each harness reference has an "Inside an Admiral ship" section with its settings and limits. What changes for you:
 
 - Re-task with `retask.sh`, never SendMessage. The driver declares `SEND=script`, and `notify_when_idle` isn't available.
 - Find who is live with `admiral crew list --json`, not `claude agents`. Read output with `teammate-tail.sh`, not `claude logs`.
@@ -70,10 +70,11 @@ When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, 
 - `VIEWER` is ignored: Admiral is the viewer, and no pane opens.
 - A launch never exits 2 and prints no `NO_BG`, so there is no subagent fallback. A failed launch is an error to report.
 - Names and roles must be lowercase letters, digits and `-`; a launch with anything else exits 5.
-- A crew boat's `last_activity` is null until its first hook, so a boat stuck before any hook never shows STALL, only STALE.
+- A crew boat's `last_activity` is null until its first hook, so a boat stuck before any hook never shows STALL, only STALE. An idle writer boat shows BLOCKED and may show STALL as well; DONE comes only from the marker.
+- On Codex and Copilot, `teammate-tail.sh` prints the transcript path and its last lines raw, each cut to 300 characters, instead of `TOOL` and `SAID` lines.
 - Set `ADMIRAL_SHIP` in `team.env` to pin a run to its ship. Without it, a coordinator resumed outside the ship picks `drivers/claude`, and its crew boats read as GONE. Clear or refresh the pin once the original ship is gone: Admiral reuses a free ship name, so a stale pin can launch into, send to or close boats in another ship. The caller's `ADMIRAL_SHIP` wins over the pin, so a coordinator resumed inside a different ship ignores it.
 - Board a BLOCKED boat with `admiral attach` before re-tasking it: Admiral's send ends with Enter, which may answer a pending prompt.
-- A launch returns after the boat's first hook and waits up to `LAUNCH_WAIT` seconds (default 90). A boat stuck at a startup prompt (folder trust) is closed and exits 5. Trust the repository once per dock first.
+- A launch returns after the boat's first hook and waits up to `LAUNCH_WAIT` seconds (default 90). A boat stuck at a startup prompt (folder trust, or Codex's hook review) is closed and exits 5. Settle those prompts once per dock first; run `scripts/drivers/admiral/preflight <team-dir>` once before launching, which WARNs about the ones it can see (Commodore's `team-preflight.sh` doesn't run it).
 - `has-skill`, `list-skills`, `advisor-probe` and `tail`'s rendering run in the coordinator's environment, which matches the crew's only when both use the same dock.
 
 ## Launch, re-task, close
@@ -125,7 +126,7 @@ When a report looks untrustworthy, the brief or its proof was weak. Sharpen it a
 
 ## Fallback
 
-Inside an Admiral ship with `HARNESS=claude` there is no fallback: report the failed launch.
+Inside an Admiral ship a crew boat has no fallback: report the failed launch. A read-only Codex or Copilot teammate launches headless as it does outside a ship.
 
 If `launch-teammate.sh` exits 2 (`NO_BG`: the harness can't run a background session here), follow the harness reference's fallback. Tell the engineer what they lose. Codex and Copilot never exit 2: their references say what to do when a launch fails.
 

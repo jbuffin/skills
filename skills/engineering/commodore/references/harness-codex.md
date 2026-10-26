@@ -1,6 +1,6 @@
 # Commodore on Codex
 
-Read this when the run's `HARNESS` is `codex`. agent-teammates has its own `references/harness-codex.md` for launching, re-tasking, the rule lines and watching.
+Read this when the run's `HARNESS` is `codex`. agent-teammates has its own `references/harness-codex.md` (inside an Admiral ship, writers are live crew boats and its "Inside an Admiral ship" section applies) for launching, re-tasking, the rule lines and watching.
 
 ## Default model per role
 

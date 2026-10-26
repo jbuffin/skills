@@ -9,3 +9,5 @@ The Codex driver launches each teammate with `codex exec`, sets `LIVE_MESSAGING=
 ## Consequences
 
 Codex runs lose live messages and idle notices, as ADR 0002 sets out for any harness without live messaging. `codex exec resume` doesn't keep the sandbox setting and takes no `-s`, so the driver passes the sandbox on every resume as `-c sandbox_mode=…`.
+
+Amended 2026-10-26 ([#115](https://github.com/jbuffin/skills/issues/115)): inside an Admiral ship, writers are live crew boats; see ADR 0006.
