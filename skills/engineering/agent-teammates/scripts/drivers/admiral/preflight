@@ -1,0 +1,26 @@
+#!/bin/zsh
+# usage: preflight <run-dir>   (see ../CONTRACT.md)
+# The run harness's preflight, minus its background-session lines (a crew boat is interactive, so its NO_BG premise is
+# false here), plus Admiral's: `admiral` on PATH, `crew launch` takes --arg, and `crew list --json` works for the ship.
+[[ $# -eq 1 && -f $1/team.env ]] || { sed -n 2,4p $0; exit 5; }
+D=${1:A}
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+fail=0
+ok()   { echo "OK    $*"; }
+bad()  { echo "FAIL  $*"; fail=1; }
+
+# The claude driver prints its own exit code from its FAIL lines, so drop the two about `claude agents` and count what's left.
+out=$($HARNESS_DRIVER/preflight $D 2>&1 | grep -vE '^(OK|FAIL) +claude (agents|background sessions)')
+print -r -- "$out"
+[[ $out == *$'\nFAIL'* || $out == FAIL* ]] && fail=1
+
+if command -v admiral >/dev/null; then
+  ok "admiral found"
+  crew_takes_arg && ok "admiral crew launch takes --arg" || bad "$OLD_ADMIRAL"
+  admiral crew list --json $SHIP_ARG >/dev/null 2>&1 && ok "ship $ADMIRAL_SHIP lists its crew (admiral crew list)" \
+    || bad "admiral crew list --json failed for ship '$ADMIRAL_SHIP'; check the ship name and that Admiral is running"
+else
+  bad "admiral not on PATH"
+fi
+exit $fail

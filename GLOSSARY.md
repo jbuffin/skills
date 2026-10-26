@@ -14,7 +14,9 @@
 
 **Triager**: a read-only teammate on a PR-feedback mission that sorts each review comment and failing check on the engineer's own PR into fix, push back, needs the engineer's call, or already done. _Avoid_: comment reviewer.
 
-**Harness**: the agent CLI a run is started from (Claude Code, Codex or Copilot CLI). The coordinator and every teammate in the run use it, and it decides how teammates are launched, messaged, watched and stopped. _Avoid_: runtime, backend, agent CLI.
+**Harness**: the agent CLI a run is started from (Claude Code, Codex or Copilot CLI). The coordinator and every teammate in the run use it, and it decides how teammates are launched, messaged, watched and stopped, unless a host driver decides instead. _Avoid_: runtime, backend, agent CLI.
+
+**Host driver**: a driver chosen by where the run lives, such as an Admiral ship, not by its harness. Inside a host, the host decides how teammates are launched, messaged, watched and stopped, and the run's harness is the one the host's teammates run. _Avoid_: platform driver, environment driver.
 
 **Advisor**: a stronger model built into the harness and paired with a teammate's session, which sees the teammate's own transcript when the teammate consults it. A sub-agent the teammate has to brief or fork through its prompt is not an advisor, so a harness without one reports the advisor as not available. _Avoid_: second opinion, rubber duck, consultant.
 

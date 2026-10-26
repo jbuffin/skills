@@ -12,7 +12,7 @@ Launch every teammate with `--role <role>`. A fresh `team.env` from `team-init.s
 | `reviewer`, `security-reviewer`, `brief-checker`, `triager` | opus |
 | `scribe` | sonnet (haiku allowed) |
 
-For an in-process subagent after `NO_BG`, use the model the `NO_BG` message names. An in-process agent launched without a model runs on the coordinator's model.
+Outside an Admiral ship, for an in-process subagent after `NO_BG`, use the model the `NO_BG` message names. An in-process agent launched without a model runs on the coordinator's model.
 
 ## The capability rule on Claude
 
@@ -38,4 +38,4 @@ Otherwise those roles still launch as background sessions, without the advisor. 
 
 ## Who is live
 
-Re-read who is live with `claude agents --json` when you resume and before any push, stack submit or close.
+Re-read who is live with `claude agents --json` (inside an Admiral ship, `admiral crew list --json`) when you resume and before any push, stack submit or close.

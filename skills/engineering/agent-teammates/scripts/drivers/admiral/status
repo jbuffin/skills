@@ -1,0 +1,29 @@
+#!/bin/zsh
+# usage: status <team-dir>   (see ../CONTRACT.md)
+# One line per teammate the registry holds an open row for: underway is working, needs_you is blocked, anchored is stopped, and
+# a boat absent from `crew list` is missing. Boats the run didn't register are not printed (a ship holds other boats too).
+# The epoch is last_activity, `-` until the boat's first hook.
+[[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+ids=(${(f)"$(awk '{last[$1]=$0} END {for (n in last) {split(last[n], f, " "); if (f[3] != "closed") print f[2]}}' $REG | sort -u)"})
+listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || exit 3
+# RFC 3339 by hand: the system python is 3.9, whose fromisoformat takes neither Z nor Go's nanosecond fractions.
+rows=$(print -r -- "$listing" | /usr/bin/python3 -c 'import calendar, json, re, sys, time
+STATES = {"underway": "working", "needs_you": "blocked", "anchored": "stopped"}
+def epoch(t):
+    m = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)", t or "")
+    if not m: return "-"
+    base = calendar.timegm(time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S"))
+    off = 0 if m.group(2) == "Z" else (1 if m.group(2)[0] == "+" else -1) * (int(m.group(2)[1:3]) * 3600 + int(m.group(2)[4:6]) * 60)
+    return str(base - off)
+try:
+    boats = {b["name"]: b for b in json.load(sys.stdin)}
+except Exception:
+    sys.exit(3)
+for i in sys.argv[1:]:
+    b = boats.get(i)
+    print(i, "-", STATES.get(b.get("state"), b.get("state") or "-") if b else "missing", epoch(b.get("last_activity")) if b else "-")' $ids) || exit 3
+[[ -n $rows ]] && print -r -- "$rows"
+exit 0

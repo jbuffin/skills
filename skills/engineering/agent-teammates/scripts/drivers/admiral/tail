@@ -1,0 +1,18 @@
+#!/bin/zsh
+# usage: tail <team-dir> <label> <session-id> <n>   (see ../CONTRACT.md)
+# Finds the boat's transcript in `crew list --json` (ADR 0021), then runs the claude driver's tail on it: the id is the
+# transcript's basename without .jsonl and CLAUDE_CONFIG_DIR its ../../.. (<config>/projects/<project>/<id>.jsonl).
+[[ $# -eq 4 ]] || { sed -n 2,4p $0; exit 5; }
+D=${1:A}; W=$2; id=$3; N=$4
+source ${0:A:h:h:h}/team-env.zsh
+source ${0:A:h}/lib.zsh
+listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || { echo "couldn't list crew boats (admiral crew list --json failed)"; exit 3; }
+[[ -n $(print -r -- "$listing" | jq -r --arg n $id '.[] | select(.name == $n) | .name' 2>/dev/null) ]] || { echo "no crew boat $W ($id) in ship $ADMIRAL_SHIP"; exit 3; }
+tr=$(print -r -- "$listing" | jq -r --arg n $id '.[] | select(.name == $n) | .transcript // empty')
+[[ -n $tr ]] || { echo "no transcript recorded for $W ($id) yet: Admiral records it at the boat's first hook"; exit 3; }
+# The claude tail sources team-env.zsh, and team.env's CLAUDE_CONFIG_DIR (Commodore writes one) would override an environment
+# variable. A scratch team dir with a team.env of its own makes the transcript's directory the one it reads.
+S=$(mktemp -d) || exit 1
+trap 'rm -rf $S' EXIT
+print -r -- "CLAUDE_CONFIG_DIR=${(q)tr:h:h:h}" > $S/team.env
+$HARNESS_DRIVER/tail $S $W ${${tr:t}%.jsonl} $N
