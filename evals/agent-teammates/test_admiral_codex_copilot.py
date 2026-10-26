@@ -288,6 +288,15 @@ class TestCopilotWriterLaunch(LaunchCase):
         self.groups()
         self.assertEqual(self.w.calls("copilot"), [])
 
+    def test_an_effort_with_the_wrong_shape_exits_5_before_any_launch(self):
+        for bad in ("-high", "hi gh", "high;x"):
+            with self.subTest(effort=bad):
+                self.w.write_team_env(harness="copilot", extra=[f"EFFORT_TEST_WRITER='{bad}'"])
+                done = self.launch("--role", "test-writer")
+                self.assertEqual(done.code, USAGE, done.text)
+                self.assertIn("effort", done.text)
+                self.assertEqual(self.w.crew_calls("launch"), [])
+
     def test_a_boat_that_exits_during_startup_is_closed_and_exits_1(self):
         self.w.boats(boat("alpha", "anchored"))
         done = self.launch("--role", "test-writer", LAUNCH_POLL="0")
@@ -550,6 +559,28 @@ class ReadOnlyDelegation:
     # tail
     # (per harness)
 
+    def test_stop_says_why_when_the_listing_is_down_and_stops_nothing(self):
+        _, delegated_id = self.delegate()
+        self.assertTrue(self.w.wait_finished(self.tool))
+        for ctl, text in (("list.rc", "1"), ("list.json", "not json at all")):
+            with self.subTest(ctl=ctl):
+                self.w.ctl_write("list.json", "[]")
+                self.w.ctl_write("list.rc", "0")
+                self.w.ctl_write(ctl, text)
+                done = self.w.run(ADMIRAL_DRIVER / "stop", self.w.team, delegated_id)
+                self.assertNotEqual(done.code, OK)
+                self.assertIn("nothing stopped", done.text)
+                self.assertEqual(self.w.crew_calls("close"), [])
+
+    def test_a_listing_that_is_not_json_does_not_delegate(self):
+        _, delegated_id = self.delegate()
+        self.assertTrue(self.w.wait_finished(self.tool))
+        before = len(self.w.calls(self.tool))
+        self.w.ctl_write("list.json", "<html>oops</html>")
+        msg = self.w.message()
+        self.w.run(ADMIRAL_DRIVER / "send", self.w.team, delegated_id, msg)
+        self.assertEqual(len(self.w.calls(self.tool)), before)
+
     # the guard: delegated <id> refuses what the file can't be trusted for
     def test_an_id_that_is_an_open_crew_boats_name_is_not_delegated(self):
         """A Copilot writer can write the team dir, so it could put a live boat's name in the file to steer `stop`."""
@@ -632,6 +663,16 @@ class TestCopilotReadOnlyDelegation(ReadOnlyDelegation, WorldCase):
         self.assertEqual(lines[-1], "SAID  all done")
 
 
+class TestReadOnlyWithoutAHarnessDriver(WorldCase):
+    def test_an_unknown_harness_read_only_launch_exits_5_with_a_message(self):
+        self.w.write_team_env(harness="nosuch", extra=["MODEL_REVIEWER=x"])
+        self.w.prompt("alpha")
+        done = self.w.run(LAUNCH, "--read-only", "--role", "reviewer", self.w.team, "alpha", self.w.work)
+        self.assertEqual(done.code, USAGE, done.text)
+        self.assertIn("nosuch", done.text)
+        self.assertEqual(self.w.admiral(), [])
+
+
 class RawTail:
     """decision 8: for a writer boat on Codex or Copilot, tail prints the transcript path and the last <n> lines raw,
     each cut to 300 characters."""
@@ -692,6 +733,17 @@ class RawTail:
         self.assertNotIn("SAID", done.out)
         self.assertNotIn("TOOL", done.out)
         self.assertEqual(self.w.calls(self.harness), [])
+
+    def test_only_newlines_split_lines(self):
+        line = '{"text":"a\u2028b\u2029c"}'
+        path = self.transcript([line, "next"])
+        done = self.tail(path, 2)
+        self.assertEqual(done.out.split("\n")[1:3], [line, "next"])
+
+    def test_control_characters_are_blanked(self):
+        path = self.transcript(["a\x1b[31mred\x07\x00b\ttab\x7f\x9bend"])
+        done = self.tail(path, 1)
+        self.assertEqual(done.out.split("\n")[1], "a [31mred  b\ttab  end")
 
     def test_the_listing_is_asked_for_by_ship(self):
         path = self.transcript(["one"])

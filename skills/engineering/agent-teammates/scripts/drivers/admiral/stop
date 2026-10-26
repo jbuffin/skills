@@ -7,9 +7,10 @@
 D=${1:A}; ID=$2
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
-delegated $ID && exec $HARNESS_DRIVER/stop "$@"
-listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || exit 1
-state=$(print -r -- "$listing" | jq -r --arg n $ID '.[] | select(.name == $n) | .state // ""' 2>/dev/null) || exit 1
+delegate_if stop $ID "$@"
+# A delegated teammate can't be told from a planted id while the listing is down (see `delegated`), so nothing is stopped.
+listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || { echo "can't list crew boats; nothing stopped"; exit 1; }
+state=$(print -r -- "$listing" | jq -r --arg n $ID '.[] | select(.name == $n) | .state // ""' 2>/dev/null) || { echo "can't read the crew list; nothing stopped"; exit 1; }
 [[ -n $state ]] || exit 1
 admiral crew close $ID $SHIP_ARG >/dev/null 2>&1 || exit 1
 [[ $state != anchored ]]

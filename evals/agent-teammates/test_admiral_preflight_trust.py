@@ -195,6 +195,17 @@ class TestCodexTrustWarns(PreflightCase):
         (self.w.home / ".codex" / "config.toml").write_text(config_toml(self.w.checkout))
         self.assertEqual(trust_warns(self.preflight().out), [])
 
+    def test_a_tilde_in_the_dock_home_is_expanded(self):
+        settled = self.w.home / "dock-tilde"
+        settled.mkdir()
+        (settled / "config.toml").write_text(config_toml(self.w.checkout))
+        self.dock_config({"work": "~/dock-tilde"})
+        (self.w.home / ".admiral" / "config.json").write_text(
+            json.dumps({"fleets": {"work": {"codex": {"env": {"CODEX_HOME": "~/dock-tilde"}}}}})
+        )
+        done = self.preflight()
+        self.assertEqual((trust_warns(done.out), hook_warns(done.out)), ([], []), done.out)
+
     def test_a_missing_admiral_config_json_falls_back(self):
         (self.w.home / ".admiral" / "config.json").unlink()
         done = self.preflight()
@@ -304,6 +315,15 @@ class TestCopilotTrustWarns(PreflightCase):
         elsewhere.mkdir()
         self.settled(self.w.checkout)
         done = self.preflight(cwd=elsewhere)
+        self.assertEqual(len([w for w in warns(done.out) if re.search(r"(?i)skipped", w)]), 1, done.out)
+
+    def test_an_unreadable_file_still_warns_when_the_repo_root_is_unknown(self):
+        self.w.write_team_env(harness="copilot", repo=False)
+        elsewhere = self.w.root / "not-a-repo"
+        elsewhere.mkdir()
+        self.config.write_text(self.HEADER + "{ this is not json")
+        done = self.preflight(cwd=elsewhere)
+        self.assertEqual(len([w for w in warns(done.out) if str(self.config) in w]), 1, done.out)
         self.assertEqual(len([w for w in warns(done.out) if re.search(r"(?i)skipped", w)]), 1, done.out)
 
     def test_copilot_has_no_hook_trust_warn(self):

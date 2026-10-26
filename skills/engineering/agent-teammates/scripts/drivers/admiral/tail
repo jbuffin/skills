@@ -9,7 +9,7 @@
 D=${1:A}; W=$2; id=$3; N=$4
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
-delegated $id && exec $HARNESS_DRIVER/tail "$@"
+delegate_if tail $id "$@"
 listing=$(admiral crew list --json $SHIP_ARG 2>/dev/null) || { echo "couldn't list crew boats (admiral crew list --json failed)"; exit 3; }
 [[ -n $(print -r -- "$listing" | jq -r --arg n $id '.[] | select(.name == $n) | .name' 2>/dev/null) ]] || { echo "no crew boat $W ($id) in ship $ADMIRAL_SHIP"; exit 3; }
 tr=$(print -r -- "$listing" | jq -r --arg n $id '.[] | select(.name == $n) | .transcript // empty')
@@ -22,9 +22,13 @@ if [[ $HARNESS != claude ]]; then
   [[ -r $tr ]] || { echo "can't read the transcript of $W ($id): $tr"; exit 3; }
   echo "transcript: $tr"
   # The cut counts characters, not bytes (a byte cut can split a multi-byte one).
-  command tail -n $N $tr | python3 -c 'import sys
-for line in sys.stdin.buffer.read().decode("utf-8", "replace").splitlines():
-    sys.stdout.buffer.write((line[:300] + "\n").encode("utf-8"))'
+  # Split on \n alone (JSON may carry U+2028 raw) and blank the control characters, as drivers/codex/tail does: a transcript
+  # line can quote anything, including escape sequences for the coordinator's terminal.
+  command tail -n $N $tr | python3 -c 'import re, sys
+lines = sys.stdin.buffer.read().decode("utf-8", "replace").split("\n")
+if lines and lines[-1] == "": lines.pop()
+for line in lines:
+    sys.stdout.buffer.write((re.sub("[\x00-\x08\x0b-\x1f\x7f-\x9f]", " ", line)[:300] + "\n").encode("utf-8"))'
   exit 0
 fi
 [[ -n $tr ]] || { echo "no transcript recorded for $W ($id) yet: Admiral records it at the boat's first hook"; exit 3; }

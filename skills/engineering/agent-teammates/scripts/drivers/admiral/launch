@@ -15,8 +15,10 @@ source ${0:A:h}/lib.zsh
 ROLE=$TEAMMATE_ROLE
 # The hand-off comes before every Admiral rule and call: such a teammate is exactly what it is on main, and needs no admiral.
 if [[ -n $RO && $HARNESS != claude ]]; then
+  [[ -x $HARNESS_DRIVER/launch ]] || { echo "harness $HARNESS has no launch operation ($HARNESS_DRIVER)"; exit 5; }
   OUT=$($HARNESS_DRIVER/launch "$@")
   RC=$?
+  (( RC == 2 )) && RC=5   # a host driver never exits 2: there is no background-session fallback inside a ship
   print -r -- "$OUT"
   first=${OUT%%$'\n'*}
   (( RC == 0 )) && print -r -- ${first%% *} >> $D/admiral-delegated
@@ -50,6 +52,8 @@ case $HARNESS in
   copilot)
     # The writer flags of drivers/copilot (cp_flags) that the interactive command takes. No -p, -s, --session-id or --trust-folder.
     source $DRIVERS/copilot/lib.zsh
+    # The shape check of drivers/copilot/launch: the value becomes a flag value, so no leading '-' and no odd characters.
+    [[ -z $TEAMMATE_EFFORT || ( $TEAMMATE_EFFORT != *[^A-Za-z0-9._-]* && $TEAMMATE_EFFORT != -* ) ]] || { echo "effort ${(q-)TEAMMATE_EFFORT} has the wrong shape: use letters, digits, . _ - only, not starting with -; 'copilot --help' lists the values; fix EFFORT_<ROLE> in team.env"; exit 5; }
     cp_extra_dirs $D/team.env
     RAW=(--no-ask-user --allow-all-tools)
     [[ -n $TEAMMATE_EFFORT ]] && RAW+=(--reasoning-effort $TEAMMATE_EFFORT)

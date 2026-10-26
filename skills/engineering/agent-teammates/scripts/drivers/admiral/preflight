@@ -59,7 +59,7 @@ if harness == "codex":
         ships = subprocess.run(["admiral", "ships"], capture_output=True, text=True).stdout
         fleet = next((c[2] for c in (l.split("\t") for l in ships.splitlines()) if len(c) >= 3 and ship in (c[0], c[1])), None)
         cfg = json.load(open(os.path.join(home, ".admiral", "config.json")))
-        cxhome = cfg["fleets"][fleet]["codex"]["env"]["CODEX_HOME"]
+        cxhome = os.path.expanduser(cfg["fleets"][fleet]["codex"]["env"]["CODEX_HOME"])  # Admiral stores a ~ as typed
         source = "the dock of fleet " + fleet + " (~/.admiral/config.json)"
     except Exception:
         pass
@@ -84,7 +84,7 @@ if harness == "codex":
     elif not any(covers(t) for t in trusted):
         warn("%s isn't trusted in %s (%s): run codex in it with that CODEX_HOME and trust the folder once, or a writer launch times out at the folder-trust prompt" % (repo, path, source))
     if not re.search(r'(?m)^\s*\[hooks\.state\.', text):
-        warn("no [hooks.state] tables in %s: Admiral's hooks aren't trusted yet; run codex once with that CODEX_HOME and approve the hook review, or a writer launch times out" % path)
+        warn("no [hooks.state] tables in %s, so no hook trust is recorded there (any such table satisfies this check, not Admiral's hooks in particular); run codex once with that CODEX_HOME and approve the hook review, or a writer launch times out" % path)
 else:
     path = os.path.join(os.environ.get("COPILOT_HOME") or os.path.join(home, ".copilot"), "config.json")
     try:
@@ -97,6 +97,7 @@ else:
         folders, problem = [], "can't read trustedFolders from %s (%s)" % (path, type(e).__name__)
     if not repo:
         warn("folder-trust check skipped: REPO is unset and the current directory is in no git repository")
+        if problem: warn("%s isn't readable as trustedFolders: %s" % (path, problem))   # still true without a repo root
     elif problem or not any(isinstance(f, str) and covers(f) for f in folders):
         warn("%s isn't in trustedFolders of %s%s: run copilot in it and trust the folder once, or a writer launch times out at the folder-trust prompt" % (repo, path, " (" + problem + ")" if problem else ""))
 PY
