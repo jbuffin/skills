@@ -27,7 +27,8 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
   | `ADVISOR` | the harness reference | the advisor model every teammate launches with, where the harness has an advisor; `none` turns it off. The reference gives the pairing rules |
   | `PERMISSION_MODE` | the harness reference | the teammates' permission mode |
   | `STALL_MIN` | 10 | the quiet minutes before STALL |
-  | `VIEWER` | none | opens a viewer pane per teammate, on a harness that supports it; the reference lists the values |
+  | `VIEWER` | none | opens a viewer pane per teammate, on a harness that supports it; the reference lists the values. Ignored inside an Admiral ship |
+  | `ADMIRAL_SHIP` | unset | the Admiral ship the run lives in; non-empty selects the admiral driver (see "Inside an Admiral ship"). Pin it here to keep a run on its ship across resumes |
   | `REPO` | unset | the engineer's checkout, inside which no teammate starts |
 
 - `worktrees.tsv` lists `unit branch path`, so a unit name can stand in for a directory.
@@ -58,6 +59,19 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 - No proof, no done. A read-only teammate on Codex or Copilot has no proof and nothing to run. Otherwise, if `<team-dir>/prompts/<name>.proof` exists, run each proof in it as `<teammates>/evidence.sh <team-dir> <name> <label>`, after your last commit and again in every round. It runs the declared command and logs its output, head SHA and exit code, and the coordinator checks those logs against your HEAD. Your own summary of a run isn't evidence.
 - Run full test suites, type checks and builds only through `<teammates>/evidence.sh`: a declared proof, or an extra command as `<teammates>/evidence.sh <team-dir> <name> <label> -- <command>`. It runs one command at a time across the whole team, so two suites never share the machine's memory. Outside it, run only the test files you're changing.
 - Keep the report short. Say what you did, the files you touched, one `commit: <sha>` line if you committed, each proof label with its result, what you didn't check and why, where you departed from the brief and why, and your start and end times (`date -u`).
+
+## Inside an Admiral ship
+
+When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, and `HARNESS` is `claude`, the scripts use the admiral **host driver** (`scripts/drivers/admiral/`) instead of `drivers/claude`. A teammate is then an Admiral crew boat, launched with `admiral crew launch`, and Admiral decides how it is launched, messaged, watched and stopped. Every script and its arguments stay the same. Other harnesses keep their own driver for now. `references/harness-claude.md` has the Claude settings and the Admiral limits ("Inside an Admiral ship"). What changes for you:
+
+- Re-task with `retask.sh`, never SendMessage. The driver declares `SEND=script`, and `notify_when_idle` isn't available.
+- Find who is live with `admiral crew list --json`, not `claude agents`. Read output with `teammate-tail.sh`, not `claude logs`.
+- `close-teammate.sh` closes the crew boat. Board a boat with `admiral attach <ship> <crew>`.
+- `VIEWER` is ignored: Admiral is the viewer, and no pane opens.
+- A launch never exits 2 and prints no `NO_BG`, so there is no subagent fallback. A failed launch is an error to report.
+- Names and roles must be lowercase letters, digits and `-`; a launch with anything else exits 5.
+- A crew boat's `last_activity` is null until its first hook, so a boat stuck before any hook never shows STALL, only STALE.
+- Set `ADMIRAL_SHIP` in `team.env` to pin a run to its ship. Without it, a coordinator resumed outside the ship picks `drivers/claude`, and its crew boats read as GONE. Clear or refresh the pin once the original ship is gone: Admiral reuses a free ship name, so a stale pin can launch into, send to or close boats in another ship.
 
 ## Launch, re-task, close
 
@@ -107,6 +121,8 @@ Run `<teammates>/watch-teammates.sh [--until-event <max-min>] <team-dir>` (the f
 When a report looks untrustworthy, the brief or its proof was weak. Sharpen it and relaunch once, or take the question up. Extra reviewers and repeated relaunches only hide the doubt.
 
 ## Fallback
+
+Inside an Admiral ship there is no fallback: report the failed launch.
 
 If `launch-teammate.sh` exits 2 (`NO_BG`: the harness can't run a background session here), follow the harness reference's fallback. Tell the engineer what they lose. Codex and Copilot never exit 2: their references say what to do when a launch fails.
 

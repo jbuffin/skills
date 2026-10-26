@@ -1,14 +1,14 @@
 # Driver contract
 
-Every harness has a folder here (`claude/`, `codex/`, `copilot/`) holding a `driver.env` and one executable per operation. The shared scripts run an operation through `drv <op> <args>` (`team-env.zsh`). A missing operation makes `drv` return 9 with a message on stderr, which the callers map to exit 5. Operations must never exit 9 themselves. The coordinator reads the declarations through the harness reference; the shared scripts don't source `driver.env`, except that `retask.sh` reads its `SEND=` line.
+Every harness has a folder here (`claude/`, `codex/`, `copilot/`), and one **host driver**, `admiral/`, is chosen by where the run lives instead of by its harness. Each holds a `driver.env` and one executable per operation. The shared scripts run an operation through `drv <op> <args>` (`team-env.zsh`). A missing operation makes `drv` return 9 with a message on stderr, which the callers map to exit 5. Operations must never exit 9 themselves. `team-env.zsh` selects `admiral/` when `ADMIRAL_SHIP` is non-empty (from the caller's environment or `team.env`) and `HARNESS` is `claude`; every other run uses `drivers/<HARNESS>`. Inside a host, the host decides how teammates are launched, messaged, watched and stopped, and `HARNESS` names the run harness: the harness its teammates run. The host driver runs that harness's driver for the operations the host doesn't own (`has-skill`, `list-skills`, `advisor-probe`, and the transcript read in `tail`). The coordinator reads the declarations through the harness reference; the shared scripts don't source `driver.env`, except that `retask.sh` reads its `SEND=` line.
 
 ## Declarations
 
-Each `driver.env` sets three values and holds nothing else the contract cares about:
+Each harness driver's `driver.env` sets three values and holds nothing else the contract cares about:
 
 - `LIVE_MESSAGING`: `1` when a live teammate can be sent new work, so the coordinator keeps its session open between rounds. `0` when a teammate works one turn at a time.
 - `SEND`: `tool` when sending is a harness tool call (the driver has no `send` executable), `script` when `retask.sh` calls the driver's `send`.
-- `SKILL_PREFIX`: what goes before a skill's name to invoke it: `/` (Claude Code, Copilot CLI) or `$` (Codex). commodore's `role-skills.sh` reads this line.
+- `SKILL_PREFIX`: what goes before a skill's name to invoke it: `/` (Claude Code, Copilot CLI) or `$` (Codex). commodore's `role-skills.sh` reads this line from `drivers/<HARNESS>`. A host driver omits it and defers to the run harness's.
 
 ## Operations
 
@@ -21,10 +21,12 @@ Each `driver.env` sets three values and holds nothing else the contract cares ab
 Starts a background session named `<name>` in `<workdir>` (an existing directory) on `<model>`, told to read `<prompt-file>`, and opens a viewer pane if `team.env` asks for one. On success prints line 1 `<session-id> <viewer-ref|->`, then the lines to show the engineer after the "launched" line. Failure prints a message and exits:
 
 - 1: sessions couldn't be listed, the session started with no id, or the harness CLI isn't on `PATH`.
-- 2: no background session can run. The last line starts `NO_BG:` and names what to do instead.
+- 2: no background session can run. The last line starts `NO_BG:` and names what to do instead. A host driver never exits 2, because the host is the only way to start a teammate there.
 - 5: a live session already has `<name>`, or the harness refuses an input, such as a malformed `TEAMMATE_EFFORT` (Copilot does).
 
 Optional input: the environment variable `TEAMMATE_EFFORT`, set on every launch call (empty when the launch has no `--role` or the role has no `EFFORT_<ROLE>` in `team.env`), is the reasoning effort for harnesses that take one. Drivers may ignore it.
+
+Optional input: the environment variable `TEAMMATE_ROLE`, set on every launch call (empty without `--role`), is the teammate's role. The admiral driver passes it to Admiral as the crew boat's `--role`; other drivers ignore it.
 
 ### status
 

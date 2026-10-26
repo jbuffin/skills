@@ -13,7 +13,7 @@ A teammate is a full Claude Code session started in the background with `claude 
 | `MODEL` | sonnet | the model for a launch with neither `--model` nor `--role` |
 | `ADVISOR` | opus | the built-in advisor model every teammate launches with; `none` turns it off. It has to rank at or above the teammate's model, and a Fable model accepts only `fable`. A refused pairing starts without the advisor and no error |
 | `PERMISSION_MODE` | auto | the teammates' permission mode |
-| `VIEWER` | none | `cmux` or `tmux` opens a pane per teammate running `claude attach <id>`; cmux also needs `CMUX_WORKSPACE` and `CMUX_SURFACE` from `cmux identify` |
+| `VIEWER` | none | `cmux` or `tmux` opens a pane per teammate running `claude attach <id>`; cmux also needs `CMUX_WORKSPACE` and `CMUX_SURFACE` from `cmux identify`. Ignored inside an Admiral ship |
 
 An in-process agent launched without a model runs on whatever model the coordinator uses.
 
@@ -29,13 +29,25 @@ For a single teammate, a SendMessage with `notify_when_idle: true` gives you a o
 
 Run `<teammates>/watch-teammates.sh <team-dir>` under the Monitor tool for as long as any teammate is live. Monitors expire after 30 minutes, so re-arm it whenever it reports expiry and someone is still live.
 
-Every minute it reads `claude agents --json`, the markers and each teammate's transcript mtime.
+Every minute it reads `claude agents --json` (inside an Admiral ship, `admiral crew list --json`), the markers and each teammate's transcript mtime.
 
 ## What the engineer sees
 
 `claude agents` is the dashboard, and it works in any terminal (Space to peek, Enter to attach). `claude attach <id>` opens one teammate.
 
 `claude logs <id>` prints raw terminal frames that cost thousands of tokens to read. Run `teammate-tail.sh` first, and read `claude logs <id>` only when you need to see an open prompt (a BLOCKED teammate).
+
+## Inside an Admiral ship
+
+With `ADMIRAL_SHIP` set (caller's environment or `team.env`), the admiral driver replaces `drivers/claude` for launch, send, status and stop. `SKILL_PREFIX`, `has-skill`, `list-skills` and `advisor-probe` still come from the Claude driver. The crew boats run Claude Code in tmux windows of the ship, not under `claude --bg`, so this reference's `claude agents`, `claude attach`, `claude logs`, `claude stop`, SendMessage and `notify_when_idle` lines don't apply. Admiral must be main at 992f678 or later: `launch` exits 5 and `preflight` prints FAIL on 0.3.0, which has no `--arg`.
+
+- **Launch.** Model, advisor, permission mode and the `--read-only` edit denies reach `admiral crew launch` as `--arg` values; `--role` is passed as Admiral's `--role`. The session id is the crew name. Exit 5 means the name is in use, Admiral rejected the call or there is no ship; exit 1 is any other refusal, with Admiral's message.
+- **Send.** `retask.sh` types a pointer to the message file into the boat with `admiral crew send`. An anchored boat can't take it (exit 1): launch a new teammate.
+- **Watch.** `watch-teammates.sh` reads `admiral crew list --json`: underway is working, needs you is blocked, anchored is stopped and a boat missing from the list is missing. A boat that needs you waits on a prompt, so read it with `admiral attach <ship> <crew>`.
+- **Read output.** `teammate-tail.sh` reads the transcript path Admiral records at the boat's first hook. Before that it exits 3 and says no transcript is recorded.
+- **Close.** `close-teammate.sh` runs `admiral crew close`. Never close a boat this run didn't launch.
+- **Autopilot** (`ADMIRAL_AUTOPILOT=1`). The launch leaves out `--permission-mode` so the boat inherits the dock's, because Admiral refuses any looser mode and the default `auto` would block every launch. Admiral refuses `--disallowedTools` when the dock already sets it, so every `--read-only` launch then exits 1 with Admiral's message. Admiral also refuses `--ship` without an `ADMIRAL_SHIP` in the caller's environment, so the driver leaves it out and the ship in `team.env` alone doesn't work under autopilot.
+- **Advisor and trust.** Unchanged: `ADVISOR` pairing applies, and the working directory still has to be trusted.
 
 ## Workspace trust
 
@@ -47,7 +59,7 @@ Close teammates with `close-teammate.sh`, which runs `claude stop`. Never run `c
 
 ## Fallback when background sessions can't start
 
-If `launch-teammate.sh` exits 2 (`NO_BG`, meaning background sessions aren't available or the folder isn't trusted), run the teammate as an in-process subagent. Give it:
+Outside an Admiral ship, if `launch-teammate.sh` exits 2 (`NO_BG`, meaning background sessions aren't available or the folder isn't trusted), run the teammate as an in-process subagent. Give it:
 
 - an explicit `model=`, set to the model the `NO_BG` message names;
 - the same prompt file, the same contract and its own working directory.
