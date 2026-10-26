@@ -57,7 +57,15 @@ if args == ["crew"]:
     sys.stderr.write(read("usage.txt"))
     sys.exit(2)
 if args[:2] == ["crew", "list"]:
-    sys.stdout.write(read("list.json", "[]"))
+    out = read("list.json", "[]")
+    seq = json.loads(read("list.seq", "null"))
+    if seq:
+        # the nth `crew list` prints the nth listing, then the last one again
+        n = int(read("list.count", "0") or 0)
+        with open(os.path.join(ctl, "list.count"), "w") as count:
+            count.write(str(n + 1))
+        out = json.dumps(seq[min(n, len(seq) - 1)])
+    sys.stdout.write(out)
     sys.stderr.write(read("list.msg"))
     sys.exit(int(read("list.rc", "0") or 0))
 if args[:2] in (["crew", "launch"], ["crew", "send"], ["crew", "close"]):
@@ -170,7 +178,7 @@ class World:
         env.update(extra)
         return env
 
-    def run(self, script, *args, ship=SHIP, **extra_env):
+    def run(self, script, *args, ship=SHIP, timeout=60, **extra_env):
         if not Path(script).exists():
             # a missing script is a failing assertion on its exit code, not a traceback in every test
             return Result(subprocess.CompletedProcess([str(script)], 127, "", f"{script}: no such file\n"))
@@ -181,6 +189,7 @@ class World:
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout,
         )
         return Result(proc)
 
@@ -206,6 +215,10 @@ class World:
 
     def boats(self, *boats):
         self.ctl_write("list.json", json.dumps(list(boats)))
+
+    def boats_over_time(self, *listings):
+        """The nth `admiral crew list` prints the nth listing (a list of boats), then the last one again."""
+        self.ctl_write("list.seq", json.dumps(list(listings)))
 
     def calls(self, tool):
         path = self.ctl / f"{tool}.log"

@@ -51,7 +51,6 @@ def split_launch(case, argv, name):
         case.assertTrue(body[i].startswith("--") and i + 1 < len(body), f"flag without a value at {i}: {argv}")
         (args if body[i] == "--arg" else flags.setdefault(body[i], [])).append(body[i + 1])
         i += 2
-    flags = {k: v for k, v in flags.items()}
     case.assertEqual(prompt, first_prompt(name, case.w.team / "prompts" / f"{name}.md"))
     return flags, args
 
@@ -60,6 +59,8 @@ class LaunchCase(WorldCase):
     def setUp(self):
         super().setUp()
         self.w.prompt("alpha")
+        # launch waits for the boat's first hook, so by default the boat it starts is already active
+        self.w.boats(boat("alpha", last_activity=rfc3339(time.time())))
 
     def launch(self, *opts, name="alpha", **env):
         return self.w.run(LAUNCH, *opts, self.w.team, name, self.w.work, **env)
@@ -181,7 +182,8 @@ class TestLaunchArguments(LaunchCase):
         )
         self.assertEqual(done.code, OK, done.text)
         self.assertEqual(done.out.splitlines()[0], "alpha -")
-        flags, _ = split_launch(self, self.w.admiral()[-1], "alpha")
+        (call,) = [a for a in self.w.admiral() if a[:2] == ["crew", "launch"]]
+        flags, _ = split_launch(self, call, "alpha")
         self.assertEqual(flags["--role"], ["test-writer"])
 
     def test_nothing_reaches_claude_or_a_viewer(self):
@@ -260,7 +262,7 @@ class TestLaunchExitCodes(LaunchCase):
         self.assertEqual(self.w.registry(), [])
 
     def test_names_outside_admirals_rule_exit_5_naming_the_rule(self):
-        for bad in ("Alpha", "a_b", "a.b"):
+        for bad in ("Alpha", "a_b", "a.b", "-alpha"):
             with self.subTest(name=bad):
                 self.w.prompt(bad)
                 done = self.launch("--role", "test-writer", name=bad)
@@ -281,6 +283,55 @@ class TestLaunchExitCodes(LaunchCase):
         done = self.w.run(ADMIRAL_DRIVER / "launch", self.w.team, "Bad_Name", self.w.work, "sonnet", prompt, 0)
         self.assertEqual(done.code, USAGE, done.text)
         self.assertIn("lowercase", done.text)
+
+
+class TestLaunchWait(LaunchCase):
+    """A launch reports success only after the boat's first hook (last_activity), as the claude driver fails fast on an
+    untrusted folder."""
+
+    def closes(self):
+        return [a for a in self.w.admiral() if a[:2] == ["crew", "close"]]
+
+    def test_waits_for_the_first_hook_then_succeeds(self):
+        quiet, active = [boat("alpha")], [boat("alpha", last_activity=rfc3339(time.time()))]
+        self.w.boats_over_time(quiet, active)
+        done = self.launch("--role", "test-writer", LAUNCH_POLL="0")
+        self.assertEqual((done.code, done.err), (OK, ""), done.text)
+        self.assertEqual(done.out.splitlines()[0], "launched alpha as background session alpha in " + str(self.w.work))
+        self.assertEqual(len([a for a in self.w.admiral() if a[:2] == ["crew", "list"]]), 2)
+        self.assertEqual(self.closes(), [])
+
+    def test_no_activity_in_time_closes_the_boat_and_exits_5(self):
+        self.w.boats(boat("alpha"))
+        done = self.launch("--role", "test-writer", LAUNCH_WAIT="0", LAUNCH_POLL="0")
+        self.assertEqual(done.code, USAGE, done.text)
+        self.assertIn("alpha showed no activity within 0s", done.text)
+        self.assertIn("startup prompt", done.text)
+        self.assertIn(f"Run the dock's harness once in {self.w.work}", done.text)
+        self.assertEqual(len(self.closes()), 1)
+        self.assertEqual(self.closes()[0][:3], ["crew", "close", "alpha"])
+        self.assertEqual(self.w.registry(), [])
+        self.assertNotIn("alpha -", done.out)
+
+    def test_wait_settings_come_from_team_env(self):
+        self.w.boats(boat("alpha"))
+        self.w.write_team_env(extra=["LAUNCH_WAIT=0", "LAUNCH_POLL=0"])
+        done = self.launch("--role", "test-writer")
+        self.assertEqual(done.code, USAGE, done.text)
+
+    def test_a_boat_that_exits_during_startup_closes_and_exits_1(self):
+        self.w.boats(boat("alpha", "anchored"))
+        done = self.launch("--role", "test-writer", LAUNCH_POLL="0")
+        self.assertEqual(done.code, FAILED, done.text)
+        self.assertIn("alpha exited during startup", done.text)
+        self.assertEqual(len(self.closes()), 1)
+        self.assertEqual(self.w.registry(), [])
+
+    def test_a_boat_missing_from_the_listing_exits_1(self):
+        self.w.boats()
+        done = self.launch("--role", "test-writer", LAUNCH_POLL="0")
+        self.assertEqual(done.code, FAILED, done.text)
+        self.assertIn("exited during startup", done.text)
 
 
 class TestSend(WorldCase):
@@ -527,6 +578,17 @@ class TestDeferred(WorldCase):
         self.assertTrue(lines[0].startswith(f"transcript: {path}"), lines)
         self.assertEqual(lines[1:], ["TOOL  Bash: ls two", "TOOL  Bash: ls three", "SAID  all done"])
 
+    def test_tail_uses_the_transcripts_config_dir_not_the_one_in_team_env(self):
+        path = self.transcript([self.tool("ls one"), self.said("all done")])
+        other = self.w.root / "coordinator-cfg"
+        (other / "projects").mkdir(parents=True)
+        self.w.write_team_env(extra=[f"CLAUDE_CONFIG_DIR={other}"])
+        self.w.register("alpha")
+        self.w.boats(boat("alpha", "underway", transcript=str(path)))
+        done = self.w.run(TAIL, self.w.team, "alpha", 2)
+        self.assertEqual(done.code, OK, done.text)
+        self.assertEqual(done.out.splitlines()[1:], ["TOOL  Bash: ls one", "SAID  all done"])
+
     def test_tail_without_a_recorded_transcript_says_so_and_fails(self):
         self.w.register("alpha")
         self.w.boats(boat("alpha", "underway", transcript=None))
@@ -570,6 +632,31 @@ class TestDeferred(WorldCase):
         self.assertEqual(declared["LIVE_MESSAGING"], "1")
         self.assertEqual(declared["SEND"], "script")
         self.assertIn(declared.get("SKILL_PREFIX", "/"), ("/",))
+
+
+class TestHarnessAdmiral(LaunchCase):
+    """`admiral` is a host driver, not a harness: HARNESS=admiral exits 5 at once instead of looping."""
+
+    def setUp(self):
+        super().setUp()
+        self.w.write_team_env(harness="admiral")
+        self.w.register("alpha")
+
+    def refused(self, done):
+        self.assertEqual(done.code, USAGE, done.text)
+        self.assertIn("admiral is a host driver, not a harness", done.text)
+
+    def test_launch_refuses(self):
+        self.refused(self.launch("--role", "test-writer"))
+        self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
+
+    def test_deferred_operations_refuse(self):
+        for op, args in (("has-skill", ("x",)), ("list-skills", ()), ("advisor-probe", ("sonnet",))):
+            with self.subTest(op=op):
+                self.refused(self.w.run(ADMIRAL_DRIVER / op, self.w.team, *args, timeout=20))
+
+    def test_tail_refuses(self):
+        self.refused(self.w.run(TAIL, self.w.team, "alpha", timeout=20))
 
 
 class TestPreflight(WorldCase):

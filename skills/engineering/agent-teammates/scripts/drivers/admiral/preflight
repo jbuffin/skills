@@ -11,7 +11,7 @@ ok()   { echo "OK    $*"; }
 bad()  { echo "FAIL  $*"; fail=1; }
 
 # The claude driver prints its own exit code from its FAIL lines, so drop the two about `claude agents` and count what's left.
-out=$($(harness_driver $D)/preflight $D 2>&1 | grep -vE '^(OK|FAIL) +claude (agents|background sessions)')
+out=$($HARNESS_DRIVER/preflight $D 2>&1 | grep -vE '^(OK|FAIL) +claude (agents|background sessions)')
 print -r -- "$out"
 [[ $out == *$'\nFAIL'* || $out == FAIL* ]] && fail=1
 
