@@ -1,6 +1,6 @@
 # Commodore on Copilot CLI
 
-Read this when the run's `HARNESS` is `copilot`. agent-teammates has its own `references/harness-copilot.md` for launching, re-tasking, the security caveats, session storage and watching.
+Read this when the run's `HARNESS` is `copilot`. agent-teammates has its own `references/harness-copilot.md` (inside an Admiral ship, writers are live crew boats and its "Inside an Admiral ship" section applies) for launching, re-tasking, the security caveats, session storage and watching.
 
 ## Default model per role
 

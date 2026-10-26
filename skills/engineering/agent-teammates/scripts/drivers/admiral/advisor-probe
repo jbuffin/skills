@@ -1,7 +1,9 @@
 #!/bin/zsh
 # usage: advisor-probe <team-dir> ...   (see ../CONTRACT.md)
-# Runs the run harness's own advisor-probe: the crew boats run that harness, in the coordinator's environment.
+# Runs the run harness's own advisor-probe: the crew boats run that harness, in the coordinator's environment. Codex and
+# Copilot have none, so those runs print what commodore's advisor-probe.sh prints for a driver without one.
 [[ -d $1 ]] || { sed -n 2p $0; exit 5; }
 source ${0:A:h}/lib.zsh
 HD=$(harness_driver $1) || exit 5
+[[ -x $HD/advisor-probe ]] || { echo "ADVISOR n/a (${HD:t})"; exit 0; }
 exec $HD/advisor-probe "$@"

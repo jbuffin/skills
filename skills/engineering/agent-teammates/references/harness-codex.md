@@ -1,6 +1,6 @@
 # Teammates on Codex
 
-Read this when the run's `HARNESS` is `codex`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/codex/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session.
+Read this when the run's `HARNESS` is `codex`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/codex/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session. Inside an Admiral ship a writer is a live crew boat instead ("Inside an Admiral ship"); a `--read-only` teammate stays as this page describes.
 
 ## What a teammate is
 
@@ -158,6 +158,21 @@ There's no dashboard and no attaching. To see who is live, run `<teammates>/driv
 
 Each session's rollout is `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<timestamp>-<thread-id>.jsonl`, with `CODEX_HOME` defaulting to `~/.codex`. The driver's own files are in the team directory: `codex-<thread-id>.state` (name, process group, model, effort, working directory), `codex-<name>.<n>.events`, `.err` and, for a read-only role, a private `.out` that the wrapper renames into `reports/`. `close-teammate.sh` stops the turn and keeps all of them, so a closed session's rollout stays readable.
 
+## Inside an Admiral ship
+
+With `ADMIRAL_SHIP` set (caller's environment or `team.env`), the admiral driver replaces `drivers/codex` for writers. The rest of this page describes the headless teammates that remain.
+
+- **Writers are crew boats.** A teammate launched without `--read-only` is a live interactive Codex in a tmux window of the ship (`admiral crew launch --harness codex`), and `retask.sh` re-tasks it by typing into it (`admiral crew send`). `LIVE_MESSAGING=1` lines of the teammate contract apply to it. The launch passes these as `--arg` values: `-s workspace-write`, `-c sandbox_workspace_write.network_access=true`, `--add-dir <team-dir>/reports`, `-m <model>`, `-c model_reasoning_effort=…` when the role has an effort, and `-a never`. There is no `exec`, `--json`, `--skip-git-repo-check`, `-C` or `--ignore-rules`.
+- **`-a never` is allowed here.** The crew boat has no one to answer an approval prompt, so it runs with approvals off inside the workspace-write sandbox; a write outside the workspace is denied without asking. This is the only approval override this driver makes. Don't add `-a`, `approval_policy` or a looser sandbox yourself to get past a denial.
+- **`--read-only` teammates stay headless.** The admiral driver hands them to `drivers/codex` (`codex exec -s read-only --ignore-rules`) and records their id in `<team-dir>/admiral-delegated`. Interactive Codex has no `--ignore-rules`, so a read-only teammate run as a boat would still obey the user's git allow rules, which run commands outside the sandbox. They report as in "How a read-only teammate reports", and `retask.sh`, `close-teammate.sh`, `watch-teammates.sh` and `teammate-tail.sh` reach them by that id. **Known limit:** if `admiral crew list` fails when you close a read-only teammate, `close-teammate.sh` can't tell it from a planted id, so it stops nothing (`stop` prints "can't list crew boats; nothing stopped", and `close-teammate.sh` then says "was not running"). The headless turn ends on its own; check `status` once Admiral answers.
+- **Autopilot.** Under `ADMIRAL_AUTOPILOT=1` Admiral refuses Codex boats, so every teammate stays headless, writers included, and everything on this page applies.
+- **Settle the startup prompts once per dock, before the run.** A new Codex boat stops at the folder-trust screen for the repository and at "Hooks need review" for Admiral's hooks, and neither fires a hook. The launch then closes the boat and exits 5 after `LAUNCH_WAIT` seconds (default 90). Run the dock's `codex` (the dock's `CODEX_HOME`, from `fleets.<fleet>.codex.env` in `~/.admiral/config.json`) in the repository, trust the folder, and approve the hooks. Don't pass `-c projects…trust_level` or another trust override. Run `<teammates>/drivers/admiral/preflight <team-dir>` once before launching: it WARNs when the dock's `config.toml` lacks the repository's `trust_level = "trusted"` or any `[hooks.state]` table (the hook check looks for any hook trust, not Admiral's hooks in particular, so a dock that trusted its own hooks only passes it). Commodore's `team-preflight.sh` runs `drivers/codex/preflight` and not this one.
+- **A missing dock** fails the launch with Admiral's exit 1 and its message (`fleet <f> has no codex dock`). Report it.
+- **Watching.** An idle writer boat after its job shows `needs_you`, so `watch-teammates.sh` reports BLOCKED, and it may report STALL as well; DONE comes from the marker, never from the state. An idle Codex boat may flip from `needs_you` back to `underway` with `last_activity` unchanged: it can read as working, so trust the marker and the `last_activity` epoch.
+- **Reading output.** `teammate-tail.sh` can't render a crew boat's transcript (Codex's tail needs the state file and `exec --json` events). It prints the rollout path Admiral recorded (`$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl`) and its last `<n>` lines raw, each cut to 300 characters. A finished turn is an `event_msg` whose payload type is `task_complete`. Before the boat's first hook there is no transcript and it exits 3.
+- **Boarding.** `admiral attach <ship> <crew>` opens the boat's window. Board a BLOCKED boat before re-tasking it: the typed pointer ends with Enter, which could answer a prompt it is waiting on.
+- **A driver flip.** A run started under autopilot and resumed without it (or the other way round) switches drivers for writers, and their ids then read as `missing`. Keep the run on one setting.
+
 ## Closing
 
 Close teammates with `close-teammate.sh`. It stops the turn's process group and every process below it. Limits:
@@ -166,7 +181,7 @@ Close teammates with `close-teammate.sh`. It stops the turn's process group and 
 - Never run these in place of `close-teammate.sh`:
   - `codex delete`, or anything else that removes a session or its rollout;
   - killing the codex process or its group by hand: it writes no `closed` row, so `retask.sh` still resumes the thread. The tool processes it started can survive, and the watchdog reports a `BLOCKED` teammate, not a closed one;
-  - `codex` with `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto` or an approval-policy override (`-a`, `approval_policy`), to get past a denial or a launch failure: stop and ask instead;
+  - `codex` with `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, `--full-auto` or an approval-policy override (`-a`, `approval_policy`) made to get past a denial or a launch failure: stop and ask instead. The one exception is the `-a never` the admiral driver gives a crew boat ("Inside an Admiral ship");
   - an interactive `codex resume <thread>`: it appends to the thread the driver resumes, and the teammate's next turn would pick up your input.
 
 ## Fallback when a launch fails

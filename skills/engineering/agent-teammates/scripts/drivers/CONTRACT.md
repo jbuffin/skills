@@ -1,12 +1,12 @@
 # Driver contract
 
-Every harness has a folder here (`claude/`, `codex/`, `copilot/`), and one **host driver**, `admiral/`, is chosen by where the run lives instead of by its harness. Each holds a `driver.env` and one executable per operation. The shared scripts run an operation through `drv <op> <args>` (`team-env.zsh`). A missing operation makes `drv` return 9 with a message on stderr, which the callers map to exit 5. Operations must never exit 9 themselves. `team-env.zsh` selects `admiral/` when `ADMIRAL_SHIP` is non-empty (from the caller's environment or `team.env`) and `HARNESS` is `claude`; every other run uses `drivers/<HARNESS>`. Inside a host, the host decides how teammates are launched, messaged, watched and stopped, and `HARNESS` names the run harness: the harness its teammates run. The host driver runs that harness's driver for the operations the host doesn't own (`has-skill`, `list-skills`, `advisor-probe`, and the transcript read in `tail`). The coordinator reads the declarations through the harness reference; the shared scripts don't source `driver.env`, except that `retask.sh` reads its `SEND=` line.
+Every harness has a folder here (`claude/`, `codex/`, `copilot/`), and one **host driver**, `admiral/`, is chosen by where the run lives instead of by its harness. Each holds a `driver.env` and one executable per operation. The shared scripts run an operation through `drv <op> <args>` (`team-env.zsh`). A missing operation makes `drv` return 9 with a message on stderr, which the callers map to exit 5. Operations must never exit 9 themselves. `team-env.zsh` selects `admiral/` when `ADMIRAL_SHIP` is non-empty (from the caller's environment or `team.env`) except under `ADMIRAL_AUTOPILOT=1` with a `HARNESS` other than `claude`, where Admiral refuses the boats; every other run uses `drivers/<HARNESS>`. Inside a host, the host decides how teammates are launched, messaged, watched and stopped, and `HARNESS` names the run harness: the harness its teammates run. The host driver runs that harness's driver for the operations the host doesn't own (`has-skill`, `list-skills`, `advisor-probe`, and the transcript read in `tail`). One case it hands over entirely: a read-only Codex or Copilot teammate is run by its harness driver, headless, because an interactive Codex has no `--ignore-rules` and a read-only Copilot teammate run as a boat can't write its report without a permission prompt. `launch` records such a teammate's id in `<team-dir>/admiral-delegated`, and `send`, `stop`, `status` and `tail` route by that id (a "delegated teammate" below). The coordinator reads the declarations through the harness reference; the shared scripts don't source `driver.env`, except that `retask.sh` reads its `SEND=` line.
 
 ## Declarations
 
 Each harness driver's `driver.env` sets three values and holds nothing else the contract cares about:
 
-- `LIVE_MESSAGING`: `1` when a live teammate can be sent new work, so the coordinator keeps its session open between rounds. `0` when a teammate works one turn at a time.
+- `LIVE_MESSAGING`: `1` when a live teammate can be sent new work, so the coordinator keeps its session open between rounds. `0` when a teammate works one turn at a time. The admiral driver declares `1`, which holds for its crew boats; inside a ship the variant is per teammate, and a delegated teammate works one turn at a time, as `LIVE_MESSAGING=0`.
 - `SEND`: `tool` when sending is a harness tool call (the driver has no `send` executable), `script` when `retask.sh` calls the driver's `send`.
 - `SKILL_PREFIX`: what goes before a skill's name to invoke it: `/` (Claude Code, Copilot CLI) or `$` (Codex). commodore's `role-skills.sh` reads this line from `drivers/<HARNESS>`. A host driver omits it and defers to the run harness's.
 
@@ -44,7 +44,7 @@ Prints one line per known session: `<session-id> <status> <state> <last-activity
 
 `tail <team-dir> <label> <session-id> <n>`
 
-Prints a `transcript: ...` line, then the session's last `<n>` tool calls as `TOOL` lines and its latest message as one `SAID` line, as plain text. `<label>` is the name or id the engineer typed, for the message when nothing is found (exit 3).
+Prints a `transcript: ...` line, then the session's last `<n>` tool calls as `TOOL` lines and its latest message as one `SAID` line, as plain text. The admiral driver prints a Codex or Copilot crew boat's transcript path and its last `<n>` lines raw instead, each cut to 300 characters, because those harnesses' tails can't read a crew boat's transcript. `<label>` is the name or id the engineer typed, for the message when nothing is found (exit 3).
 
 ### stop
 

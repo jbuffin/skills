@@ -1,6 +1,6 @@
 # Teammates on Copilot CLI
 
-Read this when the run's `HARNESS` is `copilot`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/copilot/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session.
+Read this when the run's `HARNESS` is `copilot`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/copilot/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session. Inside an Admiral ship a writer is a live crew boat instead ("Inside an Admiral ship"); a `--read-only` teammate stays as this page describes.
 
 Read [Security caveats](#security-caveats) before you launch anyone. commodore's `references/harness-copilot.md` covers the default models, the capability rule and fix rounds.
 
@@ -119,6 +119,22 @@ There's no dashboard and no attaching. To see who is live, run `<teammates>/driv
 ## Where sessions live
 
 Each session is `~/.copilot/session-state/<session-id>/`, with its `events.jsonl`. The driver's own files are in the team directory: `copilot-<session-id>` (name, workdir, model, effort, ro, pid, pgid, started, resumed, stopped as `key=value` lines) and `copilot-<session-id>.out`, `.err` and `.rc` from the last run. Closing keeps all of them, and so does stopping: `stop` ends the run's process group and never touches the session directory. Copilot CLI 1.0.95 has no command that deletes a session: `copilot sessions --help` lists only `import`.
+
+## Inside an Admiral ship
+
+With `ADMIRAL_SHIP` set (caller's environment or `team.env`), the admiral driver replaces `drivers/copilot` for writers. The rest of this page describes the headless teammates that remain.
+
+- **Writers are crew boats.** A teammate launched without `--read-only` is a live interactive Copilot in a tmux window of the ship (`admiral crew launch --harness copilot`), and `retask.sh` re-tasks it by typing into it (`admiral crew send`). The `LIVE_MESSAGING=1` lines of the teammate contract apply to it. Admiral appends the prompt as `--interactive=<prompt>`. The launch passes the writer flags that `copilot --help` lists for the interactive command, as `--arg` values: `--no-ask-user`, `--allow-all-tools`, `--reasoning-effort` when the role has an effort, one `--add-dir` each for the team directory, the scripts directory and `PREFLIGHT_SCRIPTS`/`TEAM_SCRIPTS` when set, `--available-tools bash view edit create glob grep`, the five `--deny-tool` values from "Permissions per role", and `--model <model>` last. There is no `-p`, `-s`, `--session-id`, `--resume` or `--trust-folder`.
+- **`--read-only` teammates stay headless.** The admiral driver hands them to `drivers/copilot` (`copilot -p`) and records their id in `<team-dir>/admiral-delegated`. A read-only teammate run as a boat can't write its report without a permission prompt, and headless keeps today's read-only guarantee. They report as in "How a read-only teammate reports", and `retask.sh`, `close-teammate.sh`, `watch-teammates.sh` and `teammate-tail.sh` reach them by that id. **Known limit:** if `admiral crew list` fails when you close a read-only teammate, `close-teammate.sh` can't tell it from a planted id, so it stops nothing (`stop` prints "can't list crew boats; nothing stopped", and `close-teammate.sh` then says "was not running"). The headless turn ends on its own; check `status` once Admiral answers.
+- **Autopilot.** Under `ADMIRAL_AUTOPILOT=1` Admiral refuses Copilot boats, so every teammate stays headless, writers included, and everything on this page applies.
+- **Settle folder trust once per dock, before the run.** Copilot's interactive folder trust comes from `trustedFolders` in `$COPILOT_HOME/config.json` (default `~/.copilot/config.json`; see `copilot help config`). Run the dock's `copilot` in the repository and trust the folder. A boat at the trust prompt never fires a hook, so the launch closes it and exits 5 after `LAUNCH_WAIT` seconds (default 90). Run `<teammates>/drivers/admiral/preflight <team-dir>` once before launching: it WARNs when no `trustedFolders` entry is the repository root or an ancestor. Commodore's `team-preflight.sh` runs `drivers/copilot/preflight` and not this one.
+- **Hooks are unconfirmed.** Admiral loads Copilot's hooks from `--plugin-dir`, and its own source says that is unconfirmed against a real Copilot (`bundle.go:106-107`). If they don't load, no boat ever fires a hook and every Copilot writer launch exits 5 after `LAUNCH_WAIT`. Report that rather than retrying.
+- **Unallowed URLs.** `-p` denied a URL that wasn't allowed. A crew boat prompts instead and shows as `needs_you`, which the watchdog reports as BLOCKED. This driver adds no URL allows; board the boat with `admiral attach <ship> <crew>` and answer, or re-task it around the URL.
+- **A missing dock** fails the launch with Admiral's exit 1 and its message (`fleet <f> has no copilot dock`). Report it.
+- **Watching.** An idle writer boat after its job shows `needs_you`, so `watch-teammates.sh` reports BLOCKED, and it may report STALL as well; DONE comes from the marker, never from the state.
+- **Reading output.** `teammate-tail.sh` can't render a crew boat's transcript (Copilot's tail hard-codes `~/.copilot`). It prints the transcript path Admiral recorded and its last `<n>` lines raw, each cut to 300 characters. Admiral records the path only after the first turn ends, so before that it exits 3.
+- **Boarding.** `admiral attach <ship> <crew>` opens the boat's window. Board a BLOCKED boat before re-tasking it: the typed pointer ends with Enter, which could answer a prompt it is waiting on.
+- **A driver flip.** A run started under autopilot and resumed without it (or the other way round) switches drivers for writers, and their ids then read as `missing`. Keep the run on one setting.
 
 ## Closing
 

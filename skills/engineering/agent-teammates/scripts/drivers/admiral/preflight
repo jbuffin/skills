@@ -2,6 +2,8 @@
 # usage: preflight <run-dir>   (see ../CONTRACT.md)
 # The run harness's preflight, minus its background-session lines (a crew boat is interactive, so its NO_BG premise is
 # false here), plus Admiral's: `admiral` on PATH, `crew launch` takes --arg, and `crew list --json` works for the ship.
+# For Codex and Copilot it also WARNs when the folder or the hooks aren't trusted yet: a writer boat stops at that first-run
+# screen and its launch times out (the harness preflight's own lines still apply, because read-only teammates run headless).
 [[ $# -eq 1 && -f $1/team.env ]] || { sed -n 2,4p $0; exit 5; }
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh
@@ -22,5 +24,82 @@ if command -v admiral >/dev/null; then
     || bad "admiral crew list --json failed for ship '$ADMIRAL_SHIP'; check the ship name and that Admiral is running"
 else
   bad "admiral not on PATH"
+fi
+
+# Startup prompts. Folder trust and (Codex) hook trust are settled once per dock; a boat that meets an unsettled one never fires
+# a hook. Both are WARNs: they are read from the harness's config files, which only the harness itself fully understands.
+if [[ $HARNESS == (codex|copilot) ]] && command -v $HARNESS >/dev/null; then
+  python3 - $HARNESS "$REPO" "$ADMIRAL_SHIP" <<'PY'
+import json, os, re, subprocess, sys
+
+harness, repo, ship = sys.argv[1:4]
+home = os.path.expanduser("~")
+real = os.path.realpath
+
+def warn(text): print("WARN  " + harness + ": " + text)
+
+# The repository root: REPO, else the main checkout of the current repository (a linked worktree's own path is not enough).
+if not repo:
+    try:
+        common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        common = ""
+    if common: repo = os.path.dirname(common.rstrip("/"))
+if repo: repo = real(repo)
+
+def covers(entry):
+    entry = real(entry)
+    return repo == entry or repo.startswith(entry.rstrip("/") + "/")
+
+if harness == "codex":
+    # The dock's CODEX_HOME: fleets.<fleet>.codex.env.CODEX_HOME in ~/.admiral/config.json, the fleet being the one
+    # `admiral ships` gives for the ship (matched by its name or its session name; tab-separated NAME SESSION FLEET ...).
+    cxhome = source = None
+    try:
+        ships = subprocess.run(["admiral", "ships"], capture_output=True, text=True).stdout
+        fleet = next((c[2] for c in (l.split("\t") for l in ships.splitlines()) if len(c) >= 3 and ship in (c[0], c[1])), None)
+        cfg = json.load(open(os.path.join(home, ".admiral", "config.json")))
+        cxhome = os.path.expanduser(cfg["fleets"][fleet]["codex"]["env"]["CODEX_HOME"])  # Admiral stores a ~ as typed
+        source = "the dock of fleet " + fleet + " (~/.admiral/config.json)"
+    except Exception:
+        pass
+    if not cxhome:
+        cxhome, source = (os.environ["CODEX_HOME"], "the coordinator's CODEX_HOME") if os.environ.get("CODEX_HOME") else (os.path.join(home, ".codex"), "the default ~/.codex")
+    path = os.path.join(cxhome, "config.toml")
+    print("OK    codex trust is read from %s, %s" % (path, source))
+    try: text = open(path).read()
+    except OSError: text = ""
+    # Top-level tables only matter here: [projects."<path>"] with trust_level = "trusted", and any [hooks.state."<id>"].
+    trusted, table = [], None
+    for line in text.splitlines():
+        line = line.strip()
+        m = re.match(r'\[(.+)\]$', line)
+        if m:
+            pm = re.match(r'projects\.("(?:[^"\\]|\\.)*"|\'[^\']*\')$', m.group(1))
+            table = json.loads(pm.group(1)) if pm and pm.group(1)[0] == '"' else (pm.group(1)[1:-1] if pm else None)
+        elif table and re.match(r'trust_level\s*=\s*["\']trusted["\']\s*(#.*)?$', line):
+            trusted.append(table)
+    if not repo:
+        warn("folder-trust check skipped: REPO is unset and the current directory is in no git repository")
+    elif not any(covers(t) for t in trusted):
+        warn("%s isn't trusted in %s (%s): run codex in it with that CODEX_HOME and trust the folder once, or a writer launch times out at the folder-trust prompt" % (repo, path, source))
+    if not re.search(r'(?m)^\s*\[hooks\.state\.', text):
+        warn("no [hooks.state] tables in %s, so no hook trust is recorded there (any such table satisfies this check, not Admiral's hooks in particular); run codex once with that CODEX_HOME and approve the hook review, or a writer launch times out" % path)
+else:
+    path = os.path.join(os.environ.get("COPILOT_HOME") or os.path.join(home, ".copilot"), "config.json")
+    try:
+        # the file starts with // comment lines, which json can't read
+        lines = open(path).read().splitlines()
+        while lines and lines[0].lstrip().startswith("//"): lines.pop(0)
+        folders = json.loads("\n".join(lines))["trustedFolders"]
+        problem = None
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        folders, problem = [], "can't read trustedFolders from %s (%s)" % (path, type(e).__name__)
+    if not repo:
+        warn("folder-trust check skipped: REPO is unset and the current directory is in no git repository")
+        if problem: warn("%s isn't readable as trustedFolders: %s" % (path, problem))   # still true without a repo root
+    elif problem or not any(isinstance(f, str) and covers(f) for f in folders):
+        warn("%s isn't in trustedFolders of %s%s: run copilot in it and trust the folder once, or a writer launch times out at the folder-trust prompt" % (repo, path, " (" + problem + ")" if problem else ""))
+PY
 fi
 exit $fail

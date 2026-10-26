@@ -14,11 +14,10 @@ import os
 import sys
 import time
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from admiral_world import ADMIRAL_DRIVER, SCRIPTS, SHIP, USAGE_OLD, WorldCase, boat
+from admiral_world import ADMIRAL_DRIVER, SCRIPTS, SHIP, USAGE_OLD, WorldCase, boat, first_prompt, rfc3339, split_launch
 
 LAUNCH = SCRIPTS / "launch-teammate.sh"
 RETASK = SCRIPTS / "retask.sh"
@@ -31,28 +30,6 @@ FAILED = 1
 USAGE = 5
 NOT_LISTED = 3
 FIELDS = 4
-
-
-def rfc3339(epoch):
-    return datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def first_prompt(name, prompt_file):
-    return f"You are teammate {name}. Read {prompt_file} and do exactly what it says."
-
-
-def split_launch(case, argv, name):
-    """Admiral's own flags as a dict, the --arg values in order, and the prompt after the final `--`."""
-    case.assertEqual(argv[:2], ["crew", "launch"])
-    case.assertEqual(argv[-2], "--", argv)
-    body, prompt = argv[2:-2], argv[-1]
-    flags, args, i = {}, [], 0
-    while i < len(body):
-        case.assertTrue(body[i].startswith("--") and i + 1 < len(body), f"flag without a value at {i}: {argv}")
-        (args if body[i] == "--arg" else flags.setdefault(body[i], [])).append(body[i + 1])
-        i += 2
-    case.assertEqual(prompt, first_prompt(name, case.w.team / "prompts" / f"{name}.md"))
-    return flags, args
 
 
 class LaunchCase(WorldCase):
@@ -318,6 +295,24 @@ class TestLaunchWait(LaunchCase):
         self.w.write_team_env(extra=["LAUNCH_WAIT=0", "LAUNCH_POLL=0"])
         done = self.launch("--role", "test-writer")
         self.assertEqual(done.code, USAGE, done.text)
+
+    def test_a_launch_wait_that_is_not_whole_seconds_exits_5_before_any_launch(self):
+        for bad in ("abc", "1.5", "-3"):
+            with self.subTest(wait=bad):
+                self.w.write_team_env(extra=[f"LAUNCH_WAIT={bad}"])
+                done = self.launch("--role", "test-writer")
+                self.assertEqual(done.code, USAGE, done.text)
+                self.assertIn("LAUNCH_WAIT", done.text)
+                self.assertEqual(self.w.admiral(), [])
+
+    def test_a_launch_poll_that_is_not_a_non_negative_number_exits_5_before_any_launch(self):
+        for bad in ("abc", "-1", "1.", ".5"):
+            with self.subTest(poll=bad):
+                self.w.write_team_env(extra=[f"LAUNCH_POLL={bad}"])
+                done = self.launch("--role", "test-writer")
+                self.assertEqual(done.code, USAGE, done.text)
+                self.assertIn("LAUNCH_POLL", done.text)
+                self.assertEqual(self.w.admiral(), [])
 
     def test_a_boat_that_exits_during_startup_closes_and_exits_1(self):
         self.w.boats(boat("alpha", "anchored"))
