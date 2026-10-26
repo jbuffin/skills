@@ -52,7 +52,7 @@ The run's harness is the agent CLI it starts in. `team-init.sh` detects it and w
 
 ## Launching teammates
 
-You launch every teammate with `--role <role>`. The role names and the capability rule are in [`references/roles.md`](references/roles.md); the default model per role and the advisor pairing are in the harness reference. A fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. Outside an Admiral ship, for an in-process subagent after `NO_BG`, the harness reference says which model to use. Inside one there is no `NO_BG`.
+You launch every teammate with `--role <role>`. The role names and the capability rule are in [`references/roles.md`](references/roles.md); the default model per role and the advisor pairing are in the harness reference. A fresh run's `team.env` sets `REQUIRE_ROLE=1`, so a launch without `--role` fails. Outside an Admiral ship, for an in-process subagent after `NO_BG`, the harness reference says which model to use.
 
 ```bash
 <teammates>/launch-teammate.sh [--read-only] --role <role> <run> <name> <unit> [prompt-file]

@@ -27,8 +27,8 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
   | `ADVISOR` | the harness reference | the advisor model every teammate launches with, where the harness has an advisor; `none` turns it off. The reference gives the pairing rules |
   | `PERMISSION_MODE` | the harness reference | the teammates' permission mode |
   | `STALL_MIN` | 10 | the quiet minutes before STALL |
-  | `VIEWER` | none | opens a viewer pane per teammate, on a harness that supports it; the reference lists the values. Ignored inside an Admiral ship |
-  | `ADMIRAL_SHIP` | unset | the Admiral ship the run lives in; non-empty selects the admiral driver (see "Inside an Admiral ship"). Pin it here to keep a run on its ship across resumes |
+  | `VIEWER` | none | opens a viewer pane per teammate, on a harness that supports it; the reference lists the values. Ignored inside an Admiral ship with `HARNESS=claude` |
+  | `ADMIRAL_SHIP` | unset | the Admiral ship the run lives in; non-empty selects the admiral driver with `HARNESS=claude` (see "Inside an Admiral ship"). Pin it here to keep a run on its ship across resumes; the caller's `ADMIRAL_SHIP` wins over this line |
   | `REPO` | unset | the engineer's checkout, inside which no teammate starts |
 
 - `worktrees.tsv` lists `unit branch path`, so a unit name can stand in for a directory.
@@ -71,7 +71,10 @@ When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, 
 - A launch never exits 2 and prints no `NO_BG`, so there is no subagent fallback. A failed launch is an error to report.
 - Names and roles must be lowercase letters, digits and `-`; a launch with anything else exits 5.
 - A crew boat's `last_activity` is null until its first hook, so a boat stuck before any hook never shows STALL, only STALE.
-- Set `ADMIRAL_SHIP` in `team.env` to pin a run to its ship. Without it, a coordinator resumed outside the ship picks `drivers/claude`, and its crew boats read as GONE. Clear or refresh the pin once the original ship is gone: Admiral reuses a free ship name, so a stale pin can launch into, send to or close boats in another ship.
+- Set `ADMIRAL_SHIP` in `team.env` to pin a run to its ship. Without it, a coordinator resumed outside the ship picks `drivers/claude`, and its crew boats read as GONE. Clear or refresh the pin once the original ship is gone: Admiral reuses a free ship name, so a stale pin can launch into, send to or close boats in another ship. The caller's `ADMIRAL_SHIP` wins over the pin, so a coordinator resumed inside a different ship ignores it.
+- Board a BLOCKED boat with `admiral attach` before re-tasking it: Admiral's send ends with Enter, which may answer a pending prompt.
+- A launch returns after the boat's first hook and waits up to `LAUNCH_WAIT` seconds (default 90). A boat stuck at a startup prompt (folder trust) is closed and exits 5. Trust the repository once per dock first.
+- `has-skill`, `list-skills`, `advisor-probe` and `tail`'s rendering run in the coordinator's environment, which matches the crew's only when both use the same dock.
 
 ## Launch, re-task, close
 
@@ -122,7 +125,7 @@ When a report looks untrustworthy, the brief or its proof was weak. Sharpen it a
 
 ## Fallback
 
-Inside an Admiral ship there is no fallback: report the failed launch.
+Inside an Admiral ship with `HARNESS=claude` there is no fallback: report the failed launch.
 
 If `launch-teammate.sh` exits 2 (`NO_BG`: the harness can't run a background session here), follow the harness reference's fallback. Tell the engineer what they lose. Codex and Copilot never exit 2: their references say what to do when a launch fails.
 
