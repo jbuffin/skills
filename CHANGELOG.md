@@ -1,5 +1,17 @@
 # jasonbuffin-skills
 
+## 2.6.0
+
+### Minor Changes
+
+- [#161](https://github.com/jbuffin/skills/pull/161) [`03bd846`](https://github.com/jbuffin/skills/commit/03bd84689674efb21dcf3bebda5efec76ea030ce) Thanks [@jbuffin](https://github.com/jbuffin)! - Inside an Admiral ship, agent-teammates now runs Codex and Copilot writers as crew boats too. With `HARNESS=codex` or `copilot` and `ADMIRAL_SHIP` set, `launch-teammate.sh` starts a teammate without `--read-only` through `admiral crew launch --harness <harness>`, and `retask.sh` re-tasks it with `admiral crew send`. A `--read-only` teammate stays headless, and under `ADMIRAL_AUTOPILOT=1` every Codex and Copilot teammate does. `teammate-tail.sh` prints a Codex or Copilot boat's transcript path and last lines raw. A new boat stops at an unsettled folder-trust or hook-review prompt: settle them once per dock, and run `drivers/admiral/preflight` to check. A malformed `LAUNCH_WAIT` or `LAUNCH_POLL` now exits 5 naming the variable. ADR 0006 records the change.
+
+- [#160](https://github.com/jbuffin/skills/pull/160) [`5b5c069`](https://github.com/jbuffin/skills/commit/5b5c0691fa999446fdb63b25d2287530a197d33c) Thanks [@jbuffin](https://github.com/jbuffin)! - agent-teammates has an admiral driver. In an Admiral ship (`ADMIRAL_SHIP` set in the environment or `team.env`) with `HARNESS=claude`, `launch-teammate.sh`, `retask.sh`, `watch-teammates.sh`, `close-teammate.sh` and `teammate-tail.sh` run teammates as Admiral crew boats through `admiral crew launch|send|list|close`, and `VIEWER` is ignored. It needs Admiral main at 992f678 or later; on 0.3.0 a launch exits 5. `launch-teammate.sh --role` now passes the role to the driver as `TEAMMATE_ROLE`. Outside Admiral every script behaves as before. A launch returns after the boat's first hook (`LAUNCH_WAIT`, default 90 s) and closes a boat stuck at a startup prompt, exiting 5.
+
+### Patch Changes
+
+- [#161](https://github.com/jbuffin/skills/pull/161) [`03bd846`](https://github.com/jbuffin/skills/commit/03bd84689674efb21dcf3bebda5efec76ea030ce) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore's `references/brief-common.md` says that inside an Admiral ship the teammate-contract variant is per teammate: writers get the `LIVE_MESSAGING=1` lines and read-only Codex and Copilot teammates the `LIVE_MESSAGING=0` lines.
+
 ## 2.5.0
 
 ### Minor Changes
