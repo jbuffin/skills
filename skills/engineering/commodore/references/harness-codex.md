@@ -24,7 +24,7 @@ The reviewer, the security reviewer, the brief checker and the triager run `gpt-
 
 There is no advisor on Codex. The preflight prints `ADVISOR n/a (codex)`, and Codex teammates get no `spawn_agent` stand-in. So:
 
-- Drop "Asking the advisor" from `<run>/brief-common.md`, and drop the contract's "If your harness gives you an advisor…" line.
+- Drop "Asking the advisor" from `<run>/brief-common.md`, and drop the contract's "If your session has an advisor…" line.
 - Teammates write `none` under `## Advisor consults`. Don't expect consults, and don't read their absence as a brief problem.
 - The advisor bullet in "Bubbling questions up" doesn't apply. Sort technical questions with the rest.
 - Skip "When the advisor is off". It never applies.

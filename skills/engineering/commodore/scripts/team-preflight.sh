@@ -65,13 +65,13 @@ else
     m=${(P)${:-MODEL_$var}}
     [[ -n $m ]] && add_model $m ${${(L)var}//_/-}
   done
-  probed=()
+  to_probe=()
   for m in $models; do
     if advisor_same_family $m $ADVISOR; then
       ok "no advisor for $m (${model_roles[$m]}): same family as ADVISOR=$ADVISOR, by design"
-    else probed+=$m; fi
+    else to_probe+=$m; fi
   done
-  models=($probed)
+  models=($to_probe)
   # One probe per model in parallel (each has its own session name); print in order.
   pd=$(mktemp -d); pids=()
   # $pids are the probes themselves, so each probe's own trap stops its session; wait for them before cleaning up.
