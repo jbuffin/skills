@@ -30,6 +30,7 @@ DEFAULT_ROLES = [
     "MODEL_BRIEF_CHECKER=opus",
     "MODEL_TEST_WRITER=sonnet",
     "MODEL_IMPLEMENTER=sonnet",
+    "MODEL_FIX_CHECKER=sonnet",
     "MODEL_REVIEWER=opus",
     "MODEL_SECURITY_REVIEWER=opus",
     "MODEL_TRIAGER=opus",
