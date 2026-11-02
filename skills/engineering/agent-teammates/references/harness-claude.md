@@ -11,7 +11,7 @@ A teammate is a full Claude Code session started in the background with `claude 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `MODEL` | sonnet | the model for a launch with neither `--model` nor `--role` |
-| `ADVISOR` | opus | the built-in advisor model; `none` turns it off. A teammate whose model is in the same family (`opus`, `sonnet`, `haiku` or `fable`, matched case-insensitively as a substring) launches without `--advisor`: it has none by design. Otherwise the advisor has to rank at or above the teammate's model, and a Fable model accepts only `fable`, so no setting gives a Fable teammate an advisor (`ADVISOR=fable` makes it none by design); a refused pairing starts without the advisor and no error. An unrecognised family on either side keeps the flag |
+| `ADVISOR` | opus | the built-in advisor model; `none` turns it off. A teammate whose model is in the same family (`opus`, `sonnet`, `haiku` or `fable`, matched case-insensitively as a substring) launches without `--advisor`: it has none by design. Otherwise the advisor has to rank at or above the teammate's model, and a Fable model accepts only `fable`, so no setting gives a Fable teammate an advisor: with `ADVISOR=fable` it has none by design, and with any other `ADVISOR` except `none` it gets `ADVISOR OFF`. A refused pairing starts without the advisor and no error. An unrecognised family on either side keeps the flag |
 | `PERMISSION_MODE` | auto | the teammates' permission mode |
 | `VIEWER` | none | `cmux` or `tmux` opens a pane per teammate running `claude attach <id>`; cmux also needs `CMUX_WORKSPACE` and `CMUX_SURFACE` from `cmux identify`. Ignored inside an Admiral ship |
 
