@@ -1,13 +1,14 @@
 #!/bin/zsh
 # usage: advisor-probe <team-dir> <model>   (see ../CONTRACT.md)
-# Prints `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>` and exits 0 either way (5 on bad arguments).
+# Prints `ADVISOR ON <model>`, `ADVISOR OFF <model>: <reason>` or `ADVISOR SAME-FAMILY <model>` and exits 0 on all three (5 on bad
+# arguments). SAME-FAMILY: <model> is in the same family as ADVISOR, so it has no advisor by design; no session starts.
 # A refused advisor pairing or a disabled feature flag starts a session without the advisor and prints no error, so
 # this starts a real `claude --bg` session on <model> with --advisor $ADVISOR, asks it to consult the advisor once,
 # and reads its transcript for up to ADVISOR_PROBE_TIMEOUT seconds (default 150), retrying once with a fresh session.
 # Transcript signal (confirmed on a real session): a {"type":"server_tool_use",…,"name":"advisor",…} entry, then a
 # {"type":"advisor_tool_result",…} entry. "Advisor unavailable (<code>)" or an advisor_tool_result_error means OFF.
 # Cost: about 15-30 s when the advisor is on, up to about 5 min when it's off. Sessions end with `claude stop`.
-[[ -z $1 || -z $2 || -n $3 || ! -d $1 ]] && { sed -n 2,3p $0; exit 5; }
+[[ -z $1 || -z $2 || -n $3 || ! -d $1 ]] && { sed -n 2,4p $0; exit 5; }
 D=${1:A}; M=$2
 # Sourcing team-env.zsh creates teammates.tsv and reports/; cleanup removes them again if this script made them.
 HAD_REG=; HAD_REPORTS=; [[ -e $D/teammates.tsv ]] && HAD_REG=1; [[ -d $D/reports ]] && HAD_REPORTS=1
@@ -25,6 +26,10 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'cleanup; exit 143' INT TERM HUP
+
+# A model in the same family as ADVISOR has no advisor by design: nothing to probe, and not OFF. This comes before every
+# check below that can print ADVISOR OFF.
+advisor_same_family $M $ADVISOR && { print -r -- "ADVISOR SAME-FAMILY $M"; exit 0; }
 
 # Cheap, checkable causes of a silent OFF.
 hints() {

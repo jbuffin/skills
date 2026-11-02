@@ -2,8 +2,9 @@
 # usage: team-preflight.sh <run-dir>
 # The team-specific static checks (runtime, mode, gh-stack, advisor, worktrees, role skills), then the generic ones from the
 # run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
-# Run it in the background or with a long timeout: it starts one real session per distinct teammate model (in
-# parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
+# Run it in the background or with a long timeout: it starts one real session per distinct teammate model that is not in the
+# same family as ADVISOR (in parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
+# A model in the same family as ADVISOR starts no probe: it has no advisor by design, and gets one OK line.
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2,4p $0; exit 5; }
 unset HARNESS   # HARNESS comes from team.env alone, never from the caller's environment
 source $1/team.env
@@ -13,6 +14,8 @@ warn() { echo "WARN  $*"; }
 bad()  { echo "FAIL  $*"; fail=1; }
 REPO=${REPO:-$WORKTREE}
 MODEL=${MODEL:-sonnet}; ADVISOR=${ADVISOR:-opus}
+# Not team-env.zsh: sourcing that creates teammates.tsv and reports/ in the run directory.
+source ${0:A:h:h:h}/agent-teammates/scripts/advisor-family.zsh
 
 # The harness this run was started from: HARNESS in team.env (a team.env from before drivers has none; every earlier
 # run was Claude) must match the environment, and have a driver.
@@ -45,7 +48,8 @@ if [[ $MODE == stack ]]; then
   [[ $(git -C $REPO config rerere.enabled) == true ]] && ok "rerere enabled" || warn "git rerere off (git config rerere.enabled true helps stack rebases)"
 fi
 # The built-in advisor comes on silently or not at all in a background session, so probe it once per distinct
-# teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment).
+# teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment). A model in the
+# same family as ADVISOR has no advisor by design: no probe, one OK line.
 # ADVISOR_PROBE is a test seam: an executable that replaces advisor-probe.sh, called as `<probe> <run-dir> <model>`.
 if [[ $ADVISOR == none ]]; then
   ok "advisor check skipped (ADVISOR=none)"
@@ -61,6 +65,13 @@ else
     m=${(P)${:-MODEL_$var}}
     [[ -n $m ]] && add_model $m ${${(L)var}//_/-}
   done
+  probed=()
+  for m in $models; do
+    if advisor_same_family $m $ADVISOR; then
+      ok "no advisor for $m (${model_roles[$m]}): same family as ADVISOR=$ADVISOR, by design"
+    else probed+=$m; fi
+  done
+  models=($probed)
   # One probe per model in parallel (each has its own session name); print in order.
   pd=$(mktemp -d); pids=()
   # $pids are the probes themselves, so each probe's own trap stops its session; wait for them before cleaning up.

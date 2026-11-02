@@ -63,7 +63,7 @@ For each unit, record its progress with `<team>/state-set.sh` (see [The run dire
 ```text
 Unit N: <unit> (<PR or branch>, <state>)
 Built: <one line>   Tests: <counts>   Target (<option used>): <light check passed/failed; full eval yes/no>
-Advisor: <on | off for <roles>: <reason> | n/a (<harness>)>
+Advisor: <on | on, none by design for <roles> | none by design | off for <roles>: <reason> | n/a (<harness>)>
 Review: round k of 2, <fixed / left for human, HIGH first>
 Security: <fixed / left for human / none / not reviewed: no security role skill>   Non-blocking: <n recorded>
 Proof: <verify-report verdict>   Criteria closed: <ids from the trace>

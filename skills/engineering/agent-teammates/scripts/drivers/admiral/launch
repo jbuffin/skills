@@ -37,7 +37,7 @@ ARGS=()
 case $HARNESS in
   claude)
     [[ -n $RO ]] && ARGS+=(--arg --disallowedTools --arg "Edit(/$W/**)" --arg "NotebookEdit(/$W/**)")
-    [[ $ADVISOR != none ]] && ARGS+=(--arg --advisor --arg $ADVISOR)
+    [[ $ADVISOR != none ]] && ! advisor_same_family $CHOSEN $ADVISOR && ARGS+=(--arg --advisor --arg $ADVISOR)
     ARGS+=(--arg --model --arg $CHOSEN)
     # Under autopilot the boat inherits the dock's mode: Admiral refuses any looser one, and the default (auto) would block every launch.
     [[ $ADMIRAL_AUTOPILOT != 1 ]] && ARGS+=(--arg --permission-mode --arg $PERMISSION_MODE) ;;

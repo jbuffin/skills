@@ -24,7 +24,7 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
   | `MODEL_<ROLE>` | none | the model for `--role <role>`; see "Set the model explicitly" |
   | `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, on a harness that takes one; empty passes none. The reference says how the harness passes it |
   | `REQUIRE_ROLE` | unset | `1` makes every launch pass `--role` or `--model` |
-  | `ADVISOR` | the harness reference | the advisor model every teammate launches with, where the harness has an advisor; `none` turns it off. The reference gives the pairing rules |
+  | `ADVISOR` | the harness reference | the advisor model, where the harness has an advisor; `none` turns it off. A teammate whose model is in the same family as `ADVISOR` launches without it, by design. The reference gives the pairing rules |
   | `PERMISSION_MODE` | the harness reference | the teammates' permission mode |
   | `STALL_MIN` | 10 | the quiet minutes before STALL |
   | `VIEWER` | none | opens a viewer pane per teammate, on a harness that supports it; the reference lists the values. Ignored inside an Admiral ship |
@@ -39,14 +39,14 @@ Make every call **bare**: one command, run directly by its literal absolute path
 
 ## The teammate contract
 
-Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING` (the driver contract is `scripts/drivers/CONTRACT.md`). When you paste the contract, keep only the variant lines for the run's `LIVE_MESSAGING` value. Inside an Admiral ship the variant is per teammate: writers (crew boats, on every harness) get the `LIVE_MESSAGING=1` lines, and a read-only Codex or Copilot teammate, which runs headless, gets the `LIVE_MESSAGING=0` lines, so its STALL handling is the `LIVE_MESSAGING=0` one too. When the preflight prints `ADVISOR n/a`, drop the advisor line and the "with an advisor" variant of the unresolved-problem line. For a read-only role, keep the read-only exception.
+Put this in every prompt file, or in a shared brief that every prompt points to. The harness's `driver.env` sets `LIVE_MESSAGING` (the driver contract is `scripts/drivers/CONTRACT.md`). When you paste the contract, keep only the variant lines for the run's `LIVE_MESSAGING` value. Inside an Admiral ship the variant is per teammate: writers (crew boats, on every harness) get the `LIVE_MESSAGING=1` lines, and a read-only Codex or Copilot teammate, which runs headless, gets the `LIVE_MESSAGING=0` lines, so its STALL handling is the `LIVE_MESSAGING=0` one too. When the preflight prints `ADVISOR n/a`, or a teammate's model is in the same family as `ADVISOR` (its `no advisor for <model>` line), drop the advisor line and the "with an advisor" variant of the unresolved-problem line for that teammate. For a read-only role, keep the read-only exception.
 
 - Wait inside a Bash command whenever you're waiting on a build, a deploy, a token expiry or a device: `until <condition>; do sleep 30; done` with a long timeout, then carry on. Ending your turn to wait means nothing wakes you.
 - Write the report, then the marker. When you're finished, write `<team-dir>/reports/<name>.md`, then create `<team-dir>/reports/<name>.done`, in that order. Every role writes both, except a read-only teammate on Codex or Copilot (`--read-only` with `HARNESS=codex` or `copilot`): it can't write files, so its final message is its report, and the driver writes the report and marker after a completed turn. Then:
   - `LIVE_MESSAGING=1`: wait for messages.
   - `LIVE_MESSAGING=0`: exit. The coordinator resumes your session for the next job.
 - Questions go in the report under `## Questions for the engineer`, each with options and a recommendation. Keep going on whatever doesn't depend on the answer.
-- If your harness gives you an advisor, ask it technical questions: how to do something, which approach, why something fails. It's a stronger model paired with your session, and you decide when to call it.
+- If your session has an advisor, ask it technical questions: how to do something, which approach, why something fails. It's a stronger model paired with your session, and you decide when to call it.
 - Scope, product behaviour, departures from the source of truth and ground-rule questions go under `## Questions for the engineer`, and so does a problem you can't move forward:
   - with an advisor: one that two advisor consults haven't moved forward; stop consulting and ask;
   - without one: a problem you can't move forward on your own; stop and ask.

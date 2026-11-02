@@ -6,7 +6,7 @@ Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name 
 
 Launch every teammate with `--role <role>`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`. A fresh `team.env` from `team-init.sh` holds the harness's defaults, which [`harness-claude.md`](harness-claude.md) lists for Claude Code (read `harness-<HARNESS>.md`, with `HARNESS` from `team.env`); the profile overrides them. The roles are `implementer`, `test-writer`, `target-steward`, `reviewer`, `security-reviewer`, `brief-checker`, `triager` and `scribe`.
 
-The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a more capable model than a role's default, the profile sets these four roles to the coordinator's model. Advisor pairing, where the harness has an advisor, is in the harness reference.
+The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a more capable model than a role's default, the profile sets these four roles to the coordinator's model. Advisor pairing and the same-family rule, where the harness has an advisor, are in the harness reference.
 
 ## Role skills
 

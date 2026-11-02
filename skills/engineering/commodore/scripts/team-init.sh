@@ -121,7 +121,8 @@ CMUX=$CMUX_BIN
 CMUX_WORKSPACE=$WS
 CMUX_SURFACE=$SF
 MODEL=sonnet
-# Built-in advisor for every teammate (none turns it off). It must rank at or above every teammate model below.
+# Built-in advisor (none turns it off). A teammate whose model is in the same family as ADVISOR gets none, by design; any other
+# teammate model must rank at or below it.
 ADVISOR=opus
 PERMISSION_MODE=auto
 CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}

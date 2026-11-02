@@ -36,9 +36,11 @@ Secrets reach a command only through run-preflight's helper, as a bare call: `<p
 
 ## Asking the advisor
 
-<Drop this section when the harness has no advisor, which the preflight shows as `ADVISOR n/a`.>
+<Drop this section when the harness has no advisor, which the preflight shows as `ADVISOR n/a`. For roles on a model in the same family as `ADVISOR` (the preflight's `no advisor for <model> (<roles>)` lines), name those roles in the first paragraph below and keep the rest. A section for such roles alone becomes just that paragraph.>
 
-Your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. The teammate contract below says what to ask it and how to log each call; this section says when. If you have no advisor tool, skip it. You decide whether to call it; these are the moments it helps most:
+A teammate on a model in the same family as `ADVISOR` (<roles>) has no advisor by design: skip this section, follow the contract's "without one" line, and write `none` under `## Advisor consults`.
+
+Otherwise your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. The teammate contract below says what to ask it and how to log each call; this section says when. If you have no advisor tool, skip it. You decide whether to call it; these are the moments it helps most:
 
 - After you've looked around (read the files and the source of truth) but before substantive work: before the first edit, or before you settle on an interpretation.
 - When you're stuck: the same error keeps recurring, the approach isn't converging, or the results don't fit.
