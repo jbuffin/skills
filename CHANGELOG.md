@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 2.7.0
+
+### Minor Changes
+
+- [#178](https://github.com/jbuffin/skills/pull/178) [`2636a32`](https://github.com/jbuffin/skills/commit/2636a32dbc22933d598467932d60f39d20d75690) Thanks [@jbuffin](https://github.com/jbuffin)! - A Claude teammate launches without `--advisor` when its model is in the same family as `ADVISOR` (`opus`, `sonnet`, `haiku` or `fable`, matched case-insensitively as a substring, so `sonnet[1m]` and `claude-opus-5.5` resolve). On the default models the reviewer, security reviewer, brief checker and triager now run with no advisor by design; the implementer, test writer, steward and scribe keep it. The rule follows models, not roles, and covers the `claude` and `admiral` launch paths through one check in `advisor-family.zsh`. An unrecognised family on either side keeps the flag, and `ADVISOR=none` still leaves it out. `team-preflight.sh` starts no probe for a same-family model and prints `OK    no advisor for <model> (<roles>): same family as ADVISOR=<advisor>, by design` instead of `WARN  ADVISOR OFF`. The Claude `advisor-probe` prints a new last line, `ADVISOR SAME-FAMILY <model>`, for such a model and starts no session; `mission-review` and `mission-pr-feedback` do nothing on it. `brief-common.md` tells those teammates to skip "Asking the advisor" and write `none` under `## Advisor consults`, and the unit summary's `Advisor:` line reports `none by design` instead of `off`.
+
 ## 2.6.0
 
 ### Minor Changes
