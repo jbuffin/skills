@@ -1,18 +1,20 @@
 # Roles
 
-Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name is `<name>`." Then it gives the role's section below, built the way [Role skills](#role-skills) says, the unit, and the unit's pointers. The role sections speak to the teammate, so paste them as written. Names follow `u<unit>-<role>[-<round>]`, like `u3-reviewer-2` or `u3-security-reviewer-2`. The target steward, the scribe and the triager are just `target-steward`, `scribe` and `triager`.
+Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name is `<name>`." Then it gives the role's section below, built the way [Role skills](#role-skills) says, the unit, and the unit's pointers. The role sections speak to the teammate, so paste them as written. Names follow `u<unit>-<role>[-<round>]`, like `u3-reviewer-1` or `u3-security-reviewer-1`. The fix checker has one per unit, so its name has no round: `u3-fix-checker`. The target steward, the scribe and the triager are just `target-steward`, `scribe` and `triager`.
 
 ## Models
 
-Launch every teammate with `--role <role>`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`. A fresh `team.env` from `team-init.sh` holds the harness's defaults, which [`harness-claude.md`](harness-claude.md) lists for Claude Code (read `harness-<HARNESS>.md`, with `HARNESS` from `team.env`); the profile overrides them. The roles are `implementer`, `test-writer`, `target-steward`, `reviewer`, `security-reviewer`, `brief-checker`, `triager` and `scribe`.
+Launch every teammate with `--role <role>`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`. A fresh `team.env` from `team-init.sh` holds the harness's defaults, which [`harness-claude.md`](harness-claude.md) lists for Claude Code (read `harness-<HARNESS>.md`, with `HARNESS` from `team.env`); the profile overrides them. The roles are `implementer`, `test-writer`, `target-steward`, `reviewer`, `security-reviewer`, `brief-checker`, `triager`, `scribe` and `fix-checker`.
 
-The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a more capable model than a role's default, the profile sets these four roles to the coordinator's model. Advisor pairing and the same-family rule, where the harness has an advisor, are in the harness reference.
+The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a more capable model than a role's default, the profile sets these four roles to the coordinator's model. The fix checker is outside this rule: it runs on the implementer's model, and a fresh `team.env` already says so. Advisor pairing and the same-family rule, where the harness has an advisor, are in the harness reference.
+
+A `team.env` from before the fix checker has no `MODEL_FIX_CHECKER`, and the launcher refuses `--role fix-checker` without it. Before launching one, add `MODEL_FIX_CHECKER=<the run's MODEL_IMPLEMENTER>` to `team.env`, and on a harness that writes effort keys, `EFFORT_FIX_CHECKER=<EFFORT_IMPLEMENTER>`.
 
 ## Role skills
 
-Each role below has a **contract** and a **fallback**. Every brief for the role pastes the contract as written, and it wins wherever a role skill or the role's instructions clash with it.
+Each role below has a **contract** and, except the fix checker, a **fallback**. The fix checker has no role skills at any layer and no fallback. Every brief for the role pastes the contract as written, and it wins wherever a role skill or the role's instructions clash with it.
 
-The run's role skills are the table in `profile.md`, which `<team>/role-skills.sh <run>` resolves from the override layers (SKILL.md phase 1, step 1). For a role with skills, the brief gives the contract, then "Run `<skill>`" for each skill in the table's order, written as the table shows it, then the role's instructions from the table. For a role with none, the brief gives the fallback in place of the skills.
+The run's role skills are the table in `profile.md`, which `<team>/role-skills.sh <run>` resolves from the override layers (SKILL.md phase 1, step 1). For a role with skills, the brief gives the contract, then "Run `<skill>`" for each skill in the table's order, written as the table shows it, then the role's instructions from the table. For a role with none, the brief gives the fallback in place of the skills. For the fix checker, the brief gives the contract alone.
 
 ## Lifetimes
 
@@ -21,13 +23,14 @@ The run's role skills are the table in `profile.md`, which `<team>/role-skills.s
 | Brief checker | one per batch of briefs | a cheap, independent read of the brief before anyone builds on it |
 | Test writer | one per unit | fresh, so the tests come from the source of truth and not from an implementation |
 | Implementer | one per unit, alive through that unit's fix round | fixes are small, and re-reading the unit cold costs more than any bias it avoids |
-| Reviewer | fresh every round, at most two per unit | independence is the whole point; round 2 covers only the fix diff |
-| Security reviewer | one per unit, in round 1 | same reason as the reviewer: independence. Later rounds rarely find security issues, so the round-2 reviewer checks that its findings were fixed |
+| Reviewer | fresh, in round 1 only | independence is the whole point |
+| Fix checker | one per unit, in round 2 | fresh, so it checks the fixes against the fix job and not against what the implementer meant; it covers only the fix range |
+| Security reviewer | one per unit, in round 1 | same reason as the reviewer: independence. Later rounds rarely find security issues, so the fix checker checks that its findings were fixed |
 | Triager | fresh per mission | it sorts the feedback against the PR's head before anyone fixes it, so the sorting owes nothing to a fix |
 | Target steward | the whole run | it owns the target's state, sign-in, dialogs and cleanup, so that know-how stays in one place and the target has one owner instead of a queue |
 | Scribe | the whole run, or one per unit if its context grows | PR bodies and round-cap PR comments, kept out of the coordinator's context |
 
-When the implementer's context gets heavy (a hard unit, a long CI fix), or it starts defending its own code against findings, close it and give the remaining findings to a fresh implementer, with the reviewer's report as its pointer.
+When the implementer's context gets heavy (a hard unit, a long CI fix), or it starts defending its own code against findings, close it and give the remaining round-1 findings to a fresh implementer, with the reviewer's report as its pointer.
 
 Investigation and documentation work keeps the same roles. The implementer produces the finding or the doc. The test writer writes the checks it has to satisfy: the questions it must settle, the facts it must cite, the steps a reader must be able to follow. The reviewer verifies claims against sources, and the steward tries the doc's steps on the target.
 
@@ -53,11 +56,21 @@ Then end your turn the way the teammate contract says. On a fix round, apply the
 
 ## Reviewer
 
-**Contract.** You're launched `--read-only --role reviewer`. Review the unit's diff in round 1, with the source of truth and the unit's brief as context. Report findings ranked by severity, each with file:line and a failure scenario, and mark which ones block. Your output is the report alone: no edits, no GitHub comments.
-
-Round 2 is the last, and your brief says when you're in it. Review only the fix range it gives. For each item in the fix job, security items included, say whether it's fixed. Then report what the fixes introduced. Only HIGH blocks in round 2; mark MEDIUM and LOW findings as left for a human. Don't re-review code the fixes didn't touch.
+**Contract.** You're launched `--read-only --role reviewer`. Review the unit's diff, with the source of truth and the unit's brief as context. Report findings ranked by severity, each with file:line and a failure scenario, and mark which ones block. Your output is the report alone: no edits, no GitHub comments.
 
 **Fallback.** Check, in order: correctness against the source of truth and the brief; whether the tests prove the acceptance criteria; edge cases and error handling; the project's rules. Skip style.
+
+## Fix checker
+
+**Contract.** You're launched `--read-only --role fix-checker`, in round 2 only: a fix check, not a second review. Your input is the fix range `<reviewed SHA>..HEAD` and the fix job file. Investigate nothing else, whatever else your brief says. Run no role skills and no sub-agents, and make no advisor calls: write `none` under `## Advisor consults`. Your output is the report alone: no edits, no GitHub comments, and nothing you need `gh` for.
+
+Your report has three sections:
+
+- **Fix job:** for each item, security items included, `fixed`, `partly` or `not fixed`, with file:line.
+- **Introduced by the fixes:** anything the range itself broke, each with severity, file:line and a failure scenario. Only a HIGH here blocks. Code the fixes didn't touch goes in the next section, not this one.
+- **Seen in passing:** at most five one-line notes on anything else, pre-existing problems included. A note never blocks, whatever its severity.
+
+**Fallback.** None: the contract is the whole procedure.
 
 ## Security reviewer
 

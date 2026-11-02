@@ -1,12 +1,16 @@
 # Glossary
 
-**Review round**: one pass of review over a unit. Round 1 reviews the unit's diff; round 2, the last, checks only the fixes. _Avoid_: review cycle, iteration.
+**Review round**: one pass of review over a unit. Round 1 reviews the unit's diff; round 2, the last, is a fix check, which confirms the fixes landed without reviewing the unit again. _Avoid_: review cycle, iteration.
+
+**Fix check**: review round 2. A fresh fix checker looks only at the range since round 1, `<reviewed SHA>..HEAD`, and the fix job. It reports each fix-job item as `fixed`, `partly` or `not fixed`, what the fixes themselves broke, and up to five notes on anything else. It isn't a second review. _Avoid_: second review, re-review.
+
+**Fix checker**: the read-only teammate that runs the fix check, launched once per unit as `u<unit>-fix-checker`. It runs no role skills and no sub-agents and makes no advisor calls, and it has no fallback procedure. _Avoid_: round-2 reviewer.
 
 **Security reviewer**: a read-only teammate, launched once per unit in review round 1, that reviews the unit's diff only for security vulnerabilities, alongside the reviewer. _Avoid_: security auditor, security checker.
 
-**Blocking finding**: a review finding at or above the profile's severity threshold in round 1, or a HIGH finding in round 2, which must be fixed (or handed to a human at the round cap) before the unit ships. _Avoid_: must-fix, critical finding.
+**Blocking finding**: a review finding at or above the profile's severity threshold in round 1, or, in the fix check, a HIGH finding the fixes introduced, which must be fixed (or handed to a human at the round cap) before the unit ships. A MEDIUM or LOW the fixes introduced isn't blocking, but it goes to a human. _Avoid_: must-fix, critical finding.
 
-**Non-blocking finding**: a review finding below the threshold. It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial. _Avoid_: nit, minor finding.
+**Non-blocking finding**: a review finding below the threshold. It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial. A note from the fix check is recorded the same way but never goes to the implementer, whatever its severity. _Avoid_: nit, minor finding.
 
 **Mission**: what a commodore run is for, worked out from what the engineer points it at: build, review or PR feedback. It decides the run's task force. _Avoid_: job, task type.
 
@@ -20,7 +24,7 @@
 
 **Advisor**: a stronger model built into the harness and paired with a teammate's session, which sees the teammate's own transcript when the teammate consults it. A sub-agent the teammate has to brief or fork through its prompt is not an advisor, so a harness without one reports the advisor as not available. A teammate whose model is in the same family as the advisor has none by design: that is a third state, neither off (should have one and doesn't) nor not available. _Avoid_: second opinion, rubber duck, consultant.
 
-**Role skill**: a skill a teammate in a role runs within its role contract. A role can have several, run in order, or none. With none, the role follows its fallback procedure, except the security reviewer, which isn't launched. _Avoid_: role tool, persona skill.
+**Role skill**: a skill a teammate in a role runs within its role contract. A role can have several, run in order, or none. With none, the role follows its fallback procedure, except the security reviewer, which isn't launched, and the fix checker, which never has role skills and has no fallback. _Avoid_: role tool, persona skill.
 
 **Role contract**: the part of a role that always applies, whatever role skill runs: its inputs, launch flags, scope, report, done signal, proofs and safety rules. A role skill or its instructions can't override it. _Avoid_: role rules, base prompt.
 

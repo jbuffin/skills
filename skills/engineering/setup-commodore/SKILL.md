@@ -21,7 +21,7 @@ Run `scripts/roles-draft.sh init <user|repo>`. The run keeps that target to the 
 
 - `<run>`;
 - `FROM <file>` (the draft, `<run>/draft.json`, starts from that file's entries) or `NEW <file>` (the draft starts as `{}`);
-- `ROLES <path>`: commodore's role reference. Read its Role skills section and every role's **contract** and **fallback**.
+- `ROLES <path>`: commodore's role reference. Read its Role skills section and every role's **contract** and **fallback**. Skip the fix checker's section: it takes no role skills and has no fallback, so don't offer it as a role to configure, and an entry for it is ignored.
 
 On `FROM`, run `scripts/roles-draft.sh check <run>`. Show the engineer the table, and each `not available` line as a skill missing on this harness, whose role needs re-picking.
 
@@ -58,7 +58,7 @@ Draft every role's entry, then get them approved in one batch.
    - `Leave out`: a lower layer decides. Below the repo file, that's each engineer's user-global file. Below the user-global file there's only the fallback.
    - `Clear with []`: the fallback, even where a lower layer sets skills.
 
-   The fallback is the role's fallback procedure, with two exceptions. A security reviewer with no skills isn't launched at all. Every run puts that in its phase 1 decision batch and won't start without approval. In the review mission, the review waits for approval. The target steward always runs `target-evaluation`, which no layer replaces, and any role skills run within that skill's rules.
+   The fallback is the role's fallback procedure, with two exceptions (the fix checker, which is never configured, has none). A security reviewer with no skills isn't launched at all. Every run puts that in its phase 1 decision batch and won't start without approval. In the review mission, the review waits for approval. The target steward always runs `target-evaluation`, which no layer replaces, and any role skills run within that skill's rules.
 4. Write each approved entry into `<run>/draft.json`. Redraft each edited one and ask about those roles again.
 
 Done when every role has an approved entry, or an approved choice to leave it out or clear it, in `<run>/draft.json`.

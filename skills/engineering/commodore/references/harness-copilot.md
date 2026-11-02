@@ -8,7 +8,7 @@ Launch every teammate with `--role <role>`. A fresh `team.env` from `team-init.s
 
 | `--role` | Default model |
 | --- | --- |
-| `implementer`, `test-writer`, `target-steward` | `claude-sonnet-5.5` |
+| `implementer`, `test-writer`, `target-steward`, `fix-checker` | `claude-sonnet-5.5` |
 | `reviewer`, `security-reviewer`, `brief-checker`, `triager` | `claude-opus-5.5` |
 | `scribe` | `claude-haiku-5.5` |
 
@@ -34,7 +34,7 @@ Run `<teammates>/drivers/copilot/status <run>` when you resume and before any pu
 
 ## Fix rounds
 
-An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round.
+An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers, brief checkers and the fix checker launch fresh. A fix-check result never goes back to the implementer.
 
 A read-only teammate's surprising report stays unverified until `teammate-tail.sh` shows the turn that produced it.
 
@@ -60,6 +60,6 @@ Autopilot mode follows the same rules on Copilot ([Autopilot mode](../SKILL.md#a
 
 ## Read-only roles
 
-Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Copilot the flag set follows `--read-only`, not the role. Their shell may run `gh pr view`, `gh pr diff` and `gh issue view`, plus `git log`, `git show`, `git diff` and `git status`, with any arguments, so `--output=<file>` writes a file (see "Security caveats" in agent-teammates' reference). agent-teammates' "How a read-only teammate reports" covers their report. Give them no `.proof`.
+Launch the reviewer, security reviewer, brief checker, triager and fix checker with both `--role` and `--read-only`; on Copilot the flag set follows `--read-only`, not the role. Their shell may run `gh pr view`, `gh pr diff` and `gh issue view`, plus `git log`, `git show`, `git diff` and `git status`, with any arguments, so `--output=<file>` writes a file (see "Security caveats" in agent-teammates' reference). agent-teammates' "How a read-only teammate reports" covers their report. Give them no `.proof`, the fix checker included.
 
 Before an unattended run on Copilot, tell the engineer in the decision batch that until Copilot's OS sandbox (#49) lands, any teammate that reads text from people other than the engineer is unsafe: read-only teammates can write any path, and writers run as the engineer. That rules out the review mission (someone else's PR) and the PR-feedback mission's triager and fix units on comments from untrusted people. Record the answer in `state.md`. In autopilot mode this is a high-stakes call. Agent-teammates' "Security caveats" has the detail.

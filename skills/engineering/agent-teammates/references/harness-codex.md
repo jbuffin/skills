@@ -41,11 +41,11 @@ Tell the engineer these before a Codex run, and record their answer in the run's
 
 ## Sandbox per role
 
-The sandbox is chosen from `--read-only`, not from `--role`. Commodore always passes both for a read-only role. Nothing checks that pairing: a reviewer, security reviewer, brief checker or triager launched without `--read-only` runs as a writer, with network and the `git` rules.
+The sandbox is chosen from `--read-only`, not from `--role`. Commodore always passes both for a read-only role. Nothing checks that pairing: a reviewer, security reviewer, brief checker, triager or fix checker launched without `--read-only` runs as a writer, with network and the `git` rules.
 
 | Teammate | How it runs | What it can do |
 | --- | --- | --- |
-| launched with `--read-only` (reviewer, security reviewer, brief checker, triager) | read-only sandbox and `--ignore-rules`: `-s read-only` on launch, `-c sandbox_mode="read-only"` on every resume | reads files. Its shell writes no file and has no network, so no `gh`. Only `--ignore-rules` makes that true: without it, a user-level `allow` rule would run a matching command outside the sandbox. MCP servers aren't covered (below) |
+| launched with `--read-only` (reviewer, security reviewer, brief checker, triager, fix checker) | read-only sandbox and `--ignore-rules`: `-s read-only` on launch, `-c sandbox_mode="read-only"` on every resume | reads files. Its shell writes no file and has no network, so no `gh`. Only `--ignore-rules` makes that true: without it, a user-level `allow` rule would run a matching command outside the sandbox. MCP servers aren't covered (below) |
 | any other (implementer, test writer, target steward, scribe) | `workspace-write`, network on | writes its working directory and `<team-dir>/reports`, and reaches the network |
 
 Because a read-only teammate's shell has no network, put any GitHub data it needs (a PR diff, issue text, comments) in files under the run directory before you launch it, and name those files in its brief. Never expect it to run `gh`.

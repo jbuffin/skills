@@ -24,9 +24,10 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 - The **mission** is what a run is for, worked out from what the engineer points you at: `build`, `review` or `pr-feedback`. It decides the run's task force.
 - The **task force** is the set of roles a mission assembles for a run.
-- A **review round** is one pass of review over a unit. Round 1 reviews the unit's diff. Round 2, the last, checks only the fixes. `<team>/review-round.sh` counts them and refuses a third.
+- A **review round** is one pass of review over a unit. Round 1 reviews the unit's diff. Round 2, the last, is a **fix check** and not a second review: a fresh fix checker confirms the fix-job items landed and reports what the fixes broke, over the fix range only. `<team>/review-round.sh` counts rounds and refuses a third.
+- A **fix checker** is the read-only teammate that runs the fix check, launched once per unit in round 2. It runs no role skills, no sub-agents and no advisor calls.
 - A **security reviewer** is a read-only teammate, launched once per unit in round 1, that reviews the unit's diff only for security vulnerabilities, alongside the reviewer.
-- A **blocking finding** is a review finding at or above the profile's severity threshold (default: HIGH and MEDIUM) in round 1, or a HIGH finding in round 2. It must be fixed, or handed to a human at the round cap, before the unit ships.
+- A **blocking finding** is a review finding at or above the profile's severity threshold (default: HIGH and MEDIUM) in round 1, or in round 2 a HIGH finding the fixes introduced. It must be fixed, or handed to a human at the round cap, before the unit ships.
 - A **non-blocking finding** is a review finding below the threshold (default: LOW). It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial.
 - A **unit** is one piece of the work a single reviewer can hold in their head, usually one PR. The plan is an ordered list of units.
 - The **source of truth** is what a unit gets checked against: a spec, a design, an issue's acceptance criteria, existing behaviour, or reference code at a commit SHA. It is never a paraphrase of any of those.
@@ -60,7 +61,7 @@ You launch every teammate with `--role <role>`. The role names and the capabilit
 
 On every `DONE`, run `<teammates>/verify-report.sh <run> <name>` before you act on the report. It checks that the report and marker are from this tasking, that each declared proof ran in the teammate's worktree on its current HEAD with nothing uncommitted and exited 0, and that the report's `commit:` line names that HEAD. `verdict: unverified` means the work isn't done, whatever the report says; re-task the teammate with the FAIL lines in a [job file](#re-task-job-files), the way the re-tasking paragraph under "Launch, re-task, close" in agent-teammates' `SKILL.md` says.
 
-Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (the reviewer, the security reviewer, the brief checker) do not count, and neither does a teammate between jobs (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
+Keep at most two teammates that write (edit files or commit) working at once, plus the steward. Read-only teammates (the reviewer, the security reviewer, the brief checker, the fix checker) do not count, and neither does a teammate between jobs (agent-teammates explains the limit). Keep agent-teammates' watchdog running for as long as anyone is live, and act on its events the way that skill says.
 
 ## Role skills
 
@@ -166,7 +167,7 @@ Phase 1 is done when the steps your mission's row lists are. Then tell the engin
 
 ## Briefs
 
-Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the role's contract with its role skills or its fallback ([`references/roles.md`](references/roles.md)), and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it, one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines.
+Give the role, the unit, the unit's worktree, the source of truth by exact reference (path, SHA, issue or design link), what belongs to this unit and what doesn't, the scenarios, the role's contract with its role skills or its fallback ([`references/roles.md`](references/roles.md)), and what done means, which is the acceptance criteria from the trace that this unit closes. A brief points to sources and doesn't paraphrase them. For the implementer, and any other role whose report will say a command passed, write `<run>/prompts/<name>.proof` before launching it (the fix checker gets none: it runs no commands that need proof), one `<label> <command>` per line (`tests ./gradlew test`). When the profile sets a secret scan command, add it to the implementer's proof lines.
 
 ## Bubbling questions up
 

@@ -4,7 +4,7 @@
 # ${XDG_CONFIG_HOME:-~/.config}/commodore/roles.json, then the repo's .commodore/roles.json, then <run-dir>/roles.json.
 # A layer that names a role replaces that role's whole entry. Prints the resolved table for profile.md on stdout and
 # WARN lines on stderr. Exits 1 when a layer isn't valid JSON (naming the file), 5 on a bad call; either message goes
-# to stderr.
+# to stderr. The fix checker (SKILL.md, roles.md) never has skills: a layer's entry for it is dropped with a WARN.
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2p $0 >&2; exit 5; }
 command -v jq >/dev/null || { print -u2 "role-skills.sh needs jq on PATH"; exit 5; }
 unset HARNESS   # HARNESS comes from team.env alone, never from the caller's environment
@@ -13,7 +13,7 @@ HARNESS=${HARNESS:-claude}; REPO=${REPO:-$WORKTREE}   # an old team.env has WORK
 DRIVER=${0:A:h:h:h}/agent-teammates/scripts/drivers/$HARNESS
 PREFIX=$(sed -n 's/^SKILL_PREFIX=//p' $DRIVER/driver.env 2>/dev/null | tail -1); PREFIX=${PREFIX:-/}
 
-ROLES=(implementer test-writer reviewer security-reviewer brief-checker triager target-steward scribe)
+ROLES=(implementer test-writer reviewer security-reviewer brief-checker triager target-steward scribe fix-checker)
 typeset -A SKILLS INSTR SRC
 for role in $ROLES; do SKILLS[$role]=; INSTR[$role]=; SRC[$role]=built-in; done
 warn() { print -u2 -r -- "WARN  $*"; }
@@ -50,6 +50,7 @@ layer() {  # layer <source> <file>
   for line in ${(f)out}; do
     if [[ $line == W$'\t'* ]]; then warn "$2: ${line#W$'\t'}"; continue; fi
     IFS=$'\x1f' read -r t role skills instr <<< $line
+    [[ $role == fix-checker ]] && { warn "$2: fix-checker never has role skills or instructions; its entry is ignored"; continue; }
     SKILLS[$role]=$skills; INSTR[$role]=$instr; SRC[$role]=$1
   done
 }
@@ -78,6 +79,7 @@ for role in $ROLES; do
   elif [[ $role == security-reviewer ]]; then
     cell='none: not launched'
     warn "security-reviewer has no role skill: no security review this run"
+  elif [[ $role == fix-checker ]]; then cell='none'
   else cell='none (fallback procedure)'; fi
   print -r -- "| $role | $cell | ${INSTR[$role]:--} | ${SRC[$role]} |"
 done

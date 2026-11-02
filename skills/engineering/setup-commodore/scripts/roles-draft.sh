@@ -9,7 +9,7 @@
 #          SKILL.md or agent file, `-` for none, and so is a missing description.
 #   check  resolves the draft as the run layer, which wins for every role it names. Prints the table's rows for those
 #          roles, their WARN lines, a SHADOWED line for each user entry the repo's file overrides, an UNSET line for each
-#          role the draft leaves out, then `CLEAN` or `NOT CLEAN: <n> warnings`. The security reviewer's warning doesn't
+#          role the draft leaves out (never the fix checker, which has no skills), then `CLEAN` or `NOT CLEAN: <n> warnings`. The security reviewer's warning doesn't
 #          count.
 #   save   writes the draft to the target file, each `skills` an ordered array of bare names, and prints `SAVED <file>`.
 # Exits 1 when a layer or the draft isn't valid JSON or list-skills fails, 3 when the harness has no list-skills, 5 on a
@@ -101,6 +101,7 @@ case $cmd in
     [[ $TARGET == user && -f $REPO/.commodore/roles.json ]] && repo_roles=(${(f)"$(jq -r 'keys_unsorted[]' $REPO/.commodore/roles.json)"})
     for row in $table[3,-1]; do
       r=${${row#\| }%% *}
+      [[ $r == fix-checker ]] && continue   # it never has skills, so there is nothing to leave unset
       if (( ${roles[(Ie)$r]} )); then
         (( ${repo_roles[(Ie)$r]} )) && print -r -- "SHADOWED $r: $REPO/.commodore/roles.json sets it, so this entry does nothing in this repo"
       elif [[ $TARGET == repo ]]; then print -r -- "UNSET $r: each engineer's user-global file decides, else the fallback"

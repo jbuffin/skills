@@ -8,7 +8,7 @@ Launch every teammate with `--role <role>`. A fresh `team.env` from `team-init.s
 
 | `--role` | Default model |
 | --- | --- |
-| `implementer`, `test-writer`, `target-steward` | sonnet |
+| `implementer`, `test-writer`, `target-steward`, `fix-checker` | sonnet |
 | `reviewer`, `security-reviewer`, `brief-checker`, `triager` | opus |
 | `scribe` | sonnet (haiku allowed) |
 
@@ -16,11 +16,11 @@ Outside an Admiral ship, for an in-process subagent after `NO_BG`, use the model
 
 ## The capability rule on Claude
 
-The rule is in [`roles.md`](roles.md#models). On Claude, if the coordinator runs above Opus, the profile sets the four roles to the coordinator's model, and `ADVISOR` has to rank at or above it too, or be in its family (see below).
+The rule is in [`roles.md`](roles.md#models). On Claude, if the coordinator runs above Opus, the profile sets the four roles to the coordinator's model (not the fix checker, which stays on the implementer's), and `ADVISOR` has to rank at or above it too, or be in its family (see below).
 
 ## The advisor
 
-A teammate launches with the advisor unless its model is in the same family as `ADVISOR` (default opus): then it has no advisor by design, because an advisor of the same family has no stronger judgement to offer and each consult re-reads the teammate's transcript. The rule follows models, not roles. On the default models the implementers, test writers, the target steward and the scribe (Sonnet) have the advisor, and the reviewers, security reviewers, brief checkers and the triager (Opus) have none by design. Unless `ADVISOR=none`, the launcher passes `--advisor $ADVISOR` on every other launch, read-only ones included, and `brief-common.md` tells each teammate when to consult it, or that it has none. A teammate's advisor sees only that teammate's own transcript. It never sees the work a reviewer judges, so reviewers stay independent of the implementer.
+A teammate launches with the advisor unless its model is in the same family as `ADVISOR` (default opus): then it has no advisor by design, because an advisor of the same family has no stronger judgement to offer and each consult re-reads the teammate's transcript. The rule follows models, not roles. On the default models the implementers, test writers, the target steward and the scribe (Sonnet) have the advisor, and so does the fix checker (Sonnet), which launches with it but must not use it: its contract says to make no advisor calls and write `none` under `## Advisor consults`, and the launcher stays as it is. The reviewers, security reviewers, brief checkers and the triager (Opus) have none by design. Unless `ADVISOR=none`, the launcher passes `--advisor $ADVISOR` on every other launch, read-only ones included, and `brief-common.md` tells each teammate when to consult it, or that it has none. A teammate's advisor sees only that teammate's own transcript. It never sees the work a reviewer judges, so reviewers stay independent of the implementer.
 
 Three states, kept apart: **off** is a teammate that should have the advisor and doesn't, **n/a** is a harness with none, and **none by design** is a model in the same family as `ADVISOR`. Outside the same family, the advisor must rank at or above the teammate's model, and a pairing that doesn't hold starts without it and no error: that is off. `MODEL_REVIEWER=opus` with `ADVISOR=sonnet` leaves the reviewer without an advisor. For a Fable teammate, see the `ADVISOR` row in agent-teammates' [`harness-claude.md`](../../agent-teammates/references/harness-claude.md). Don't set `ADVISOR=fable` to give it an advisor. The preflight probes each distinct model that isn't in the same family as `ADVISOR` and reports `ADVISOR OFF` for each one that fails. For each model in the same family it starts no probe and prints `OK    no advisor for <model> (<roles>): same family as ADVISOR=<advisor>, by design`.
 
