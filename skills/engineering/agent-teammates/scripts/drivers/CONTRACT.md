@@ -62,7 +62,7 @@ Reserved for drivers that declare `SEND=script` (read by `retask.sh`). Gives the
 
 `advisor-probe <team-dir> <model>`
 
-Prints `ADVISOR ON <model>` or `ADVISOR OFF <model>: <reason>` as its last line; exits 0 either way. A driver with no `advisor-probe` makes `team-preflight` print `ADVISOR n/a (<harness>)`.
+Prints `ADVISOR ON <model>`, `ADVISOR OFF <model>: <reason>` or `ADVISOR SAME-FAMILY <model>` as its last line; exits 0 on all three. `SAME-FAMILY` means `<model>` is in the same family as `ADVISOR` (`advisor-family.zsh`), so it has no advisor by design: the driver starts no session and checks nothing else first. It is neither ON nor OFF. A driver with no `advisor-probe` makes `team-preflight` print `ADVISOR n/a (<harness>)`.
 
 ### has-skill
 

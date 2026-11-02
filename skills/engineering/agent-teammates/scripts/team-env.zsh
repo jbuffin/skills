@@ -1,7 +1,8 @@
 # Sourced by the agent-teammates scripts, with D set to the team directory.
 # Loads <team-dir>/team.env if present, then fills defaults.
 #   MODEL            teammate model (default sonnet), for launches without --model or --role
-#   ADVISOR          built-in advisor model for every teammate (default opus; none turns it off)
+#   ADVISOR          built-in advisor model (default opus; none turns it off). A teammate whose model is in the same family
+#                    gets no advisor by design (advisor-family.zsh)
 #   MODEL_<ROLE>     model for launches with --role <role> (the role uppercased, "-" and "." as "_"); no default: unset or empty refuses the launch
 #   EFFORT_<ROLE>   reasoning effort for launches with --role <role>, on harnesses that take one (Codex, Copilot); no default
 #   REQUIRE_ROLE     1: a launch needs --role or --model; no default
@@ -17,6 +18,7 @@
 #   REPO             a checkout teammates must never start in
 #   STALL_MIN        minutes a working teammate may go without writing to its transcript before STALL (default 10)
 # HARNESS comes from team.env alone, never from the caller's environment.
+source ${0:A:h}/advisor-family.zsh
 unset HARNESS
 ADMIRAL_SHIP_ENV=$ADMIRAL_SHIP   # what the caller's environment holds; an autopilot caller may pass --ship only for that
 [[ -f $D/team.env ]] && source $D/team.env
