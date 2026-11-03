@@ -129,9 +129,9 @@ class TestReviewRound(TmpCase):
             "not fixed or partly fixed",
             "HIGH first",
             "status=human",
-            "only a HIGH there is blocking",
+            "only a HIGH the fixes introduced is new blocking work",
             "status=open",
-            "Re-task nobody",
+            "Don't re-task anyone for a fix-check result",
         ):
             self.assertIn(needle, out)
 
@@ -354,6 +354,19 @@ class TestShippedText(unittest.TestCase):
         self.assertTrue(any(re.search(r"status=open|`open`", ln) for ln in notes), "no line records notes as open")
         step5 = self.line(self.build, "Done when round 2's report")
         self.assertNotRegex(step5, r"round-2 finding")
+
+    def test_no_bg_retries_once_then_skips_and_the_unit_can_finish(self):
+        skip = self.line(self.build, "exits 2 (`NO_BG`)")
+        self.assertIn("retry the launch once", skip)
+        self.assertIn("status=human", skip)
+        self.assertIn("or the skip above", self.line(self.build, "Done when round 2's report"))
+
+    def test_the_contract_pasted_into_the_brief_has_no_coordinator_rule(self):
+        section = self.roles.split("## Fix checker", 1)[1].split("## Security reviewer", 1)[0]
+        self.assertNotIn("NO_BG", section)
+
+    def test_a_break_the_fixes_caused_counts_as_introduced(self):
+        self.assertIn("A break the fixes caused goes here, even in code they didn't touch", self.roles)
 
 
 class TestGlossary(unittest.TestCase):

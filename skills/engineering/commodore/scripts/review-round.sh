@@ -15,5 +15,5 @@ N=$(( N + 1 ))
 print -r -- "$U $N" >> $F
 case $N in
   1) echo "round 1 of $CAP for $U: full review. Launch $U-reviewer-1, and $U-security-reviewer-1 when the run has a security reviewer, on the unit's diff" ;;
-  *) echo "round $N of $CAP for $U, the last, a fix check: launch $U-fix-checker alone, on the fix range. Record fix-job items not fixed or partly fixed, and everything the fixes introduced, HIGH first, as status=human; only a HIGH there is blocking. Record seen-in-passing notes as status=open. Re-task nobody" ;;
+  *) echo "round $N of $CAP for $U, the last, a fix check: launch $U-fix-checker alone, on the fix range. Record fix-job items not fixed or partly fixed, and everything the fixes introduced, HIGH first, as status=human; only a HIGH the fixes introduced is new blocking work. Record seen-in-passing notes as status=open. Don't re-task anyone for a fix-check result" ;;
 esac

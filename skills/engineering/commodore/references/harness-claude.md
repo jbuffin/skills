@@ -12,7 +12,7 @@ Launch every teammate with `--role <role>`. A fresh `team.env` from `team-init.s
 | `reviewer`, `security-reviewer`, `brief-checker`, `triager` | opus |
 | `scribe` | sonnet (haiku allowed) |
 
-Outside an Admiral ship, for an in-process subagent after `NO_BG`, use the model the `NO_BG` message names. An in-process agent launched without a model runs on the coordinator's model.
+Outside an Admiral ship, for an in-process subagent after `NO_BG`, use the model the `NO_BG` message names. An in-process agent launched without a model runs on the coordinator's model. The fix checker never runs in-process, whatever the `NO_BG` message suggests: step 5 of [`mission-build.md`](mission-build.md) says what to do instead.
 
 ## The capability rule on Claude
 

@@ -36,11 +36,11 @@ Secrets reach a command only through run-preflight's helper, as a bare call: `<p
 
 ## Asking the advisor
 
-<Drop this section when the harness has no advisor, which the preflight shows as `ADVISOR n/a`, or when `ADVISOR=none`. For roles whose model is in the same family as `ADVISOR` (the preflight's `no advisor for <model> (<roles>)` lines, or the direct probe's `ADVISOR SAME-FAMILY <model>`), name those roles in the first paragraph below and keep the rest. A section for such roles alone becomes just that paragraph. When no role's model is in that family, drop the first paragraph and the word "Otherwise", and start the section at "Your session has…". Keep the fix checker's paragraph below in every brief.>
+<Drop this section when the harness has no advisor, which the preflight shows as `ADVISOR n/a`, or when `ADVISOR=none`. For roles whose model is in the same family as `ADVISOR` (the preflight's `no advisor for <model> (<roles>)` lines, or the direct probe's `ADVISOR SAME-FAMILY <model>`), name those roles in the first paragraph below and keep the rest. A section for such roles alone becomes just that paragraph. When no role's model is in that family, drop the first paragraph and the word "Otherwise", so the rest starts at "Your session has…". The fix checker's paragraph below is the one exception to all of this: keep it in every brief, even when the rest of the section is dropped.>
 
 A teammate on a model in the same family as `ADVISOR` (<roles>) has no advisor by design: skip this section, follow the contract's "without one" line, and write `none` under `## Advisor consults`.
 
-The fix checker skips this section whatever its model, ignores the teammate contract's advisor lines, and makes no advisor calls: it writes `none` under `## Advisor consults`.
+The fix checker skips this section whatever its model, ignores the teammate contract's advisor lines, except the unresolved-problem line's "without one" case, which it follows, and makes no advisor calls: it writes `none` under `## Advisor consults`.
 
 Otherwise your session has a stronger model paired with it as an advisor. It reads your whole transcript on every call, has no tools and gives advice only. The teammate contract below says what to ask it and how to log each call; this section says when. If you have no advisor tool, skip it. You decide whether to call it; these are the moments it helps most:
 
