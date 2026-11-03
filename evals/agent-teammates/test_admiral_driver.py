@@ -406,6 +406,17 @@ class TestStatus(WorldCase):
         self.assertEqual([rows[n][3] for n in "abcd"], ["1792922400"] * 3 + ["-"])
         self.assertTrue(all(len(r) == FIELDS for r in rows.values()), rows)
 
+    def test_an_idle_boat_is_blocked(self):
+        """ac1-status-idle: Admiral's `idle` (a plain Stop ended the turn) reads as blocked."""
+        self.w.register("a")
+        self.w.boats(boat("a", "idle", last_activity="2026-10-25T10:00:00Z"))
+        self.assertEqual(self.status_lines()["a"], ["a", "-", "blocked", "1792922400"])
+
+    def test_an_unknown_state_still_passes_through_unchanged(self):
+        self.w.register("a")
+        self.w.boats(boat("a", "adrift", last_activity="2026-10-25T10:00:00Z"))
+        self.assertEqual(self.status_lines()["a"], ["a", "-", "adrift", "1792922400"])
+
     def test_the_listing_asks_admiral_for_json(self):
         self.w.register("a")
         self.status_lines()
@@ -472,6 +483,12 @@ class TestWatch(WorldCase):
         self.assertEqual(self.watch(), ["WATCH timeout 1"])
         self.assertEqual(self.watch(), ["BLOCKED alpha alpha"])
 
+    def test_an_idle_boat_without_a_marker_is_blocked_on_the_second_poll(self):
+        self.w.register("alpha")
+        self.w.boats(boat("alpha", "idle", last_activity=rfc3339(time.time() - 60)))
+        self.assertEqual(self.watch(), ["WATCH timeout 1"])
+        self.assertEqual(self.watch(), ["BLOCKED alpha alpha"])
+
     def test_a_quiet_working_boat_stalls(self):
         self.w.register("alpha")
         self.w.boats(boat("alpha", "underway", last_activity=rfc3339(time.time() - 30 * 60)))
@@ -513,12 +530,14 @@ class TestStop(WorldCase):
         self.assertEqual(self.closes()[0][:3], ["crew", "close", "alpha"])
         self.assertEqual(self.w.registry()[-1][2], "closed")
 
-    def test_underway_and_needs_you_exit_0(self):
-        for state in ("underway", "needs_you"):
+    def test_live_boats_close_and_exit_0(self):
+        """ac2-stop-idle: every state but anchored, `idle` included."""
+        states = ("underway", "needs_you", "idle")
+        for state in states:
             with self.subTest(state=state):
                 self.w.boats(boat("alpha", state))
                 self.assertEqual(self.stop().code, OK)
-        self.assertEqual(len(self.closes()), 2)
+        self.assertEqual(len(self.closes()), len(states))
 
     def test_an_anchored_boat_is_closed_but_exits_nonzero(self):
         self.w.boats(boat("alpha", "anchored"))

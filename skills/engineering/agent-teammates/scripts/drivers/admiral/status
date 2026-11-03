@@ -1,6 +1,6 @@
 #!/bin/zsh
 # usage: status <team-dir>   (see ../CONTRACT.md)
-# One line per teammate the registry holds an open row for: underway is working, needs_you is blocked, anchored is stopped, and
+# One line per teammate the registry holds an open row for: underway is working, needs_you and idle are blocked, anchored is stopped, and
 # a boat absent from `crew list` is missing. Boats the run didn't register are not printed (a ship holds other boats too).
 # The epoch is last_activity, `-` until the boat's first hook. A read-only Codex/Copilot teammate (`delegated`, in lib.zsh) is
 # no crew boat: its line comes from the harness driver's status, after the boats', and it is never missing.
@@ -15,7 +15,7 @@ boats=(); held=()
 for i in $ids; do delegated $i $listing && held+=($i) || boats+=($i); done
 # RFC 3339 by hand: the system python is 3.9, whose fromisoformat takes neither Z nor Go's nanosecond fractions.
 rows=$(print -r -- "$listing" | /usr/bin/python3 -c 'import calendar, json, re, sys, time
-STATES = {"underway": "working", "needs_you": "blocked", "anchored": "stopped"}
+STATES = {"underway": "working", "needs_you": "blocked", "idle": "blocked", "anchored": "stopped"}
 def epoch(t):
     m = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)", t or "")
     if not m: return "-"
