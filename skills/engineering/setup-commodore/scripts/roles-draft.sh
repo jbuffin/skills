@@ -9,8 +9,8 @@
 #          SKILL.md or agent file, `-` for none, and so is a missing description.
 #   check  resolves the draft as the run layer, which wins for every role it names. Prints the table's rows for those
 #          roles, their WARN lines, a SHADOWED line for each user entry the repo's file overrides, an UNSET line for each
-#          role the draft leaves out (never the fix checker, which has no skills), then `CLEAN` or `NOT CLEAN: <n> warnings`. The security reviewer's warning doesn't
-#          count.
+#          role the draft leaves out (never the fix checker, which has no skills), then `CLEAN` or
+#          `NOT CLEAN: <n> warnings`. The security reviewer's warning doesn't count.
 #   save   writes the draft to the target file, each `skills` an ordered array of bare names, and prints `SAVED <file>`.
 # Exits 1 when a layer or the draft isn't valid JSON or list-skills fails, 3 when the harness has no list-skills, 5 on a
 # bad call.

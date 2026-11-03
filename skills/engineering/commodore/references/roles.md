@@ -6,7 +6,7 @@ Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name 
 
 Launch every teammate with `--role <role>`. The launcher takes the model from `MODEL_<ROLE>` in `team.env`. A fresh `team.env` from `team-init.sh` holds the harness's defaults, which [`harness-claude.md`](harness-claude.md) lists for Claude Code (read `harness-<HARNESS>.md`, with `HARNESS` from `team.env`); the profile overrides them. The roles are `implementer`, `test-writer`, `target-steward`, `reviewer`, `security-reviewer`, `brief-checker`, `triager`, `scribe` and `fix-checker`.
 
-The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a more capable model than a role's default, the profile sets these four roles to the coordinator's model. The fix checker is outside this rule: it runs on the implementer's model, and a fresh `team.env` already says so. Advisor pairing and the same-family rule, where the harness has an advisor, are in the harness reference.
+The reviewer, the security reviewer, the brief checker and the triager run on a model at least as capable as the coordinator's. If the coordinator runs on a more capable model than a role's default, the profile sets these four roles to the coordinator's model. The fix checker is outside this rule: it runs on the implementer's model, and a fresh `team.env` sets `MODEL_FIX_CHECKER` and `EFFORT_FIX_CHECKER` to the implementer's values. When the profile changes `MODEL_IMPLEMENTER` or its effort, change `MODEL_FIX_CHECKER` and `EFFORT_FIX_CHECKER` with it. Advisor pairing and the same-family rule, where the harness has an advisor, are in the harness reference.
 
 A `team.env` from before the fix checker has no `MODEL_FIX_CHECKER`, and the launcher refuses `--role fix-checker` without it. Before launching one, add `MODEL_FIX_CHECKER=<the run's MODEL_IMPLEMENTER>` to `team.env`, and on a harness that writes effort keys, `EFFORT_FIX_CHECKER=<EFFORT_IMPLEMENTER>`.
 
@@ -67,8 +67,10 @@ Then end your turn the way the teammate contract says. On a fix round, apply the
 Your report has three sections:
 
 - **Fix job:** for each item, security items included, `fixed`, `partly` or `not fixed`, with file:line.
-- **Introduced by the fixes:** anything the range itself broke, each with severity, file:line and a failure scenario. Only a HIGH here blocks. Code the fixes didn't touch goes in the next section, not this one.
+- **Introduced by the fixes:** anything the range itself broke, each with severity, file:line and a failure scenario. Only a HIGH here blocks. A problem that was already there goes in the next section, not this one, even in code the fixes didn't touch.
 - **Seen in passing:** at most five one-line notes on anything else, pre-existing problems included. A note never blocks, whatever its severity.
+
+If `launch-teammate.sh` exits 2 (`NO_BG`), don't run the fix checker as an in-process subagent: it would have no separate read-only session. Tell the engineer, skip the fix check, and send every fix-job item to a human as `status=human`, noting in `state.md` that round 2 didn't run.
 
 **Fallback.** None: the contract is the whole procedure.
 

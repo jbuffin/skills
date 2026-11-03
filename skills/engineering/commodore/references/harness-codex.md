@@ -61,7 +61,7 @@ Autopilot mode follows the same rules on Codex ([Autopilot mode](../SKILL.md#aut
 
 ## Read-only roles have no network
 
-Launch the reviewer, security reviewer, brief checker, triager and fix checker with both `--role` and `--read-only`; on Codex the sandbox follows the flag, not the role. Their shell can't run `gh`, so fetch the GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments) before the launch, save it to files in the run directory, and name the files in the brief. agent-teammates' "Sandbox per role" gives the HEAD and `git status` check to run around each read-only turn, and "How a read-only teammate reports" covers its report. Give it no `.proof`. The fix checker's shell can't run `gh` either, so put its fix job file and the fix range's diff in the run directory too, and name them in its brief. It gets no `.proof`.
+Launch the reviewer, security reviewer, brief checker, triager and fix checker with both `--role` and `--read-only`; on Codex the sandbox follows the flag, not the role. Their shell can't run `gh`, so fetch the GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments, the fix checker's fix job and fix-range diff) before the launch, save it to files in the run directory, and name the files in the brief. agent-teammates' "Sandbox per role" gives the HEAD and `git status` check to run around each read-only turn, and "How a read-only teammate reports" covers its report. Give it no `.proof`.
 
 ## Caveats to settle before a Codex run
 

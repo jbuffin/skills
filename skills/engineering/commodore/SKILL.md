@@ -28,7 +28,7 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 - A **fix checker** is the read-only teammate that runs the fix check, launched once per unit in round 2. It runs no role skills, no sub-agents and no advisor calls.
 - A **security reviewer** is a read-only teammate, launched once per unit in round 1, that reviews the unit's diff only for security vulnerabilities, alongside the reviewer.
 - A **blocking finding** is a review finding at or above the profile's severity threshold (default: HIGH and MEDIUM) in round 1, or in round 2 a HIGH finding the fixes introduced. It must be fixed, or handed to a human at the round cap, before the unit ships.
-- A **non-blocking finding** is a review finding below the threshold (default: LOW). It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial.
+- A **non-blocking finding** is a review finding below the threshold (default: LOW). It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial. A note from the fix check is recorded the same way but never goes to the implementer, whatever its severity, and a MEDIUM or LOW the fix check introduced goes to a human.
 - A **unit** is one piece of the work a single reviewer can hold in their head, usually one PR. The plan is an ordered list of units.
 - The **source of truth** is what a unit gets checked against: a spec, a design, an issue's acceptance criteria, existing behaviour, or reference code at a commit SHA. It is never a paraphrase of any of those.
 - The **target** is wherever the work runs for its users. A browser, a phone, an API, a terminal, a desktop.
@@ -150,7 +150,7 @@ The run has to get from the first unit to the stop rule without the engineer. Ru
       - PRs end ready for review; nothing is merged except through auto-merge where the repo allows it (see [Marking ready](#marking-ready)).
       - The run's own branches and PRs are the branches the run created and the PRs it opened, plus, in existing-PR mode, the existing PR's branch (pushed only through `push-branch.sh`). Pushing them, opening those PRs, marking them ready and posting the round-cap comment on them are never calls: don't ask about them, in any mode. A reply on someone's PR keeps its own approval (mission-pr-feedback's findings item, mission-review's posting gate).
       - Force-pushes go only through `<team>/push-branch.sh`, which pushes the run's own branches with `--force-with-lease` and nothing else.
-      - Review rounds cap at 2: a full review, then one check of the fixes. After that, a PR comment hands what's left to a human.
+      - Review rounds cap at 2: a full review, then one check of the fixes. After that, a PR comment hands what's left to a human (none for fix-check notes alone).
       - Anything the engineer names stays untouched.
       - With no security role skill, the run has no security reviewer. It starts only once the engineer approves that.
 

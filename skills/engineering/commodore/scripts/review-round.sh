@@ -10,10 +10,10 @@ RUN=${1:A}; U=$2; CAP=2
 [[ $U =~ '^[A-Za-z0-9._-]+$' ]] || { echo "invalid unit name '$U'"; exit 5; }
 F=$RUN/rounds.tsv
 N=$(awk -v u=$U '$1==u && $2>n {n=$2} END {print n+0}' $F 2>/dev/null)
-(( N >= CAP )) && { echo "CAP $U: $CAP review rounds done; launch no more reviewers. Hand what's left to a human (the round-cap PR comment)"; exit 1; }
+(( N >= CAP )) && { echo "CAP $U: $CAP review rounds done; launch no more reviewers. Hand what's left to a human (the round-cap PR comment, none for seen-in-passing notes alone)"; exit 1; }
 N=$(( N + 1 ))
 print -r -- "$U $N" >> $F
 case $N in
   1) echo "round 1 of $CAP for $U: full review. Launch $U-reviewer-1, and $U-security-reviewer-1 when the run has a security reviewer, on the unit's diff" ;;
-  *) echo "round $N of $CAP for $U, the last, a fix check: launch $U-fix-checker alone, on the fix range. Only a HIGH the fixes introduced blocks. Record other findings the fixes introduced and fixes not made as status=human, and its seen-in-passing notes as status=open" ;;
+  *) echo "round $N of $CAP for $U, the last, a fix check: launch $U-fix-checker alone, on the fix range. Record fix-job items not fixed or partly fixed, and everything the fixes introduced, HIGH first, as status=human; only a HIGH there is blocking. Record seen-in-passing notes as status=open. Re-task nobody" ;;
 esac

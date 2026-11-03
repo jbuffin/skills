@@ -1,10 +1,10 @@
 """Tests for the fix checker (issue #169): review round 2 becomes a fix check run by a read-only `fix-checker` role.
 
 Seams are the shipped scripts' command lines and the text of the shipped docs. Expected values come from the
-issue's Agent Brief, not from the code. Some checks hold on main already; each is paired with a red assertion in
-the same test, except the named regression guards for round 1 and the round cap (no other eval covers
+issue's Agent Brief, not from the code. Some checks held on main already, so each is paired with an assertion that
+fails without the change, except the named regression guards for round 1 and the round cap (no other eval covers
 `review-round.sh`). `pr-ready.sh` needs no code change: test_pr_ready.py already pins an `open` finding (does not
-leave the unit for a human) and a `human` finding (stops auto-merge); the red test here is that mission-build.md
+leave the unit for a human) and a `human` finding (stops auto-merge); the test here is that mission-build.md
 tells the coordinator to record fix-check notes as `open`.
 
 Run from the repo root: python3 -m unittest discover -s evals/commodore -v
@@ -122,6 +122,19 @@ class TestReviewRound(TmpCase):
         self.assertIn("u1-fix-checker", out)
         self.assertNotIn("everything else goes to a human", out)
 
+    def test_round_2_says_where_each_kind_of_finding_goes(self):
+        self.round()
+        out = self.round().stdout
+        for needle in (
+            "not fixed or partly fixed",
+            "HIGH first",
+            "status=human",
+            "only a HIGH there is blocking",
+            "status=open",
+            "Re-task nobody",
+        ):
+            self.assertIn(needle, out)
+
     def test_third_call_is_refused_with_exit_1(self):
         self.round()
         self.round()
@@ -210,7 +223,7 @@ class TestRolesDraft(TmpCase):
 
     def test_empty_draft_has_no_unset_line_for_fix_checker(self):
         run_dir = self.init()
-        # red: the role exists in the resolved table (it is excluded from UNSET, not absent)
+        # the role exists in the resolved table: it is excluded from UNSET, not absent
         self.assertIn("| fix-checker |", self.resolved_table(run_dir))
         out = self.check(run_dir)
         self.assertNotIn("UNSET fix-checker", out)
@@ -219,7 +232,7 @@ class TestRolesDraft(TmpCase):
     def test_draft_naming_fix_checker_does_not_read_as_clean(self):
         run_dir = self.init()
         (run_dir / "draft.json").write_text(json.dumps({"fix-checker": {"skills": ["code-review"]}}))
-        # red: the role is known, so the warning is the drop rule's, not "unknown role"
+        # the role is known, so the warning is the drop rule's, not "unknown role"
         self.assertIn("| fix-checker |", self.resolved_table(run_dir))
         out = self.check(run_dir)
         warns = [ln for ln in out.splitlines() if ln.startswith("WARN  draft: ") and "fix-checker" in ln]
@@ -233,7 +246,7 @@ class TestRolesDraft(TmpCase):
         run_dir = self.init()
         self.assertIn("| fix-checker |", self.resolved_table(run_dir))
         skill = text(REPO / "skills" / "engineering" / "setup-commodore" / "SKILL.md")
-        self.assertNotIn("fix-checker", skill.replace("`fix-checker` is not", ""))
+        self.assertNotIn("fix-checker", skill)
 
 
 class TestTeamInit(TmpCase):
