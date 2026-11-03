@@ -2,8 +2,8 @@
 
 With `ADMIRAL_SHIP` set and autopilot off, Commodore asks the engineer through a question item or AskUserQuestion and
 never through a prose `needs input:` line. The seam is the text of the shipped docs. Expected values come from the
-the rules the skill must follow, not from any implementation. Each section is located by headings that exist on main, so the
-implementer is free to put the new rules in the bullet, a subsection or a section after "Bubbling questions up".
+rules the skill must follow, not from any implementation. Each section is located by headings that exist on main, so
+the implementer is free to put the new rules in the bullet, a subsection or a section after "Bubbling questions up".
 
 Where autopilot mode already states a
 rule, the shipped text may point at it instead of repeating it, so those checks accept either form.
