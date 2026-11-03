@@ -1,5 +1,15 @@
 # jasonbuffin-skills
 
+## 2.9.0
+
+### Minor Changes
+
+- [#186](https://github.com/jbuffin/skills/pull/186) [`d9cacee`](https://github.com/jbuffin/skills/commit/d9cacee83ffcd0945f0043308160208c1d0f5b8a) Thanks [@jbuffin](https://github.com/jbuffin)! - Inside an Admiral ship with autopilot off, Commodore no longer asks the engineer through a `needs input:` line. While the team has independent work it publishes one question item and keeps going, checking for the answer on every wake; when nothing independent is left, and at the review mission's posting gate, it uses AskUserQuestion. A question item still open when a run ends goes in the Admiral report's `inbox`, and resume reads `## Inbox questions`. Outside Admiral nothing changes.
+
+### Patch Changes
+
+- [#183](https://github.com/jbuffin/skills/pull/183) [`c51d027`](https://github.com/jbuffin/skills/commit/c51d02709930a9fa35ff85b949b40efb959c4b3b) Thanks [@jbuffin](https://github.com/jbuffin)! - The admiral driver's `status` maps the crew state `idle` to `blocked`, so the watchdog still raises BLOCKED for an idle boat that never wrote its marker. A test now covers `stop` closing an idle boat with exit 0 (it already did). The Codex and Copilot references say an idle writer boat shows `idle`, not `needs_you`, and the Claude reference lists an idle boat among the blocked states.
+
 ## 2.8.0
 
 ### Minor Changes
