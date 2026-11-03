@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 2.8.0
+
+### Minor Changes
+
+- [#181](https://github.com/jbuffin/skills/pull/181) [`52867b9`](https://github.com/jbuffin/skills/commit/52867b922caec5ad2c159ad0b673b040d25c1813) Thanks [@jbuffin](https://github.com/jbuffin)! - Review round 2 is now a fix check, run by a new read-only `fix-checker` role in place of a second reviewer. `review-round.sh` names `u<unit>-fix-checker` in round 2. The fix checker gets the fix range `<reviewed SHA>..HEAD` and the fix job, runs no role skills, sub-agents or advisor calls, and reports each fix-job item as `fixed`, `partly` or `not fixed`, what the fixes introduced, and up to five "seen in passing" notes. Only a HIGH the fixes introduced blocks. Other things the fixes introduced and unfixed items go to a human as `status=human`; notes are recorded `status=open` and never block auto-merge. The coordinator never re-tasks the implementer for a fix-check result or carries one into a later unit. `role-skills.sh` lists `fix-checker` with no skills and drops an override naming it with a `WARN`; `roles-draft.sh` and setup-commodore don't offer it. `team-init.sh` writes `MODEL_FIX_CHECKER` (and `EFFORT_FIX_CHECKER` where the harness uses effort) on each harness's implementer model. A `team.env` from before this change needs `MODEL_FIX_CHECKER` added, set to the run's implementer model, before a fix checker launches, and a profile that changes the implementer's model or effort changes the fix checker's with it. The fix checker never runs in-process: on `NO_BG` the coordinator retries the launch once, then tells the engineer, skips the fix check and sends every fix-job item to a human. The harness references list the role as read-only with no `.proof`.
+
 ## 2.7.0
 
 ### Minor Changes
