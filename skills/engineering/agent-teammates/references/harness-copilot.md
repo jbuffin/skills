@@ -45,7 +45,7 @@ The flag set is chosen from `--read-only`, not from `--role`. Every run, launch 
 
 | Teammate | Flags | What it can do |
 | --- | --- | --- |
-| launched with `--read-only` (reviewer, security reviewer, brief checker, triager) | `--available-tools bash view glob grep`, `--deny-tool=write`, and `--allow-tool` for `shell(git log)`, `shell(git show)`, `shell(git diff)`, `shell(git status)`, `shell(gh pr view)`, `shell(gh pr diff)`, `shell(gh issue view)` | reads files and runs the allowed commands. Copilot's write tool is gone and other shell commands are refused, but see [Security caveats](#security-caveats) |
+| launched with `--read-only` (reviewer, security reviewer, brief checker, triager, fix checker) | `--available-tools bash view glob grep`, `--deny-tool=write`, and `--allow-tool` for `shell(git log)`, `shell(git show)`, `shell(git diff)`, `shell(git status)`, `shell(gh pr view)`, `shell(gh pr diff)`, `shell(gh issue view)` | reads files and runs the allowed commands. Copilot's write tool is gone and other shell commands are refused, but see [Security caveats](#security-caveats) |
 | any other (implementer, test writer, target steward, scribe) | `--add-dir` for each skill script directory (see the list below), `--available-tools bash view edit create glob grep`, `--allow-all-tools`, and `--deny-tool` for `shell(git push:*)`, `shell(gh pr merge:*)`, `shell(gh pr create:*)`, `shell(gh api:*)`, `shell(gh issue:*)` | runs any command as the engineer, except the five denied prefixes. Also writes the added script directories |
 
 What these flags need in order to work, checked on Copilot CLI 1.0.95 (the script directories on 1.0.96):

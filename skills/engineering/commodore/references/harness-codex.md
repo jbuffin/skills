@@ -8,7 +8,7 @@ Launch every teammate with `--role <role>`. A fresh `team.env` from `team-init.s
 
 | `--role` | Default model | Default effort |
 | --- | --- | --- |
-| `implementer`, `test-writer`, `target-steward` | `gpt-6.1-sol` | medium |
+| `implementer`, `test-writer`, `target-steward`, `fix-checker` | `gpt-6.1-sol` | medium |
 | `reviewer`, `security-reviewer`, `brief-checker`, `triager` | `gpt-6-astra` | high |
 | `scribe` | `gpt-6-luna` | medium |
 
@@ -35,7 +35,7 @@ Run `<teammates>/drivers/codex/status <run>` when you resume and before any push
 
 ## Fix rounds
 
-An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers and brief checkers launch fresh each round, as on any harness.
+An implementer keeps its context across fix rounds. Write the round's job to `<run>/prompts/<name>.job-<n>.md`, then run `<teammates>/retask.sh <run> <name> <run>/prompts/<name>.job-<n>.md` once its turn has ended. It resumes the same session. Reviewers, security reviewers, brief checkers and the fix checker launch fresh, as on any harness. A fix-check result never goes back to the implementer.
 
 Run the watchdog in its bounded mode, as agent-teammates' "Run the watchdog" says. `DONE` can arrive before `status` reads `done`, so check `status` before you re-task.
 
@@ -61,7 +61,7 @@ Autopilot mode follows the same rules on Codex ([Autopilot mode](../SKILL.md#aut
 
 ## Read-only roles have no network
 
-Launch the reviewer, security reviewer, brief checker and triager with both `--role` and `--read-only`; on Codex the sandbox follows the flag, not the role. Their shell can't run `gh`, so fetch the GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments) before the launch, save it to files in the run directory, and name the files in the brief. agent-teammates' "Sandbox per role" gives the HEAD and `git status` check to run around each read-only turn, and "How a read-only teammate reports" covers its report. Give it no `.proof`.
+Launch the reviewer, security reviewer, brief checker, triager and fix checker with both `--role` and `--read-only`; on Codex the sandbox follows the flag, not the role. Their shell can't run `gh`, so fetch the GitHub data a brief points at (the source-of-truth issue, a PR's diff and body, comments, the fix checker's fix job and fix-range diff) before the launch, save it to files in the run directory, and name the files in the brief. agent-teammates' "Sandbox per role" gives the HEAD and `git status` check to run around each read-only turn, and "How a read-only teammate reports" covers its report. Give it no `.proof`.
 
 ## Caveats to settle before a Codex run
 
