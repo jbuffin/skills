@@ -33,3 +33,5 @@
 **Unit**: one slice of a run's work that ships as its own branch and PR, reviewed in its own review rounds. _Avoid_: task, chunk, slice.
 
 **Acceptance trace**: the run's table mapping each acceptance criterion in the source of truth to the unit that owns it, the test or scenario that will show it, its status, and the evidence. _Avoid_: requirements matrix, checklist.
+
+**Question item**: an item Commodore writes to its Admiral ship's inbox to ask the engineer one or more questions, each with options and a recommendation. The engineer answers it from the inbox, not in the session. _Avoid_: inbox question, needs-input line.
