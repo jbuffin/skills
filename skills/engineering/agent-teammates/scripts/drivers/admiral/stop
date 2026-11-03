@@ -1,9 +1,9 @@
 #!/bin/zsh
 # usage: stop <team-dir> <session-id>   (see ../CONTRACT.md)
-# Closes the crew boat when `crew list` shows it. Exits 0 only if it was underway, needs_you or idle; an anchored boat is
-# still closed but exits 1, and a boat that isn't listed exits 1 with nothing closed. A read-only Codex/Copilot teammate
+# Closes the crew boat when `crew list` shows it. Exits 0 unless it was anchored (still closed, exits 1); a boat that
+# isn't listed exits 1 with nothing closed. A read-only Codex/Copilot teammate
 # (`delegated`, in lib.zsh) is no crew boat: its harness driver's stop runs instead.
-[[ $# -eq 2 ]] || { sed -n 2,4p $0; exit 5; }
+[[ $# -eq 2 ]] || { sed -n 2,5p $0; exit 5; }
 D=${1:A}; ID=$2
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
