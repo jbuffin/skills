@@ -178,7 +178,7 @@ Teammates put questions in their reports, with options and a recommendation, and
 - If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next [unit summary](references/mission-build.md#unit-summary-to-the-engineer) so the engineer can overturn it.
 - Product behaviour, design choices that depart from the source, scope, and anything external or irreversible outside the run's own branches and PRs (defined in the ground rules, step 5.2) belong to the engineer. Batch them, then ask by where the run is:
   - Outside Admiral (`ADMIRAL_SHIP` unset): if the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
-  - In an Admiral ship (`ADMIRAL_SHIP` set) with autopilot off: never ask in prose alone, with or without a `needs input:` line, and don't ask whether the engineer is around. While independent work remains, put the batch in one question item and keep the team on that work (see [Question items in a ship](#question-items-in-a-ship)). When nothing independent is left, use AskUserQuestion with your recommendation first.
+  - In an Admiral ship (`ADMIRAL_SHIP` set) with autopilot off: never ask in prose alone, with or without a `needs input:` line, and don't ask whether the engineer is around. While independent work remains, put the batch in one question item and keep the team on that work (see [Question items in a ship](#question-items-in-a-ship)). When nothing independent is left, use AskUserQuestion (on Codex and Copilot, the harness's own ask) with your recommendation first.
 
 In autopilot mode, an engineer question goes through [Autopilot mode](#autopilot-mode) in place of AskUserQuestion and the `needs input:` line.
 
@@ -186,13 +186,15 @@ In autopilot mode, an engineer question goes through [Autopilot mode](#autopilot
 
 These rules apply with `ADMIRAL_SHIP` set and autopilot off.
 
-Publish the batch with `<team>/admiral-io.sh item <draft>`, in the format of [A high-stakes stop](#autopilot-mode) steps 1–2: `kind` `question`, id `<run-name>-q<n>`. `<n>` is the same counter autopilot's items use, and a later batch gets the next `n`. If `ADMIRAL_INBOX` is empty, `admiral-io.sh item` prints a note and writes nothing: use AskUserQuestion, never a question item.
+Publish the batch with `<team>/admiral-io.sh item <draft>`, in the format of [A high-stakes stop](#autopilot-mode) steps 1–2, which apply here: `kind` `question`, id `<run-name>-q<n>`. `<n>` is the same counter autopilot's items use, and a later batch gets the next `n`. If `ADMIRAL_INBOX` is unset, `admiral-io.sh item` prints a note and writes nothing: use AskUserQuestion, never a question item.
 
-Record every question item under `## Inbox questions` in `state.md`: its id, the inbox directory, the questions, and an `applied` mark once its answer is applied. Under `## Open questions for the engineer`, list only the item id.
+Add `## Inbox questions` to `state.md` (team-init's template lacks it) and record every question item there: its id, the inbox directory, the questions, and an `applied` mark once its answer is applied. Under `## Open questions for the engineer (with recommended default)`, list only the item id.
 
-Every time you wake (a watchdog event, a teammate report or a resume), run `<team>/admiral-io.sh answer <recorded inbox dir> <id>` for each open question item. Exit 3 means unanswered: carry on. Read an answer by [Resume](#autopilot-mode) steps 2–3, which apply here, and apply it where the team waited. After a resume, Resume step 1 finds the open items.
+Every time you wake (a watchdog event, a teammate report or a resume), run `<team>/admiral-io.sh answer <recorded inbox dir> <id>` for each open question item. Exit 3 means unanswered: carry on. Read an answer by [Resume](#autopilot-mode) steps 2–3, which apply here, and apply it where the team waited.
 
-When the team runs out of independent work while a question item is open, ask the same questions with AskUserQuestion and say they are also in the inbox as `<id>`. Whichever answer arrives first is applied and the item is marked `applied`. Ignore a later answer to that item and note it in `state.md`.
+On a resume with autopilot off, Resume steps 1–3 apply to the items under `## Inbox questions` and step 5 doesn't. Mark an answered item `applied` under `## Inbox questions`. Keep an unanswered item open: check it on every wake, escalate it when independent work runs out, and don't re-publish it as a new item.
+
+When the team runs out of independent work while a question item is open, ask the same questions with AskUserQuestion (at most 4 questions per call: split a longer item across calls) and say they are also in the inbox as `<id>`. Whichever answer arrives first is applied and the item is marked `applied`. After applying it from AskUserQuestion, keep running `answer` on the item each wake until an answer file appears. Ignore that later answer, note it in `state.md` and stop checking the item.
 
 If the run ends with a question item open, [Ending a run](#ending-a-run) says where its id goes.
 
@@ -209,7 +211,7 @@ While the engineer is away, every wait should be on something only the engineer 
 Every run ends this way, in any mode.
 
 1. Write the `result:` line with `<team>/state-set.sh <run> mode result <done|partial|failed>`. `failed` means the run can't go on for a reason no answer would fix: a tool or a script fails, the repo or the PR is gone, or the mission fits nothing even after the answer.
-2. When `ADMIRAL_REPORT` is set, publish the Admiral report with `<team>/admiral-io.sh report <draft>`. It needs `version` (1), `result`, `why`, and for `partial` a `resume` of `/commodore resume <run-name>`, never with `--autopilot`: the resume's launch decides whether autopilot is on. `prs`, `assumptions` and `inbox` are lists of strings. See [`admiral-report.schema.json`](references/admiral-report.schema.json). Exit 2 means fix the draft from the message and publish again. The id of every question item still open when the run ends `partial` or `failed` goes in `inbox`, in autopilot mode or not, and in the final report.
+2. When `ADMIRAL_REPORT` is set, publish the Admiral report with `<team>/admiral-io.sh report <draft>`. It needs `version` (1), `result`, `why`, and for `partial` a `resume` of `/commodore resume <run-name>`, never with `--autopilot`: the resume's launch decides whether autopilot is on. `prs`, `assumptions` and `inbox` are lists of strings. See [`admiral-report.schema.json`](references/admiral-report.schema.json). Exit 2 means fix the draft from the message and publish again. With autopilot off, the id of every question item still open when the run ends `partial` or `failed` goes in `inbox` and in the final report; autopilot keeps its own rule, [A high-stakes stop](#autopilot-mode) step 4.
 3. Write every draft you publish with `<team>/admiral-io.sh` (the Admiral report, question items and, in autopilot mode, review items) with the file tool, never with a heredoc, `printf` or its text on a command line: it can quote text from people who aren't the engineer. A findings item is the exception: `<team>/cards-draft.py` builds its draft from the triager's report.
 
 Each mission's `result:` line points here. A `/commodore resume` of a finished run says it's finished and stops.

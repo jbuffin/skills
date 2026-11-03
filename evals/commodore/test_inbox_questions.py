@@ -2,10 +2,10 @@
 
 With `ADMIRAL_SHIP` set and autopilot off, Commodore asks the engineer through a question item or AskUserQuestion and
 never through a prose `needs input:` line. The seam is the text of the shipped docs. Expected values come from the
-issue's Agent Brief, not from any implementation. Each section is located by headings that exist on main, so the
+the rules the skill must follow, not from any implementation. Each section is located by headings that exist on main, so the
 implementer is free to put the new rules in the bullet, a subsection or a section after "Bubbling questions up".
 
-Where the unit brief (and not the Agent Brief) fixes a rule, the test says so. Where autopilot mode already states a
+Where autopilot mode already states a
 rule, the shipped text may point at it instead of repeating it, so those checks accept either form.
 
 `TestRegressionGuards` holds the only tests that pass before the change: they must keep passing.
@@ -46,9 +46,12 @@ def text(path):
     return Path(path).read_text()
 
 
-def origin_main(rel):
-    """The file at origin/main as bytes, or None when the ref is missing (shallow checkout)."""
-    done = subprocess.run(["git", "show", f"origin/main:{rel}"], cwd=REPO, capture_output=True, check=False)
+BASELINE = "c51d027"  # the commit this change started from; the guards compare against it, not a moving branch
+
+
+def at_baseline(rel):
+    """The file at BASELINE as bytes, or None when the commit is missing (shallow checkout)."""
+    done = subprocess.run(["git", "show", f"{BASELINE}:{rel}"], cwd=REPO, capture_output=True, check=False)
     return done.stdout if done.returncode == 0 else None
 
 
@@ -117,7 +120,7 @@ class TestBubblingRule(SkillCase):
         self.assertIn("needs input:", self.rules)
 
     def test_an_empty_admiral_inbox_means_ask_user_question_not_a_question_item(self):
-        # From the unit brief (admiral-io.sh:25 prints a note and writes nothing), not the Agent Brief.
+        # admiral-io.sh item prints a note and writes nothing when the inbox is unset.
         self.assertMatches(r"ADMIRAL_INBOX[^\n]{0,200}(empty|unset|not set)", self.rules)
 
 
@@ -158,14 +161,16 @@ class TestRecording(SkillCase):
         self.assertIn("applied", para)
 
     def test_the_open_questions_section_lists_only_the_item_id(self):
-        # From the unit brief: the questions aren't kept in two places.
+        # The questions aren't kept in two places.
         self.assertIn("Open questions for the engineer", self.rules)
 
 
 class TestAnswerCheck(SkillCase):
     def test_every_wake_runs_admiral_io_answer_for_each_open_question_item(self):
         self.assertIn("admiral-io.sh answer", self.rules)
-        self.assertIn("open question item", self.rules)  # unit brief's wording: not "open item"
+        self.assertIn(
+            "open question item", self.rules
+        )  # not "open item": inbox items also include review and findings items
 
     def test_all_three_wake_triggers_are_named(self):
         para = self.paragraph(self.rules, "admiral-io.sh answer")
@@ -247,7 +252,7 @@ class TestEndingARun(SkillCase):
         )
 
     def test_a_partial_run_outside_autopilot_resumes_without_the_autopilot_flag(self):
-        # From the unit brief: step 2 must say the resume is /commodore resume <run-name>, without --autopilot.
+        # Step 2 must say the resume is /commodore resume <run-name>, without --autopilot.
         self.assertIn("--autopilot", self.ending)
 
     def test_drafts_for_question_items_in_a_ship_are_written_with_the_file_tool(self):
@@ -320,9 +325,9 @@ class TestRegressionGuards(DocCase):
         self.assertIn("`needs input:`", step3)
 
     def test_guard_the_autopilot_text_is_unchanged_except_resume_step_1(self):
-        old = origin_main("skills/engineering/commodore/SKILL.md")
+        old = at_baseline("skills/engineering/commodore/SKILL.md")
         if old is None:
-            self.skipTest("origin/main is not available")
+            self.skipTest("the baseline commit is not available")
 
         def autopilot(body):
             tail = body[body.index("## Autopilot mode") :]
@@ -330,12 +335,12 @@ class TestRegressionGuards(DocCase):
 
         self.assertEqual(autopilot(self.skill), autopilot(old.decode()))
 
-    def test_guard_files_outside_this_change_are_byte_identical_to_origin_main(self):
+    def test_guard_files_outside_this_change_are_byte_identical_to_the_baseline(self):
         for rel in UNCHANGED_FILES:
             with self.subTest(path=rel):
-                old = origin_main(rel)
+                old = at_baseline(rel)
                 if old is None:
-                    self.skipTest("origin/main is not available")
+                    self.skipTest("the baseline commit is not available")
                 self.assertEqual((REPO / rel).read_bytes(), old)
 
     def test_guard_question_item_is_still_defined_in_words_used_here(self):
