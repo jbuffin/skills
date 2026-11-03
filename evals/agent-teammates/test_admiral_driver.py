@@ -483,6 +483,12 @@ class TestWatch(WorldCase):
         self.assertEqual(self.watch(), ["WATCH timeout 1"])
         self.assertEqual(self.watch(), ["BLOCKED alpha alpha"])
 
+    def test_an_idle_boat_without_a_marker_is_blocked_on_the_second_poll(self):
+        self.w.register("alpha")
+        self.w.boats(boat("alpha", "idle", last_activity=rfc3339(time.time() - 60)))
+        self.assertEqual(self.watch(), ["WATCH timeout 1"])
+        self.assertEqual(self.watch(), ["BLOCKED alpha alpha"])
+
     def test_a_quiet_working_boat_stalls(self):
         self.w.register("alpha")
         self.w.boats(boat("alpha", "underway", last_activity=rfc3339(time.time() - 30 * 60)))
