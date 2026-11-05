@@ -194,7 +194,7 @@ Every time you wake (a watchdog event, a teammate report or a resume), run `<tea
 
 On a resume with autopilot off, Resume steps 1–3 apply to the items under `## Inbox questions` and step 5 doesn't. Mark an answered item `applied` under `## Inbox questions`. Keep an unanswered item open: check it on every wake, escalate it when independent work runs out, and don't re-publish it as a new item.
 
-When the team runs out of independent work while a question item is open, ask the same questions with AskUserQuestion (at most 4 questions per call: split a longer item across calls) and say they are also in the inbox as `<id>`. Whichever answer arrives first is applied and the item is marked `applied`. After applying it from AskUserQuestion, keep running `answer` on the item each wake until an answer file appears. Ignore that later answer, note it in `state.md` and stop checking the item.
+When the team runs out of independent work while a question item is open, ask the same questions with AskUserQuestion (at most 4 questions per call: split a longer item across calls) and say they are also in the inbox as `<id>`. Whichever answer arrives first is applied and the item is marked `applied`. When the AskUserQuestion answer comes first, write the item's answer file as [Answered in the session](#autopilot-mode) says, so Admiral drops the item, and stop checking it. If Admiral wrote an answer meanwhile (exit 4), ignore that later answer and note it in `state.md`.
 
 If the run ends with a question item open, [Ending a run](#ending-a-run) says where its id goes.
 
@@ -266,6 +266,15 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 
 - A stop at mission confirmation comes before any mission is recorded. Run `<team>/team-init.sh <run-name> <repo>` first, write no `mission:` line, keep the draft in that run directory, and record the item and the original launch text under `## Autopilot calls`. The `resume` is `/commodore resume <run-name>`.
 - With `ADMIRAL_INBOX` unset (a hand launch with `--autopilot`), never wait: stop `partial` with the questions in `state.md` and the final report. The engineer answers in the session: resume without `--autopilot`, and the open questions under `## Autopilot calls` are asked as normal gates.
+
+**Answered in the session.** This applies with autopilot off too. Admiral keeps an item in its inbox until `<id>.answer.json` exists beside it. When you take an answer in the session (the engineer replies in the terminal, or a resume without `--autopilot` asks the open questions as gates) to a question of a question item you published, and Resume step 1 doesn't find an answer to that item, write its answer file before you act on the answer:
+
+1. Ask every question of that item. One the engineer doesn't answer gets `{"other": "Not answered in the terminal"}` in the file and stays unanswered in the run: ask it again as Resume step 5 says.
+2. Write `<run>/<id>.answer-draft.json` with the file tool: `version` (1), `id`, `kind` `question`, `answered` (`date -u +%Y-%m-%dT%H:%M:%SZ`), `answers` mapping each question id to `{"choice": "<label>"}` (a list of labels only on a `multi` question) or `{"other": "<free text>"}`, and `note` `Answered in the terminal`. See [`admiral-answer.schema.json`](references/admiral-answer.schema.json).
+3. Run `<team>/admiral-io.sh answer-write <recorded inbox dir> <id> <draft>`. Exit 2 means fix the draft from the message and run it again. Exit 4 means an answer already exists (the engineer also answered in Admiral): it is left as it is, the session answer stands, and you record both.
+4. Mark the answer applied where the item is recorded (`## Autopilot calls` or `## Inbox questions`), saying it was answered in the terminal.
+
+Never write an answer file for a review or findings item.
 
 **Resume.** `/commodore resume <run-name>` (on Codex, `$commodore resume <run-name>`) resumes `<teams>/<run-name>`.
 
