@@ -267,6 +267,15 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 - A stop at mission confirmation comes before any mission is recorded. Run `<team>/team-init.sh <run-name> <repo>` first, write no `mission:` line, keep the draft in that run directory, and record the item and the original launch text under `## Autopilot calls`. The `resume` is `/commodore resume <run-name>`.
 - With `ADMIRAL_INBOX` unset (a hand launch with `--autopilot`), never wait: stop `partial` with the questions in `state.md` and the final report. The engineer answers in the session: resume without `--autopilot`, and the open questions under `## Autopilot calls` are asked as normal gates.
 
+**Answered in the session.** This applies with autopilot off too. Admiral keeps an item in its inbox until `<id>.answer.json` exists beside it. When you take an answer in the session (the engineer replies in the terminal, or a resume without `--autopilot` asks the open questions as gates) to a question of a question item you published, and Resume step 1 doesn't find an answer to that item, write its answer file before you act on the answer:
+
+1. Ask every question of that item. One the engineer doesn't answer gets `{"other": "Not answered in the terminal"}` in the file and stays unanswered in the run: ask it again as Resume step 5 says.
+2. Write `<run>/<id>.answer-draft.json` with the file tool: `version` (1), `id`, `kind` `question`, `answered` (`date -u +%Y-%m-%dT%H:%M:%SZ`), `answers` mapping each question id to `{"choice": "<label>"}` (a list of labels only on a `multi` question) or `{"other": "<free text>"}`, and `note` `Answered in the terminal`. See [`admiral-answer.schema.json`](references/admiral-answer.schema.json).
+3. Run `<team>/admiral-io.sh answer-write <recorded inbox dir> <id> <draft>`. Exit 2 means fix the draft from the message and run it again. Exit 4 means an answer already exists (the engineer also answered in Admiral): it is left as it is, the session answer stands, and you record both.
+4. Mark the answer applied under `## Autopilot calls`, saying it was answered in the terminal.
+
+Never write an answer file for a review or findings item.
+
 **Resume.** `/commodore resume <run-name>` (on Codex, `$commodore resume <run-name>`) resumes `<teams>/<run-name>`.
 
 1. For each item listed under `## Autopilot calls` or `## Inbox questions` whose answer isn't marked applied, run `<team>/admiral-io.sh answer <recorded inbox dir> <id>`. Exit 3 means unanswered.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Check a JSON file against a JSON Schema (the draft 2020-12 keywords Commodore's Admiral schemas use).
 
-usage: schema-check.py <schema.json> <instance.json> [--into <dir> | --to <file>]
+usage: schema-check.py <schema.json> <instance.json> [--into <dir> | --to <file> | --new <file>]
        schema-check.py --json <file>
 
 Exit 0 if the instance is valid; 1 if it is invalid or isn't JSON (one reason per line on stderr, each naming the
@@ -11,8 +11,9 @@ schema keyword this script doesn't implement, or a failed publish). Stdlib only,
 JSON is parsed strictly: a duplicate object key, NaN, Infinity and numbers that overflow to infinity are errors, so
 every parser reads the same value. With --into <dir> a valid instance is published, re-serialised from the parsed
 value, to <dir>/<its id>.json, and an existing entry there (file, directory or symlink) is an error. With --to <file> it
-replaces <file>. Both go through a dot-prefixed temp file in the destination directory, and nothing is created for an
-invalid instance. `--json <file>` only checks that the file is strict JSON (exit 0, else 1).
+replaces <file>. With --new <file> it is written to <file>, and an existing entry there is an error. All three go
+through a dot-prefixed temp file in the destination directory, and nothing is created for an invalid instance.
+`--json <file>` only checks that the file is strict JSON (exit 0, else 1).
 
 Implemented: type, required, properties, additionalProperties, items, enum, const, pattern, allOf, if/then/else, not,
 and boolean schemas. Annotations ($schema, $id, $comment, title, description, default, examples) are ignored. Any other
@@ -264,9 +265,9 @@ def publish(instance, target, replace):
 
 
 def destination(instance, mode, where):
-    """(target, replace) for --into <dir> (<dir>/<id>.json, never replaced) or --to <file>."""
-    if mode == "--to":
-        return where, True
+    """(target, replace) for --into <dir> (<dir>/<id>.json, never replaced), --to <file> or --new <file>."""
+    if mode in {"--to", "--new"}:
+        return where, mode == "--to"
     name = instance.get("id") if isinstance(instance, dict) else None
     if not isinstance(name, str) or not name or "/" in name or name.startswith("."):
         raise CannotCheck("the instance has no usable id to name the file")
@@ -287,8 +288,9 @@ def run(argv):
     if len(argv) == 3 and argv[1] == "--json":  # noqa: PLR2004
         read(argv[2], "instance")
         return
-    if len(argv) not in {3, 5} or (len(argv) == 5 and argv[3] not in {"--into", "--to"}):  # noqa: PLR2004
-        raise Failed(2, "usage: schema-check.py <schema.json> <instance.json> [--into <dir> | --to <file>]")
+    if len(argv) not in {3, 5} or (len(argv) == 5 and argv[3] not in {"--into", "--to", "--new"}):  # noqa: PLR2004
+        usage = "usage: schema-check.py <schema.json> <instance.json> [--into <dir> | --to <file> | --new <file>]"
+        raise Failed(2, usage)
     schema = read(argv[1], "schema")
     vet(schema)
     instance = read(argv[2], "instance")

@@ -85,10 +85,11 @@ Outcome records, `state.md` excerpts, `analysis.json` fields, `gh` output and PR
    - Write the step the run stopped at to `<run>/notes.md` as well, then stop with `result: partial` (step 8).
    - With no `<skill>/../commodore/scripts/admiral-io.sh`, publish nothing: write the questions to `<run>/notes.md`, stop `partial`, and claim no `inbox` ids. Opening the one draft PR in step 7 is authorized by the launch and isn't a question.
    - With `ADMIRAL_INBOX` unset, never wait: stop `partial` with the questions in `<run>/notes.md` and in your final message.
+   - When the engineer answers a published item's questions in the session instead of in Admiral, and `<inbox dir>/<id>.answer.json` doesn't exist, write it before acting on the answer, or the item stays in Admiral's inbox. Follow commodore's "Answered in the session" (in its "Autopilot mode" section): write the draft in `<run>` with the file tool and run `<skill>/../commodore/scripts/admiral-io.sh answer-write <inbox dir> <id> <draft>`. Exit 4 means Admiral already has an answer; the session answer stands. Record in `<run>/notes.md` that the item was answered in the terminal.
 
 ## Write scope
 
-The retro's own steps write only inside `<run>`, plus `$ADMIRAL_REPORT`, inbox items under autopilot, and the pushed PR branch. A copy the engineer explicitly asks for is the one addition. Never write `~/.admiral`, any `config.json`, or another run's directory.
+The retro's own steps write only inside `<run>`, plus `$ADMIRAL_REPORT`, inbox items under autopilot and the answer files for those answered in the session, and the pushed PR branch. A copy the engineer explicitly asks for is the one addition. Never write `~/.admiral`, any `config.json`, or another run's directory.
 
 ## Final message
 
