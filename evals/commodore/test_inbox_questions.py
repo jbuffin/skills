@@ -37,7 +37,6 @@ UNCHANGED_FILES = (
     "skills/engineering/commodore/references/harness-codex.md",
     "skills/engineering/commodore/references/harness-copilot.md",
     "skills/engineering/commodore/references/admiral-inbox-item.schema.json",
-    "skills/engineering/commodore/scripts/admiral-io.sh",
     "skills/engineering/commodore/references/mission-pr-feedback.md",
 )
 
@@ -325,12 +324,17 @@ class TestRegressionGuards(DocCase):
         self.assertIn("`needs input:`", step3)
 
     def test_guard_the_autopilot_text_is_unchanged_except_resume_step_1(self):
+        # Since #188 the section also holds the "Answered in the session" paragraph and its steps, which this guard
+        # leaves out; admiral-io.sh left UNCHANGED_FILES then too, for its answer-write command.
         old = at_baseline("skills/engineering/commodore/SKILL.md")
         if old is None:
             self.skipTest("the baseline commit is not available")
 
         def autopilot(body):
             tail = body[body.index("## Autopilot mode") :]
+            if "**Answered in the session.**" in tail:
+                head, rest = tail.split("**Answered in the session.**", 1)
+                tail = head + rest[rest.index("**Resume.**") :]
             return [ln for ln in tail.splitlines() if not ln.startswith("1. For each item listed under")]
 
         self.assertEqual(autopilot(self.skill), autopilot(old.decode()))
