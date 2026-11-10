@@ -5,4 +5,6 @@ pick-me-when: The plain default for the scribe role: it follows the role's fallb
 skills: []
 ---
 
+# Scribe
+
 Follow the scribe fallback in `references/roles.md`.

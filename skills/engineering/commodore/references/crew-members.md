@@ -24,7 +24,7 @@ Five override layers, in order. A member in a later layer replaces the whole mem
 - `crew.py resolve [--admiral] [--layer <label>=<dir> ...]` names the layers itself.
 - Exit 5, a usage message on stderr and nothing on stdout: an unknown label, one label twice, `user-global` with `--admiral`, `fleet` without it, or `--run` with `--layer` or `--admiral`.
 
-`team.env` is read as text, never sourced. Lines are `KEY=value`. The last assignment of a key wins. A value wrapped in one pair of matching `"` or `'` is unwrapped. An unquoted value is cut at its first ` #` and trimmed.
+`team.env` is read as text, never sourced. Lines are `KEY=value`. The last assignment of a key wins. A value wrapped in one pair of matching `"` or `'` is unwrapped. An unquoted value is cut at its first space-then-`#` and trimmed.
 
 ## Reading a file
 
@@ -34,14 +34,14 @@ Each step's failure is an error with the code shown. The first error ends the fi
 2. Real path not inside the real path of its layer directory: `outside-layer`.
 3. Not valid UTF-8, or starts with a BOM: `bad-frontmatter`. CRLF becomes LF.
 4. Line 1 is exactly `---` and a later line is exactly `---`, or `bad-frontmatter`.
-5. Each frontmatter line is blank, a full-line `#` comment, `key:` plus an optional value (`key` matches `[a-z][a-z0-9-]*` at column 1), or a block list item (one or more spaces, `- `, an item) that belongs to the key directly above. That key must have an empty value. A tab in indentation, any other line, or a repeated key is `bad-frontmatter`.
+5. Each frontmatter line is blank, a full-line `#` comment, `key:` plus an optional value (`key` matches `[a-z][a-z0-9-]*` at column 1), or a block list item (one or more spaces, a dash, a space, then an item) that belongs to the key directly above. That key must have an empty value. A tab in indentation, any other line, or a repeated key is `bad-frontmatter`.
 6. Values, after trimming spaces and tabs:
    - empty: null, or a list when block items follow;
    - `"…"`: a string whose only escapes are `\"` and `\\`;
    - `'…'`: a string where `''` is a literal `'`;
    - `[…]`: a flow list, items split on `,`, each a plain or quoted scalar; a quoted item holds no `,`, `[` or `]`;
    - `true` or `false`: a boolean;
-   - anything else: a plain string, verbatim. ` #` and `: ` belong to the value.
+   - anything else: a plain string, verbatim. A space-then-`#` and a colon-then-space belong to the value.
    - Text after a closing quote, an unclosed quote, an unclosed flow list and a quoted flow item holding `,` are `bad-frontmatter`. List items are never booleans or nested lists.
 7. The body is every line after the closing `---`, with leading and trailing blank lines removed. It's the member's `instructions`; an empty body is `""`.
 

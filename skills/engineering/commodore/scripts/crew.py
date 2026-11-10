@@ -29,6 +29,7 @@ ROLES = [
 HARNESSES = ["claude", "codex", "copilot"]
 KNOWN_FIELDS = {"name", "role", "pick-me-when", "model", "harness", "ad-hoc", "ad-hoc-run", "based-on", "skills"}
 MAX_BYTES = 65536
+MIN_QUOTED = 2
 SLUG = re.compile(r"^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$")
 KEY = re.compile(r"^([a-z][a-z0-9-]*):(.*)$")
 ITEM = re.compile(r"^ +- (.*)$")
@@ -115,24 +116,10 @@ def parse_value(text):
     return parse_scalar(text)
 
 
-def parse_member(raw):
-    """Return (fields, instructions) from file bytes, or raise Unreadable."""
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise bad("not valid UTF-8") from None
-    if text.startswith("﻿"):
-        raise bad("starts with a byte order mark")
-    lines = text.replace("\r\n", "\n").split("\n")
-    if lines[0] != "---":
-        raise bad("line 1 is not ---")
-    try:
-        end = lines.index("---", 1)
-    except ValueError:
-        raise bad("no closing ---") from None
+def parse_frontmatter(lines):
     fields = {}
     open_key = None  # the key directly above, while it holds no value yet or only block list items
-    for line in lines[1:end]:
+    for line in lines:
         if line.strip(" ") == "" or line.lstrip(" ").startswith("#"):
             continue
         if re.match(r" *\t", line):
@@ -153,13 +140,31 @@ def parse_member(raw):
             raise bad(f"repeated key {name}")
         fields[name] = parse_value(rest)
         open_key = name if fields[name] is None else None
+    return fields
+
+
+def parse_member(raw):
+    """Return (fields, instructions) from file bytes, or raise Unreadable."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise bad("not valid UTF-8") from None
+    if text.startswith("\ufeff"):
+        raise bad("starts with a byte order mark")
+    lines = text.replace("\r\n", "\n").split("\n")
+    if lines[0] != "---":
+        raise bad("line 1 is not ---")
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        raise bad("no closing ---") from None
+    fields = parse_frontmatter(lines[1:end])
     body = lines[end + 1 :]
     while body and body[0].strip(" \t") == "":
         body.pop(0)
     while body and body[-1].strip(" \t") == "":
         body.pop()
     return fields, "\n".join(body)
-
 
 
 # ------------------------------------------------------------------------------------------------ one member file
@@ -186,6 +191,10 @@ def check_fields(fields, stem):
         raise Unreadable("missing-field", "pick-me-when", "pick-me-when is required")
     if not isinstance(pick, str):
         raise Unreadable("bad-field", "pick-me-when", "pick-me-when must be a string")
+    check_optional_fields(fields)
+
+
+def check_optional_fields(fields):
     model = fields.get("model")
     if model is not None and not isinstance(model, str):
         raise Unreadable("bad-field", "model", "model must be a string")
@@ -204,26 +213,7 @@ def check_fields(fields, stem):
         raise Unreadable("bad-field", "skills", "skills must be a list of strings or one string")
 
 
-def read_member(path, layer_real, layer, stem):
-    """Return (member or None if refused, warnings); raise Unreadable for an error."""
-    if os.stat(path).st_size > MAX_BYTES:
-        raise Unreadable("too-large", None, f"file is over {MAX_BYTES} bytes")
-    real = os.path.realpath(path)
-    if os.path.commonpath([real, layer_real]) != layer_real:
-        raise Unreadable("outside-layer", None, "file resolves outside its layer directory")
-    with open(path, "rb") as handle:
-        fields, body = parse_member(handle.read())
-    check_fields(fields, stem)
-
-    warnings = []
-
-    def warn(code, field, message):
-        warnings.append({"code": code, "field": field, "message": message})
-
-    for key in fields:
-        if key not in KNOWN_FIELDS:
-            warn("unknown-field", key, f"unknown field {key}, ignored")
-    skills = fields.get("skills")
+def clean_skills(skills, warn):
     if skills is None:
         skills = []
     elif isinstance(skills, str):
@@ -235,6 +225,20 @@ def read_member(path, layer_real, layer, stem):
             warn("bad-skill", "skills", f"skill {skill!r} is not a valid skill name, dropped")
         elif cleaned not in kept:
             kept.append(cleaned)
+    return kept
+
+
+def review_fields(fields, body):
+    """Run the warning checks; return (warnings, kept skills, body, refused)."""
+    warnings = []
+
+    def warn(code, field, message):
+        warnings.append({"code": code, "field": field, "message": message})
+
+    for key in fields:
+        if key not in KNOWN_FIELDS:
+            warn("unknown-field", key, f"unknown field {key}, ignored")
+    kept = clean_skills(fields.get("skills"), warn)
     role = fields["role"]
     based_on = fields.get("based-on")
     if role == "fix-checker":
@@ -255,6 +259,23 @@ def read_member(path, layer_real, layer, stem):
     if fields.get("ad-hoc") is True:
         warn("misplaced-ad-hoc", "ad-hoc", "ad hoc members live only in ad-hoc/, member refused")
         refused = True
+    return warnings, kept, body, refused
+
+
+def read_member(path, layer_real, layer, stem):
+    """Return (member or None if refused, warnings); raise Unreadable for an error."""
+    if os.stat(path).st_size > MAX_BYTES:
+        raise Unreadable("too-large", None, f"file is over {MAX_BYTES} bytes")
+    real = os.path.realpath(path)
+    if os.path.commonpath([real, layer_real]) != layer_real:
+        raise Unreadable("outside-layer", None, "file resolves outside its layer directory")
+    with open(path, "rb") as handle:
+        fields, body = parse_member(handle.read())
+    check_fields(fields, stem)
+
+    warnings, kept, body, refused = review_fields(fields, body)
+    role = fields["role"]
+    based_on = fields.get("based-on")
     member = {
         "name": fields["name"],
         "role": role,
@@ -303,7 +324,11 @@ def resolve(layers):
                 continue
             warnings.extend(found)
             earlier = standing.get(member["name"])
-            if earlier and not refused and (earlier["role"] != member["role"] or earlier["based-on"] != member["based-on"]):
+            if (
+                earlier
+                and not refused
+                and (earlier["role"] != member["role"] or earlier["based-on"] != member["based-on"])
+            ):
                 field = "role" if earlier["role"] != member["role"] else "based-on"
                 warnings.append(
                     {
@@ -344,7 +369,7 @@ def read_team_env(run_dir):
         if not match:
             continue
         key, value = match.group(1), match.group(2).strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        if len(value) >= MIN_QUOTED and value[0] == value[-1] and value[0] in ('"', "'"):
             value = value[1:-1]
         else:
             value = value.split(" #", 1)[0].strip()
@@ -376,45 +401,49 @@ def usage_error(message):
     return 5
 
 
+class UsageError(Exception):
+    pass
+
+
 def parse_args(argv):
-    """Return (admiral, explicit {label: dir}, run dir or None), or a message string for a bad call."""
+    """Return (admiral, explicit {label: dir}, run dir or None); raise UsageError for a bad call."""
     admiral, explicit, run_dir = False, {}, None
     args = iter(argv)
     for arg in args:
         if arg == "--admiral":
             admiral = True
         elif arg == "--layer":
-            spec = next(args, None)
-            if spec is None or "=" not in spec:
-                return "--layer needs <label>=<dir>"
-            label, path = spec.split("=", 1)
+            spec = next(args, "")
+            label, _, path = spec.partition("=")
+            if "=" not in spec:
+                raise UsageError("--layer needs <label>=<dir>")
             if label not in LAYERS:
-                return f"unknown layer {label}"
+                raise UsageError(f"unknown layer {label}")
             if label in explicit:
-                return f"layer {label} given twice"
+                raise UsageError(f"layer {label} given twice")
             explicit[label] = path
         elif arg == "--run":
             run_dir = next(args, None)
             if run_dir is None:
-                return "--run needs a run directory"
+                raise UsageError("--run needs a run directory")
         else:
-            return f"unknown argument {arg}"
+            raise UsageError(f"unknown argument {arg}")
     if run_dir is not None and (explicit or admiral):
-        return "--run can't be combined with --layer or --admiral"
+        raise UsageError("--run can't be combined with --layer or --admiral")
     if admiral and "user-global" in explicit:
-        return "user-global is ignored inside Admiral"
+        raise UsageError("user-global is ignored inside Admiral")
     if not admiral and "fleet" in explicit:
-        return "fleet is only read inside Admiral (--admiral)"
+        raise UsageError("fleet is only read inside Admiral (--admiral)")
     return admiral, explicit, run_dir
 
 
 def main(argv):
     if not argv or argv[0] != "resolve":
         return usage_error("expected the resolve subcommand")
-    parsed = parse_args(argv[1:])
-    if isinstance(parsed, str):
-        return usage_error(parsed)
-    _, explicit, run_dir = parsed
+    try:
+        _, explicit, run_dir = parse_args(argv[1:])
+    except UsageError as err:
+        return usage_error(str(err))
     if run_dir is not None:
         layers = run_layers(run_dir)
     else:
