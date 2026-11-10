@@ -142,7 +142,9 @@ class ConvertCase(unittest.TestCase):
         return [ln for ln in done.stderr.splitlines() if ln.startswith("WARN") and word in ln]
 
     def tree(self):
-        return sorted(str(p.relative_to(self.root)) for p in self.root.rglob("*"))
+        # Apple's python3 shim writes its bytecode cache under $HOME/Library even for a script that imports nothing.
+        paths = (p.relative_to(self.root) for p in self.root.rglob("*"))
+        return sorted(str(p) for p in paths if p.parts[0] != "Library")
 
 
 class TestRoundTrip(ConvertCase):
