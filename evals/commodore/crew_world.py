@@ -42,7 +42,7 @@ ROLES_JSON_WARNING = (
 )
 
 
-def member_text(name, role, pick=None, body=None, skills=None, based_on=None, model=None, extra=""):
+def member_text(name, role, *, pick=None, body=None, skills=None, based_on=None, model=None, extra=""):  # noqa: PLR0913
     """A member file. `body` None gives a one-line body, "" gives none; `skills` None leaves the field out."""
     lines = ["---", f"name: {name}", f"role: {role}", f"pick-me-when: {pick if pick is not None else f'Pick {name}.'}"]
     if based_on is not None:
