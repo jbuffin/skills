@@ -180,7 +180,7 @@ class TestFixCheckerCast(cw.WorldCase):
                 self.assertNotIn("be thorough", "|".join(cells))
                 self.assertNotIn("fallback", "|".join(cells))
                 self.assertEqual(cells[7], source)  # the layer that held the dropped entry, not "built-in"
-                self.assertTrue([w for w in self.w.warns(done) if "fix-checker" in w], done.stderr)
+                self.assertTrue([w for w in self.warns(done) if "fix-checker" in w], done.stderr)
                 path.unlink()
 
 

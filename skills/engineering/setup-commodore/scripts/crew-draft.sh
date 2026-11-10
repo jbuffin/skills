@@ -8,8 +8,8 @@
 #          detect-harness.sh unless named. check and save use this target alone.
 #   skills prints `<name><TAB><file><TAB><description>` for each skill the harness can load here; <file> is the skill's
 #          SKILL.md or agent file, `-` for none, and so is a missing description.
-#   check  casts the crew with the draft as the run layer, which pins each role it holds. Prints the cast table, its WARN
-#          lines, a SHADOWED line for each draft member the repo has a member of the same name for, an OUTRANKED line for
+#   check  casts the crew with the draft as the run layer, which pins each role it holds. Prints the cast table, and on stderr its
+#          WARN lines, a SHADOWED line for each draft member the repo has a member of the same name for, an OUTRANKED line for
 #          each differently named repo member of a draft role, an UNSET line for each role the draft leaves out (never the
 #          fix checker), then `CLEAN` or `NOT CLEAN: <n> warnings`. The security reviewer's warning doesn't count.
 #   save   copies each draft file into the target dir and removes the target's role-named member for a role the draft
@@ -89,7 +89,7 @@ case $cmd in
     n=0
     while IFS= read -r w; do
       [[ $w == WARN* ]] || continue
-      print -r -- $w
+      print -u2 -r -- $w
       [[ $w == 'WARN  security-reviewer has no role skill'* ]] || (( n++ ))
     done < $RUN/check.err
     for r in $drafted; do

@@ -1,6 +1,6 @@
 # Roles
 
-Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name is `<name>`." Then it gives the role's section below, built the way [Role skills](#role-skills) says, the unit, and the unit's pointers. The role sections speak to the teammate, so paste them as written. Names follow `u<unit>-<role>[-<round>]`, like `u3-reviewer-1` or `u3-security-reviewer-1`. The fix checker has one per unit, so its name has no round: `u3-fix-checker`. The target steward, the scribe and the triager are just `target-steward`, `scribe` and `triager`.
+Every brief starts "Read `<run>/brief-common.md` first and follow it. Your name is `<name>`." Then it gives the role's section below, built the way [Crew members](#crew-members) says, the unit, and the unit's pointers. The role sections speak to the teammate, so paste them as written. Names follow `u<unit>-<role>[-<round>]`, like `u3-reviewer-1` or `u3-security-reviewer-1`. The fix checker has one per unit, so its name has no round: `u3-fix-checker`. The target steward, the scribe and the triager are just `target-steward`, `scribe` and `triager`.
 
 ## Models
 
@@ -10,11 +10,11 @@ The reviewer, the security reviewer, the brief checker and the triager run on a 
 
 A `team.env` from before the fix checker has no `MODEL_FIX_CHECKER`, and the launcher refuses `--role fix-checker` without it. Before launching one, add `MODEL_FIX_CHECKER=<the run's MODEL_IMPLEMENTER>` to `team.env`, and on a harness that writes effort keys, `EFFORT_FIX_CHECKER=<EFFORT_IMPLEMENTER>`.
 
-## Role skills
+## Crew members
 
-Each role below has a **contract** and, except the fix checker, a **fallback**. The fix checker has no role skills at any layer and no fallback. Every brief for the role pastes the contract as written, and it wins wherever a role skill or the role's instructions clash with it.
+Each role below has a **contract** and, except the fix checker, a **fallback**. The fix checker has no role skills, whatever member fills it, and no fallback. Every brief for the role pastes the contract as written, and it wins wherever a role skill or the role's instructions clash with it.
 
-The run's role skills are the table in `profile.md`, which `<team>/role-skills.sh <run>` resolves from the override layers (SKILL.md phase 1, step 1). For a role with skills, the brief gives the contract, then "Run `<skill>`" for each skill in the table's order, written as the table shows it, then the role's instructions from the table. For a role with none, the brief gives the fallback in place of the skills. For the fix checker, the brief gives the contract alone.
+The run's crew is the cast table in `profile.md`, which `<team>/crew.py cast --run <run>` builds from the layers (SKILL.md phase 1, step 1). For a role whose member has skills, the brief gives the contract, then "Run `<skill>`" for each skill in the table's order, written as the table shows it, then the member's instructions from the table. A member's instructions never override the contract. For a role with none, the brief gives the fallback in place of the skills. For the fix checker, the brief gives the contract alone. A custom role's brief uses the contract of the role in its `Based on` cell.
 
 ## Lifetimes
 

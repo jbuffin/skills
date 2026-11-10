@@ -586,6 +586,10 @@ def build_cast(members, picks, harness, warn):
             errors.append(error)
         if member is None:
             continue
+        if role == "fix-checker":
+            if member["skills"] or member["instructions"]:
+                warn(f"fix-checker: the fix checker takes no skills or instructions; those of {member['name']} dropped")
+            member = {**member, "skills": [], "instructions": ""}
         skills, missed = usable_skills(member, harness, warn)
         unchecked = unchecked or missed
         entries.append(
