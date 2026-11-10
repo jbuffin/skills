@@ -1,0 +1,4 @@
+{
+  "admiral": false,
+  "description": "A member body with a shebang and command substitution resolves as plain text."
+}
