@@ -36,6 +36,8 @@
 
 **Question item**: an item Commodore writes to its Admiral ship's inbox to ask the engineer one or more questions, each with options and a recommendation. The engineer answers it from the inbox, not in the session. _Avoid_: inbox question, needs-input line.
 
+**Admiral report**: the JSON at `$ADMIRAL_REPORT` that Commodore publishes for its Admiral ship at the end of every round (the first build and each PR-feedback round), overwriting the last. In version 2, each of its `prs` has a `url` and `closes`, and an optional `cast` lists each crew member used, its role and whether it is ad hoc. It isn't the final report, the text report to the engineer.
+
 **Crew member**: a named, reusable definition of a teammate that fills one role: its role skills, instructions, model, optional harness lock, and when to pick it. The role contract applies whatever member fills the role. A role can have several members, and the lead picks one for each role its task force needs. A teammate at work is a crew member running. _Avoid_: agent definition, persona, crew type.
 
 **Custom role**: a role the engineer adds by basing it on an existing role, whose contract it takes. It joins a mission's task force when one of its members fits; it never adds a mission. _Avoid_: custom mission, new role type.
