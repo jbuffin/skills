@@ -32,13 +32,14 @@ MAX_BYTES = 65536
 MIN_QUOTED = 2
 SLUG = re.compile(r"^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$")
 KEY = re.compile(r"^([a-z][a-z0-9-]*):(.*)$")
-ITEM = re.compile(r"^ +- (.*)$")
+ITEM = re.compile(r"^ +-( .*)?$")
 SKILL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 USAGE = (
     "usage: crew.py resolve [--admiral] [--layer <label>=<dir> ...]\n"
     "       crew.py resolve --run <run-dir>\n"
     "labels: " + ", ".join(LAYERS) + "\n"
+    "--admiral only selects which labels are allowed: fleet with it, user-global without it.\n"
 )
 
 
@@ -88,6 +89,16 @@ def parse_scalar(text):
     return text
 
 
+def parse_item(text):
+    """A list item: a plain or quoted scalar, never empty and never a nested list."""
+    text = text.strip(" \t")
+    if text == "":
+        raise bad("empty list item")
+    if text[0] == "[":
+        raise bad("nested list")
+    return parse_scalar(text)
+
+
 def parse_flow_list(text):
     if not text.endswith("]"):
         raise bad("unclosed flow list")
@@ -96,9 +107,7 @@ def parse_flow_list(text):
         return []
     items = []
     for piece in inner.split(","):
-        item = parse_scalar(piece)
-        if item[:1] == "[":
-            raise bad("nested list")
+        item = parse_item(piece)
         if piece.strip(" \t")[:1] in ('"', "'") and re.search(r"[\[\]]", item):
             raise bad("quoted list item holds a bracket")
         items.append(item)
@@ -120,7 +129,7 @@ def parse_frontmatter(lines):
     fields = {}
     open_key = None  # the key directly above, while it holds no value yet or only block list items
     for line in lines:
-        if line.strip(" ") == "" or line.lstrip(" ").startswith("#"):
+        if line.strip(" \t") == "" or line.lstrip(" ").startswith("#"):
             continue
         if re.match(r" *\t", line):
             raise bad("tab in indentation")
@@ -130,7 +139,7 @@ def parse_frontmatter(lines):
                 raise bad("list item without an empty key above it")
             if fields[open_key] is None:
                 fields[open_key] = []
-            fields[open_key].append(parse_scalar(item.group(1)))
+            fields[open_key].append(parse_item(item.group(1) or ""))
             continue
         key = KEY.match(line)
         if not key:
@@ -187,7 +196,7 @@ def check_fields(fields, stem):
     if not is_slug(role):
         raise Unreadable("bad-field", "role", "role must be a lowercase slug")
     pick = fields.get("pick-me-when")
-    if pick is None or (isinstance(pick, str) and not pick.strip()):
+    if pick is None or (isinstance(pick, str) and not pick.strip(" \t")):
         raise Unreadable("missing-field", "pick-me-when", "pick-me-when is required")
     if not isinstance(pick, str):
         raise Unreadable("bad-field", "pick-me-when", "pick-me-when must be a string")
@@ -263,14 +272,18 @@ def review_fields(fields, body):
 
 
 def read_member(path, layer_real, layer, stem):
-    """Return (member or None if refused, warnings); raise Unreadable for an error."""
-    if os.stat(path).st_size > MAX_BYTES:
-        raise Unreadable("too-large", None, f"file is over {MAX_BYTES} bytes")
-    real = os.path.realpath(path)
-    if os.path.commonpath([real, layer_real]) != layer_real:
-        raise Unreadable("outside-layer", None, "file resolves outside its layer directory")
-    with open(path, "rb") as handle:
-        fields, body = parse_member(handle.read())
+    """Return (member, warnings, refused); raise Unreadable for an error."""
+    try:
+        if os.stat(path).st_size > MAX_BYTES:
+            raise Unreadable("too-large", None, f"file is over {MAX_BYTES} bytes")
+        real = os.path.realpath(path)
+        if os.path.commonpath([real, layer_real]) != layer_real:
+            raise Unreadable("outside-layer", None, "file resolves outside its layer directory")
+        with open(path, "rb") as handle:
+            raw = handle.read()
+    except OSError as err:
+        raise Unreadable("unreadable", None, f"file can't be read: {err.strerror or err}") from None
+    fields, body = parse_member(raw)
     check_fields(fields, stem)
 
     warnings, kept, body, refused = review_fields(fields, body)
@@ -296,13 +309,25 @@ def read_member(path, layer_real, layer, stem):
 
 
 # ------------------------------------------------------------------------------------------------ resolution
+def usable_name(name):
+    """A member file name: lowercase .md, not a dotfile, valid UTF-8."""
+    if not name.endswith(".md") or name.startswith("."):
+        return False
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def member_files(directory):
+    """Sorted member file names. A missing directory is empty; one that can't be listed raises OSError."""
     try:
         names = os.listdir(directory)
-    except OSError:
+    except (FileNotFoundError, NotADirectoryError):
         return []
     return sorted(
-        (n for n in names if n.endswith(".md") and os.path.isfile(os.path.join(directory, n))),
+        (n for n in names if usable_name(n) and os.path.isfile(os.path.join(directory, n))),
         key=lambda n: n.encode("utf-8"),
     )
 
@@ -312,7 +337,13 @@ def resolve(layers):
     standing, errors, warnings = {}, [], []
     for label, directory in layers:
         layer_real = os.path.realpath(directory)
-        for filename in member_files(directory):
+        try:
+            filenames = member_files(directory)
+        except OSError as err:
+            message = f"layer directory can't be listed: {err.strerror or err}"
+            errors.append({"layer": label, "file": None, "code": "unreadable", "field": None, "message": message})
+            continue
+        for filename in filenames:
             path = os.path.join(directory, filename)
             stem = filename[: -len(".md")]
             try:
@@ -346,7 +377,8 @@ def resolve(layers):
     def order(item):
         return (
             LAYERS.index(item["layer"]),
-            item["file"].encode("utf-8"),
+            item["file"] is not None,
+            (item["file"] or "").encode("utf-8"),
             item["code"],
             item["field"] is not None,
             item["field"] or "",
@@ -377,21 +409,30 @@ def read_team_env(run_dir):
     return values
 
 
+def setting(name, team):
+    """The environment's value when it sets the variable (even empty), else team.env's, else empty."""
+    return os.environ[name] if name in os.environ else team.get(name, "")
+
+
 def run_layers(run_dir):
     team = read_team_env(run_dir)
-    ship = os.environ["ADMIRAL_SHIP"] if "ADMIRAL_SHIP" in os.environ else team.get("ADMIRAL_SHIP", "")
+    inside = bool(setting("ADMIRAL_SHIP", team))
     layers = [("built-in", str(Path(os.path.realpath(__file__)).parent.parent / "crew"))]
-    if ship:
-        layers.append(("fleet", os.environ.get("ADMIRAL_CREW_DIR", "")))
+    repo = team.get("REPO") or team.get("WORKTREE") or ""
+    repo_crew = os.path.join(repo, ".commodore", "crew") if repo else ""
+    if inside:
+        layers += [
+            ("fleet", setting("ADMIRAL_CREW_DIR", team)),
+            ("repo", repo_crew),
+            ("run", setting("ADMIRAL_RUN_CREW", team)),
+        ]
     else:
         xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-        layers.append(("user-global", os.path.join(xdg, "commodore", "crew")))
-    repo = team.get("REPO") or team.get("WORKTREE") or ""
-    layers.append(("repo", os.path.join(repo, ".commodore", "crew") if repo else ""))
-    if ship:
-        layers.append(("run", os.environ.get("ADMIRAL_RUN_CREW", "")))
-    else:
-        layers.append(("run", os.path.join(run_dir, "crew")))
+        layers += [
+            ("user-global", os.path.join(xdg, "commodore", "crew")),
+            ("repo", repo_crew),
+            ("run", os.path.join(run_dir, "crew")),
+        ]
     return [(label, path) for label, path in layers if path]
 
 
@@ -405,6 +446,17 @@ class UsageError(Exception):
     pass
 
 
+def add_layer(explicit, spec):
+    label, equals, path = spec.partition("=")
+    if not equals:
+        raise UsageError("--layer needs <label>=<dir>")
+    if label not in LAYERS:
+        raise UsageError(f"unknown layer {label}")
+    if label in explicit:
+        raise UsageError(f"layer {label} given twice")
+    explicit[label] = path
+
+
 def parse_args(argv):
     """Return (admiral, explicit {label: dir}, run dir or None); raise UsageError for a bad call."""
     admiral, explicit, run_dir = False, {}, None
@@ -413,18 +465,12 @@ def parse_args(argv):
         if arg == "--admiral":
             admiral = True
         elif arg == "--layer":
-            spec = next(args, "")
-            label, _, path = spec.partition("=")
-            if "=" not in spec:
-                raise UsageError("--layer needs <label>=<dir>")
-            if label not in LAYERS:
-                raise UsageError(f"unknown layer {label}")
-            if label in explicit:
-                raise UsageError(f"layer {label} given twice")
-            explicit[label] = path
+            add_layer(explicit, next(args, ""))
         elif arg == "--run":
-            run_dir = next(args, None)
-            if run_dir is None:
+            if run_dir is not None:
+                raise UsageError("--run given twice")
+            run_dir = next(args, "")
+            if run_dir == "":
                 raise UsageError("--run needs a run directory")
         else:
             raise UsageError(f"unknown argument {arg}")

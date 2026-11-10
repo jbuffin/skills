@@ -375,6 +375,46 @@ class ExplicitMode(ResolverCase):
         self.assertEqual(member["pick-me-when"], f"Pick {evil}")
         self.assertEqual(member["model"], tick)
 
+    def test_unreadable_member_file_is_an_error_not_a_traceback(self):
+        if os.geteuid() == 0:
+            self.skipTest("root reads files whatever their mode")
+        d = self.layer("repo", {"locked.md": member_text("locked", "scribe"), "fine.md": member_text("fine", "scribe")})
+        (d / "locked.md").chmod(0o000)
+        self.addCleanup((d / "locked.md").chmod, 0o644)
+        proc, parsed = self.explicit({"repo": d})
+        self.assertEqual(proc.returncode, ERRORS, proc.stderr)
+        self.assertEqual(
+            strip_messages(parsed),
+            {"errors": [{"layer": "repo", "file": "locked.md", "code": "unreadable", "field": None}], "warnings": []},
+        )
+
+    def test_unlistable_layer_directory_is_an_error_with_a_null_file_sorted_first(self):
+        if os.geteuid() == 0:
+            self.skipTest("root lists directories whatever their mode")
+        locked = self.layer("repo", {"x.md": member_text("x", "scribe")})
+        locked.chmod(0o000)
+        self.addCleanup(locked.chmod, 0o755)
+        broken = self.layer("user-global", {"bad.md": "nope\n"})
+        proc, parsed = self.explicit({"user-global": broken, "repo": locked})
+        self.assertEqual(proc.returncode, ERRORS, proc.stderr)
+        self.assertEqual(
+            strip_messages(parsed)["errors"],
+            [
+                {"layer": "user-global", "file": "bad.md", "code": "bad-frontmatter", "field": None},
+                {"layer": "repo", "file": None, "code": "unreadable", "field": None},
+            ],
+        )
+
+    def test_file_name_that_is_not_utf8_is_skipped(self):
+        d = self.layer("repo", {"keep.md": member_text("keep", "scribe")})
+        try:
+            (d.parent.joinpath("repo").joinpath(os.fsdecode(b"bad-\xff.md"))).write_text("x")
+        except OSError:
+            self.skipTest("this file system rejects non-UTF-8 names")
+        proc, parsed = self.explicit({"repo": d})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual([m["name"] for m in parsed["members"]], ["keep"])
+
 
 class UsageErrors(ResolverCase):
     def test_bad_calls_exit_5_with_a_usage_message_and_no_stdout(self):
@@ -392,6 +432,9 @@ class UsageErrors(ResolverCase):
             "fleet without --admiral": ["resolve", "--layer", f"fleet={self.tmp}"],
             "--run with --layer": ["resolve", "--run", run_dir, "--layer", f"repo={self.tmp}"],
             "--run with --admiral": ["resolve", "--run", run_dir, "--admiral"],
+            "--run twice": ["resolve", "--run", run_dir, "--run", run_dir],
+            "--run empty": ["resolve", "--run", ""],
+            "--run without a value": ["resolve", "--run"],
         }
         for label, args in calls.items():
             with self.subTest(label):
@@ -494,6 +537,43 @@ class RunMode(ResolverCase):
         layers = self.w.layers_of(parsed)
         self.assertIn("reviewer", layers)
         self.assertNotIn("scribe", layers)
+
+    def test_inside_admiral_team_env_names_the_fleet_and_run_dirs(self):
+        self.fill()
+        self.w.team_env(
+            f"REPO={self.w.repo}\nADMIRAL_SHIP=ship-4\n"
+            f"ADMIRAL_CREW_DIR={self.w.fleet}\nADMIRAL_RUN_CREW='{self.w.admiral_run_crew}'\n"
+        )
+        proc, parsed = self.w.resolve()
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual(
+            self.w.layers_of(parsed),
+            {"implementer": "built-in", "scribe": "fleet", "triager": "repo", "test-writer": "run"},
+        )
+
+    def test_inside_admiral_the_environment_beats_team_env_for_the_fleet_and_run_dirs(self):
+        self.fill()
+        other_fleet, other_run = self.tmp / "other-fleet", self.tmp / "other-run"
+        self.w.put(other_fleet, "target-steward", "target-steward")
+        self.w.put(other_run, "fix-checker", "fix-checker")
+        self.w.team_env(
+            f"REPO={self.w.repo}\nADMIRAL_CREW_DIR={self.w.fleet}\nADMIRAL_RUN_CREW={self.w.admiral_run_crew}\n"
+        )
+        proc, parsed = self.w.resolve(
+            ADMIRAL_SHIP="ship-5", ADMIRAL_CREW_DIR=str(other_fleet), ADMIRAL_RUN_CREW=str(other_run)
+        )
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual(
+            self.w.layers_of(parsed),
+            {"implementer": "built-in", "target-steward": "fleet", "triager": "repo", "fix-checker": "run"},
+        )
+
+    def test_an_empty_admiral_dir_in_the_environment_beats_team_env_and_never_falls_back_to_run_crew(self):
+        self.fill()
+        self.w.team_env(f"REPO={self.w.repo}\nADMIRAL_CREW_DIR={self.w.fleet}\nADMIRAL_RUN_CREW={self.w.run_crew}\n")
+        proc, parsed = self.w.resolve(ADMIRAL_SHIP="ship-6", ADMIRAL_CREW_DIR="", ADMIRAL_RUN_CREW="")
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual(self.w.layers_of(parsed), {"implementer": "built-in", "triager": "repo"})
 
     def test_unset_or_empty_admiral_dirs_are_empty_layers(self):
         self.fill()

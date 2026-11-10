@@ -30,7 +30,7 @@ Some cases hold committed git symlinks (for example `error-outside-layer`). Chec
 
 ## Generated inputs
 
-Inputs that can't be committed safely aren't fixtures: non-UTF-8 content, a byte order mark and CRLF line endings. `evals/commodore/test_crew_resolution.py` generates those files at run time. Cover them in your own tests.
+Inputs that can't be committed safely aren't fixtures: non-UTF-8 content, a byte order mark, CRLF line endings, upper-case extensions, non-UTF-8 file names and files or directories with no read permission (the `unreadable` error). `evals/commodore/test_crew_resolution.py` generates those files at run time. Cover them in your own tests.
 
 ## Markdown lint
 
