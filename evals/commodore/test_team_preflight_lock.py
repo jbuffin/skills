@@ -115,8 +115,8 @@ class TestLockedHarnessPreflight(PreflightLockCase):
         fails = [ln for ln in self.out(done) if ln.startswith("FAIL  locked harness codex (roles: ")]
         self.assertEqual(len(fails), 1, done.stdout)
         self.assertTrue(fails[0].endswith(") failed preflight: put it in the decision batch"), fails[0])
-        for role in ("implementer", "fix-checker"):  # the spec gives no order for the roles
-            self.assertIn(role, fails[0])
+        # spec section 7 item 16: roles are in cast (nine-role) order
+        self.assertEqual(fails[0].split("(roles: ")[1].split(")")[0], "implementer, fix-checker")
 
 
 class TestAdvisorProbeSkipsLockedRoles(PreflightLockCase):
@@ -134,8 +134,12 @@ class TestCastFailureShowsThrough(PreflightLockCase):
         done = self.preflight()
         self.assertEqual(done.returncode, 1, done.stdout)
         crew = [ln for ln in self.out(done) if ln.startswith("FAIL  crew:")]
-        self.assertTrue(crew, done.stdout)
-        self.assertIn("codex", crew[0])
+        self.assertEqual(len(crew), 1, done.stdout)
+        # spec section 7 item 16: the first UNAVAILABLE line from cast
+        self.assertEqual(
+            crew[0],
+            "FAIL  crew: UNAVAILABLE implementer: lock-impl is locked to codex: codex CLI not found on PATH",
+        )
 
 
 if __name__ == "__main__":
