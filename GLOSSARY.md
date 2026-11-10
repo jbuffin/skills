@@ -24,14 +24,22 @@
 
 **Advisor**: a stronger model built into the harness and paired with a teammate's session, which sees the teammate's own transcript when the teammate consults it. A sub-agent the teammate has to brief or fork through its prompt is not an advisor, so a harness without one reports the advisor as not available. A teammate whose model is in the same family as the advisor has none by design: that is a third state, neither off (should have one and doesn't) nor not available. _Avoid_: second opinion, rubber duck, consultant.
 
-**Role skill**: a skill a teammate in a role runs within its role contract. A role can have several, run in order, or none. With none, the role follows its fallback procedure, except the security reviewer, which isn't launched, and the fix checker, which never has role skills and has no fallback. _Avoid_: role tool, persona skill.
+**Role skill**: a skill a teammate in a role runs within its role contract. A crew member sets its role skills. A role can have several, run in order, or none. With none, the role follows its fallback procedure, except the security reviewer, which isn't launched, and the fix checker, which never has role skills and has no fallback. _Avoid_: role tool, persona skill.
 
 **Role contract**: the part of a role that always applies, whatever role skill runs: its inputs, launch flags, scope, report, done signal, proofs and safety rules. A role skill or its instructions can't override it. _Avoid_: role rules, base prompt.
 
-**Override layer**: one of the places a role skill is set, in precedence order: built-in (empty), user-global, repo, then the run, which only the engineer's prompt or the profile can set. _Avoid_: config level, scope, tier.
+**Override layer**: one of the places a crew member is defined, in precedence order: built-in, fleet inside an Admiral ship or user-global outside one, repo, then the run, which only the engineer's prompt or the launch can set. A member in a later layer replaces the one with the same name. _Avoid_: config level, scope, tier.
 
 **Unit**: one slice of a run's work that ships as its own branch and PR, reviewed in its own review rounds. _Avoid_: task, chunk, slice.
 
 **Acceptance trace**: the run's table mapping each acceptance criterion in the source of truth to the unit that owns it, the test or scenario that will show it, its status, and the evidence. _Avoid_: requirements matrix, checklist.
 
 **Question item**: an item Commodore writes to its Admiral ship's inbox to ask the engineer one or more questions, each with options and a recommendation. The engineer answers it from the inbox, not in the session. _Avoid_: inbox question, needs-input line.
+
+**Crew member**: a named, reusable definition of a teammate that fills one role: its role skills, instructions, model, optional harness lock, and when to pick it. The role contract applies whatever member fills the role. A role can have several members, and the lead picks one for each role its task force needs. A teammate at work is a crew member running. _Avoid_: agent definition, persona, crew type.
+
+**Custom role**: a role the engineer adds by basing it on an existing role, whose contract it takes. It joins a mission's task force when one of its members fits; it never adds a mission. _Avoid_: custom mission, new role type.
+
+**Harness lock**: a crew member's setting that makes it always run on one harness, whatever harness the run started from. _Avoid_: harness preference.
+
+**Ad hoc crew member**: a crew member the lead makes during a run because none fits a role. Only that run uses it until the engineer keeps it; the engineer can also edit it or drop it. _Avoid_: temporary member, draft crew.

@@ -15,3 +15,5 @@ The teammate contract depends on the harness. A harness that can message a live 
 A run started in Claude Code and resumed from another harness fails preflight. Features one harness lacks, like the advisor off Claude Code, are reported as not available on that harness rather than as warnings.
 
 Amended 2026-10-26 ([#115](https://github.com/jbuffin/skills/issues/115)): inside an Admiral ship, writers are live crew boats; see ADR 0006.
+
+Amended 2026-11-10 ([#193](https://github.com/jbuffin/skills/issues/193)): a crew member can lock another harness; see ADR 0008.
