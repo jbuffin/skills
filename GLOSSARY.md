@@ -40,6 +40,8 @@
 
 **Crew member**: a named, reusable definition of a teammate that fills one role: its role skills, instructions, model, optional harness lock, and when to pick it. The role contract applies whatever member fills the role. A role can have several members, and the lead picks one for each role its task force needs. A teammate at work is a crew member running. _Avoid_: agent definition, persona, crew type.
 
+**Crew note**: a short fact a crew member learned and will need again, kept for that member alone once the engineer approves it, for the whole fleet or for one repo. It is knowledge, never reasoning: no verdicts, opinions on code quality, past review findings or accounts of what happened on a run.
+
 **Custom role**: a role the engineer adds by basing it on an existing role, whose contract it takes. It joins a mission's task force when one of its members fits; it never adds a mission. _Avoid_: custom mission, new role type.
 
 **Harness lock**: a crew member's setting that makes it always run on one harness, whatever harness the run started from. _Avoid_: harness preference.
