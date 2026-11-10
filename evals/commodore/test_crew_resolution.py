@@ -3,7 +3,7 @@
 Seams are `crew.py resolve` as a subprocess (explicit `--layer` mode and `--run` mode), its stdout JSON and exit
 code, and the fixture directory layout in fixtures/crew-resolution/. Expected values come from the unit spec (the
 issue's Agent Brief, docs/adr/0007 and the coordinator's rules), never from the resolver: the fixtures' expected.json
-files were written by hand.
+files were generated from spec-derived expectations by a throwaway script, never from a resolver.
 
 Every fixture case runs twice: through explicit `--layer` mode (the ignored layer's directory is left out, because that
 mode rejects it with exit 5) and through `--run` mode (every layer directory is placed where `--run` looks for it, and
@@ -230,8 +230,9 @@ for _name in case_names():
     setattr(FixtureCases, "test_run_mode_" + _name.replace("-", "_"), _via_run)
 
 
-class FixtureCoverage(ResolverCase):
-    """The fixture set itself: shape, and that it covers what the unit spec says it must."""
+class FixtureCoverage(unittest.TestCase):
+    """The fixture set itself: shape, and that it covers what the unit spec says it must. These tests guard the
+    fixtures, not the resolver, so they pass before crew.py exists: the one deliberate exception to "every test red"."""
 
     ERROR_CODES = frozenset(
         {
@@ -476,6 +477,15 @@ class RunMode(ResolverCase):
         self.assertIn("scribe", layers)
         self.assertNotIn("reviewer", layers)
 
+    def test_an_empty_admiral_ship_in_the_environment_beats_one_in_team_env(self):
+        self.fill()
+        self.w.team_env(f"REPO={self.w.repo}\nADMIRAL_SHIP=ship-x\n")
+        proc, parsed = self.w.resolve(ADMIRAL_SHIP="", ADMIRAL_CREW_DIR=str(self.w.fleet))
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        layers = self.w.layers_of(parsed)
+        self.assertIn("reviewer", layers)
+        self.assertNotIn("scribe", layers)
+
     def test_an_empty_admiral_ship_everywhere_means_outside_admiral(self):
         self.fill()
         self.w.team_env(f"REPO={self.w.repo}\nADMIRAL_SHIP=\n")
@@ -567,13 +577,15 @@ class RunMode(ResolverCase):
 
 
 # ---------------------------------------------------------------------------------------------------- built-in set
-class ShippedBuiltIns(ResolverCase):
+class BuiltInDirectory(unittest.TestCase):
     def test_built_in_directory_holds_exactly_one_member_per_role_named_after_it(self):
         self.assertTrue(BUILTIN_DIR.is_dir(), f"{BUILTIN_DIR.relative_to(REPO)} does not exist yet")
         self.assertEqual(sorted(p.name for p in BUILTIN_DIR.iterdir()), sorted(f"{r}.md" for r in ROLES))
         for role in ROLES:
             self.assertTrue((BUILTIN_DIR / f"{role}.md").is_file(), role)
 
+
+class ShippedBuiltIns(ResolverCase):
     def test_built_in_set_resolves_cleanly_to_plain_defaults(self):
         proc, parsed = self.explicit({"built-in": BUILTIN_DIR})
         self.assertEqual(proc.returncode, OK, proc.stderr)

@@ -50,6 +50,20 @@
     },
     {
       "ad-hoc": false,
+      "ad-hoc-run": "run-123",
+      "based-on": null,
+      "file": "booleans-and-comments.md",
+      "harness": null,
+      "instructions": "",
+      "layer": "repo",
+      "model": null,
+      "name": "booleans-and-comments",
+      "pick-me-when": "Bools.",
+      "role": "scribe",
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
       "ad-hoc-run": null,
       "based-on": null,
       "file": "empty-body.md",
@@ -105,20 +119,6 @@
       "model": null,
       "name": "name-at-limit-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "pick-me-when": "Sixty-four chars.",
-      "role": "scribe",
-      "skills": []
-    },
-    {
-      "ad-hoc": false,
-      "ad-hoc-run": "run-123",
-      "based-on": null,
-      "file": "null-and-booleans.md",
-      "harness": null,
-      "instructions": "",
-      "layer": "repo",
-      "model": null,
-      "name": "null-and-booleans",
-      "pick-me-when": "Nulls.",
       "role": "scribe",
       "skills": []
     },
