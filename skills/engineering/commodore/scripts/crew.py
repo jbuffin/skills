@@ -500,6 +500,18 @@ class Harness:
         return self.answers[name]
 
 
+class Fleet:
+    """The harnesses one cast uses: the run's own and each lock's, one Harness each."""
+
+    def __init__(self, run_name, run_dir):
+        self.run_name, self.run_dir, self.cache = run_name, run_dir, {}
+
+    def __call__(self, name):
+        if name not in self.cache:
+            self.cache[name] = Harness(name, self.run_dir)
+        return self.cache[name]
+
+
 def usable_skills(member, harness, warn):
     """The member's skills the harness can load. Returns (kept names, whether a skill went unchecked)."""
     if not harness.can_check:
@@ -518,7 +530,9 @@ def usable_model(member, role, warn, unlocked_from=None):
     if not model:
         return None
     if unlocked_from:
-        warn(f"{role}: model {json.dumps(model)} of {member['name']} is for {unlocked_from}; the role keeps its default")
+        warn(
+            f"{role}: model {json.dumps(model)} of {member['name']} is for {unlocked_from}; the role keeps its default"
+        )
         return None
     if role == "fix-checker":
         warn(
@@ -592,12 +606,13 @@ def choose(role, candidates, pick, warn):
     return member, None
 
 
-def build_cast(members, picks, harnesses, run_name, unlocks, warn):
+def build_cast(members, picks, harnesses, unlocks, warn):
     """Return (cast entries, errors). An entry is a dict with the cast.json keys plus `_`-prefixed working keys.
 
     `_lock` is the harness the member is locked to (None when the run's own), `_unlocked` the harness the role was
     unlocked from, `_on` the harness the role runs on.
     """
+    run_name = harnesses.run_name
     roles = role_order({m["role"] for m in members} | set(ROLES))
     entries, errors, unchecked = [], [], set()
     implementer = None
@@ -658,9 +673,11 @@ def build_cast(members, picks, harnesses, run_name, unlocks, warn):
     return entries, errors
 
 
-def check_available(entries, run_dir, warn, say_line):
+def check_available(entries, run_dir, say_line):
     """Run harness-available.sh once per locked harness; mark the entries on an unavailable one. Returns the count."""
-    script = Path(os.path.realpath(__file__)).parent.parent.parent / "agent-teammates" / "scripts" / "harness-available.sh"
+    script = (
+        Path(os.path.realpath(__file__)).parent.parent.parent / "agent-teammates" / "scripts" / "harness-available.sh"
+    )
     answers, bad = {}, 0
     for entry in entries:
         name = entry["_lock"]
@@ -675,12 +692,15 @@ def check_available(entries, run_dir, warn, say_line):
                     text=True,
                     check=False,
                 )
-                code, lines = done.returncode, [ln.strip() for ln in (done.stdout + done.stderr).splitlines() if ln.strip()]
+                code, lines = (
+                    done.returncode,
+                    [ln.strip() for ln in (done.stdout + done.stderr).splitlines() if ln.strip()],
+                )
             except OSError as err:
                 code, lines = 1, [f"harness-available.sh can't run: {err}"]
             for ln in lines:
                 if ln.startswith("WARN"):
-                    warn(ln[4:].strip()) if False else say_line(ln)
+                    say_line(ln)
             reason = next((ln for ln in lines if not ln.startswith("WARN")), f"availability check failed (exit {code})")
             answers[name] = None if code == 0 else reason
         if answers[name] is not None:
@@ -791,6 +811,24 @@ def leftover_roles_json(run_dir):
     return [p for p in paths if os.path.exists(p)]
 
 
+def take_pick(args, picks):
+    role, equals, member = next(args, "").partition("=")
+    if not (equals and role and member):
+        raise UsageError("--pick needs <role>=<member>")
+    if role in picks:
+        raise UsageError(f"two picks for the role {role}")
+    picks[role] = member
+
+
+def take_unlock(args, unlocks):
+    role = next(args, "")
+    if not role:
+        raise UsageError("--unlock needs a role")
+    if role in unlocks:
+        raise UsageError(f"two unlocks for the role {role}")
+    unlocks.append(role)
+
+
 def parse_cast_args(argv):
     """Return (run dir, {role: member}, save, [unlocked roles]); raise UsageError for a bad call."""
     run_dir, picks, save, unlocks = None, {}, False, []
@@ -803,19 +841,9 @@ def parse_cast_args(argv):
             if run_dir == "":
                 raise UsageError("--run needs a run directory")
         elif arg == "--pick":
-            role, equals, member = next(args, "").partition("=")
-            if not (equals and role and member):
-                raise UsageError("--pick needs <role>=<member>")
-            if role in picks:
-                raise UsageError(f"two picks for the role {role}")
-            picks[role] = member
+            take_pick(args, picks)
         elif arg == "--unlock":
-            role = next(args, "")
-            if not role:
-                raise UsageError("--unlock needs a role")
-            if role in unlocks:
-                raise UsageError(f"two unlocks for the role {role}")
-            unlocks.append(role)
+            take_unlock(args, unlocks)
         elif arg == "--save":
             save = True
         else:
@@ -850,14 +878,35 @@ def effective_picks(members, explicit, run_dir, warn):
     return {**picks, **explicit}
 
 
+def check_unlocks(entries, asked, saved, warn):
+    """Raise UsageError for an --unlock of a role with no lock of its own; warn for a saved one that went stale."""
+    by_role = {e["role"]: e for e in entries}
+
+    def locked(role):
+        return role != "fix-checker" and role in by_role and by_role[role]["_own"]
+
+    for role in asked:
+        if not locked(role):
+            raise UsageError(f"--unlock {role}: {role} is not a role in the cast with a harness lock")
+    for role in saved:
+        if not locked(role):
+            warn(f"unlock: {role}: saved unlock dropped; the role is no longer locked")
+
+
+def cast_setup(argv):
+    """Return (run dir, explicit picks, save, asked unlocks, run harness name); raise UsageError for a bad call."""
+    run_dir, explicit, save, asked = parse_cast_args(argv)
+    if not os.path.isfile(os.path.join(run_dir, "team.env")):
+        raise UsageError(f"{run_dir}/team.env not found")
+    harness_name = read_team_env(run_dir).get("HARNESS") or "claude"
+    if not HARNESS_NAME.fullmatch(harness_name):
+        raise UsageError(f"HARNESS {harness_name!r} in team.env is not a harness name")
+    return run_dir, explicit, save, asked, harness_name
+
+
 def cast_main(argv):
     try:
-        run_dir, explicit, save, asked = parse_cast_args(argv)
-        if not os.path.isfile(os.path.join(run_dir, "team.env")):
-            raise UsageError(f"{run_dir}/team.env not found")
-        harness_name = read_team_env(run_dir).get("HARNESS") or "claude"
-        if not HARNESS_NAME.fullmatch(harness_name):
-            raise UsageError(f"HARNESS {harness_name!r} in team.env is not a harness name")
+        run_dir, explicit, save, asked, harness_name = cast_setup(argv)
     except UsageError as err:
         return usage_error(str(err))
     members, errors, warnings = resolve(run_layers(run_dir))
@@ -877,42 +926,27 @@ def cast_main(argv):
     def warn(text):
         notes.append(f"WARN  {text}")
 
+    fleet = Fleet(harness_name, run_dir)
     try:
         picks = effective_picks(members, explicit, run_dir, warn)
+        saved = [r for r in read_saved_unlocks(run_dir) if r not in asked]
+        entries, problems = build_cast(members, picks, fleet, {*asked, *saved}, warn)
+        check_unlocks(entries, asked, saved, warn)
     except UsageError as err:
         return usage_error(str(err))
-    cache = {}
-
-    def harnesses(name):
-        if name not in cache:
-            cache[name] = Harness(name, run_dir)
-        return cache[name]
-
-    saved = [r for r in read_saved_unlocks(run_dir) if r not in asked]
-    entries, problems = build_cast(members, picks, harnesses, harness_name, {*asked, *saved}, warn)
-    by_role = {e["role"]: e for e in entries}
-    for role in asked:
-        entry = by_role.get(role)
-        if role == "fix-checker" or entry is None or not entry["_own"]:
-            return usage_error(f"--unlock {role}: {role} is not a role in the cast with a harness lock")
-    for role in saved:
-        entry = by_role.get(role)
-        if role == "fix-checker" or entry is None or not entry["_own"]:
-            warn(f"unlock: {role}: saved unlock dropped; the role is no longer locked")
     if problems:
         for line in [*notes, *problems]:
             say(line)
         return 1
-    unavailable = check_available(entries, run_dir, warn, lambda line: notes.append(line))
-    table = cast_table(entries, harnesses, warn)
+    unavailable = check_available(entries, run_dir, notes.append)
+    table = cast_table(entries, fleet, warn)
     for line in notes:
         say(line)
+    sys.stdout.write(table)
     if unavailable:
-        sys.stdout.write(table)
         return 4
     if save:
         save_cast(run_dir, picks, entries)
-    sys.stdout.write(table)
     return 0
 
 

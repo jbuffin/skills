@@ -183,7 +183,9 @@ class TestCloseRetaskTail(LockCase):
         msg = self.w.message()
         done = self.w.run(RETASK, self.w.team, "impl", msg, ship=None)
         self.assertEqual(done.code, 0, done.text)
-        self.assertTrue(self.w.wait_finished("codex", count=2), self.w.calls("codex"))  # the resume runs in the background
+        self.assertTrue(
+            self.w.wait_finished("codex", count=2), self.w.calls("codex")
+        )  # the resume runs in the background
         resumes = [c for c in self.w.calls("codex") if c["argv"][:2] == ["exec", "resume"]]
         self.assertEqual(len(resumes), 1, self.w.calls("codex"))
         row = self.row("impl")
