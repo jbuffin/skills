@@ -12,3 +12,5 @@ A Commodore role's skill comes from override layers, where a later layer wins: b
 ## Consequences
 
 An engineer can't permanently override their repo's choice for themselves, only per run. With no security role skill, a run has no security reviewer: phase 1 puts that in the decision batch, and the run doesn't start without approval. Each role's contract (inputs, flags, report, proofs, safety rules) stays in `roles.md` and applies whatever skill runs.
+
+Superseded 2026-11-10 by ADR 0007 ([#193](https://github.com/jbuffin/skills/issues/193)): role skills come from layered crew member files.
