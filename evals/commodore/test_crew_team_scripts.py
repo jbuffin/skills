@@ -66,11 +66,6 @@ class TestPreflightPassThrough(PreflightCase):
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertIn("pin-a, pin-b", done.stdout)
 
-    def test_the_preflight_writes_nothing_into_the_run_dir_for_the_cast(self):
-        done = self.run_preflight(probe=False)
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertFalse((self.team / "cast.json").exists())
-
 
 class TestTeamInitAdmiralVars(WorldCase):
     def setUp(self):

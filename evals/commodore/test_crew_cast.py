@@ -176,7 +176,7 @@ class TestPicking(WorldCase):
         self.assertIn("WARN  pick: reviewer: 3 candidates and no pick; took aaa-rev (repo)", done.stderr.splitlines())
 
     def test_one_candidate_needs_no_pick_and_no_warning(self):
-        done = self.w.cast()
+        done = self.assert_cast_works()
         self.assertNotIn("no pick", done.stderr)
 
     def test_a_pick_wins_over_the_default_and_silences_the_warning(self):
@@ -218,15 +218,18 @@ class TestPicking(WorldCase):
 
     def test_two_picks_for_one_role_are_a_usage_error(self):
         self.w.write_member("user", "rev-a", "reviewer")
+        self.assert_cast_works("--pick", "reviewer=rev-a")
         done = self.w.cast("--pick", "reviewer=rev-a", "--pick", "reviewer=reviewer")
         self.assertEqual(done.returncode, 5)
         self.assertEqual(done.stdout, "")
 
     def test_a_pick_without_an_equals_sign_is_a_usage_error(self):
+        self.assert_cast_works("--pick", "reviewer=reviewer")
         done = self.w.cast("--pick", "reviewer")
         self.assertEqual((done.returncode, done.stdout), (5, ""))
 
     def test_a_pick_names_a_role_that_has_no_member_as_a_usage_error(self):
+        self.assert_cast_works("--pick", "reviewer=reviewer")
         done = self.w.cast("--pick", "captain=reviewer")
         self.assertEqual((done.returncode, done.stdout), (5, ""))
 
@@ -350,6 +353,7 @@ class TestCustomRoles(WorldCase):
         self.assertEqual((rows["run-helper"][2], rows["run-helper"][7]), ("triager", "run (pinned)"))
 
     def test_a_custom_member_is_not_a_candidate_for_its_based_on_role(self):
+        self.assert_cast_works("--pick", "docs-writer=docs-writer")
         done = self.w.cast("--pick", "scribe=docs-writer")
         self.assertEqual((done.returncode, done.stdout), (5, ""))
 
@@ -397,11 +401,13 @@ class TestResolutionPassThrough(WorldCase):
         self.assertNotIn("unknown-field", done.stdout)
 
     def test_no_run_option_is_a_usage_error(self):
+        self.assert_cast_works()
         done = self.w.sh([self.w.crew_py, "cast"])
         self.assertEqual((done.returncode, done.stdout), (5, ""))
         self.assertTrue(done.stderr)
 
     def test_a_missing_team_env_is_a_usage_error(self):
+        self.assert_cast_works()
         (self.w.run / "team.env").unlink()
         done = self.w.cast()
         self.assertEqual((done.returncode, done.stdout), (5, ""))
@@ -409,11 +415,14 @@ class TestResolutionPassThrough(WorldCase):
     def test_a_bad_harness_is_a_usage_error(self):
         for harness in ("Claude", "a b", "../claude", "x;y"):
             with self.subTest(harness=harness):
+                self.w.team_env()
+                self.assert_cast_works()
                 self.w.team_env(harness=harness)
                 done = self.w.cast()
                 self.assertEqual((done.returncode, done.stdout), (5, ""))
 
     def test_an_unknown_option_is_a_usage_error(self):
+        self.assert_cast_works()
         done = self.w.cast("--frobnicate")
         self.assertEqual((done.returncode, done.stdout), (5, ""))
 
@@ -468,7 +477,7 @@ class TestLeftoverRolesJson(WorldCase):
         self.assertIn(ROLES_JSON_WARNING.format(path=run), done.stderr.splitlines())
 
     def test_no_file_no_warning(self):
-        self.assertNotIn("roles.json", self.w.cast().stderr)
+        self.assertNotIn("roles.json", self.assert_cast_works().stderr)
 
 
 class TestModels(WorldCase):
@@ -668,6 +677,7 @@ class TestSave(WorldCase):
     def test_a_second_save_drops_a_model_the_member_no_longer_has(self):
         self.w.write_member("user", "scribe", model="claude-haiku-5.5")
         self.w.cast("--save")
+        self.assertIn("MODEL_SCRIBE='claude-haiku-5.5'", self.team_env_text())
         self.w.write_member("user", "scribe")
         self.w.cast("--save")
         self.assertNotIn("MODEL_SCRIBE='", self.team_env_text())
@@ -675,6 +685,7 @@ class TestSave(WorldCase):
     def test_the_block_is_the_same_after_saving_twice(self):
         self.w.cast("--pick", "implementer=impl-a", "--save")
         first = self.team_env_text()
+        self.assertIn("MODEL_IMPLEMENTER='claude-sonnet-5.5'", first)
         self.w.cast("--save")
         self.assertEqual(self.team_env_text(), first)
 

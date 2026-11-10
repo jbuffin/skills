@@ -194,6 +194,13 @@ class WorldCase(unittest.TestCase):
     def warns(self, done):
         return [ln for ln in done.stderr.splitlines() if ln.startswith("WARN")]
 
+    def assert_cast_works(self, *args, env=None):
+        """Positive control for a "bad call is refused" test: the same world casts fine without the bad part."""
+        done = self.w.cast(*args, env=env)
+        self.assertEqual(done.returncode, 0, f"the control cast failed: {done.stderr}")
+        self.assertEqual(done.stdout.splitlines()[0], HEADER)
+        return done
+
     def git_init(self, path):
         subprocess.run(["git", "-C", str(path), "init", "-q"], check=True)
 
