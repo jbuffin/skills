@@ -606,6 +606,14 @@ def choose(role, candidates, pick, warn):
     return member, None
 
 
+def model_advice(role, lock):
+    """What to do about a locked member that names no model."""
+    if role not in ROLES:
+        return f"pass --model and --effort for {lock} when launching it"
+    extra = " (and MODEL_FIX_CHECKER, EFFORT_FIX_CHECKER)" if role == "implementer" else ""
+    return f"set MODEL_{env_name(role)} and EFFORT_{env_name(role)} for {lock}{extra}"
+
+
 def build_cast(members, picks, harnesses, unlocks, warn):
     """Return (cast entries, errors). An entry is a dict with the cast.json keys plus `_`-prefixed working keys.
 
@@ -644,12 +652,7 @@ def build_cast(members, picks, harnesses, unlocks, warn):
         if missed:
             unchecked.add(on)
         if lock and not member["model"] and role != "fix-checker":
-            if role in ROLES:
-                extra = " (and MODEL_FIX_CHECKER, EFFORT_FIX_CHECKER)" if role == "implementer" else ""
-                how = f"set MODEL_{env_name(role)} and EFFORT_{env_name(role)} for {lock}{extra}"
-            else:
-                how = f"pass --model and --effort for {lock} when launching it"
-            warn(f"{role}: {member['name']} is locked to {lock} and names no model; {how}")
+            warn(f"{role}: {member['name']} is locked to {lock} and names no model; {model_advice(role, lock)}")
         entry = {
             "role": role,
             "member": member["name"],
@@ -880,7 +883,7 @@ def effective_picks(members, explicit, run_dir, warn):
 
 
 def check_unlocks(entries, asked, saved, warn):
-    """Raise UsageError for an --unlock of a role with no lock of its own; warn for each saved one it applies and for one that went stale."""
+    """Raise UsageError for an --unlock of an unlocked role; warn for each saved unlock applied or gone stale."""
     by_role = {e["role"]: e for e in entries}
 
     def locked(role):
