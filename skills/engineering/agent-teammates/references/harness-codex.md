@@ -1,6 +1,6 @@
 # Teammates on Codex
 
-Read this when the run's `HARNESS` is `codex`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/codex/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session. Inside an Admiral ship a writer is a live crew boat instead ("Inside an Admiral ship"); a `--read-only` teammate stays as this page describes.
+Read this when the run's `HARNESS` is `codex`, or a teammate is locked to `codex` (`HARNESS_<ROLE>`). This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/codex/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session. Inside an Admiral ship a writer is a live crew boat instead ("Inside an Admiral ship"); a `--read-only` teammate stays as this page describes.
 
 ## What a teammate is
 

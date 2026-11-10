@@ -1,6 +1,6 @@
 # Teammates on Copilot CLI
 
-Read this when the run's `HARNESS` is `copilot`. This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/copilot/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session. Inside an Admiral ship a writer is a live crew boat instead ("Inside an Admiral ship"); a `--read-only` teammate stays as this page describes.
+Read this when the run's `HARNESS` is `copilot`, or a teammate is locked to `copilot` (`HARNESS_<ROLE>`). This harness declares `LIVE_MESSAGING=0` and `SEND=script` in `scripts/drivers/copilot/driver.env`: a teammate works one turn at a time, and you give it new work by running `retask.sh`, not by sending a message to a live session. Inside an Admiral ship a writer is a live crew boat instead ("Inside an Admiral ship"); a `--read-only` teammate stays as this page describes.
 
 Read [Security caveats](#security-caveats) before you launch anyone. commodore's `references/harness-copilot.md` covers the default models, the capability rule and fix rounds.
 

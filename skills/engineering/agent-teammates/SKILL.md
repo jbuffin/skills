@@ -19,7 +19,7 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
 
   | Setting | Default | Meaning |
   | --- | --- | --- |
-  | `HARNESS` | claude | the harness; selects `scripts/drivers/<HARNESS>` and `references/harness-<HARNESS>.md` |
+  | `HARNESS` | claude | the run's harness; selects `scripts/drivers/<HARNESS>` and `references/harness-<HARNESS>.md` for every teammate not locked to another harness (`HARNESS_<ROLE>`) |
   | `MODEL` | the harness reference | the model for a launch with neither `--model` nor `--role` |
   | `HARNESS_<ROLE>` | unset | the harness `--role <role>` runs on, when it isn't the run's `HARNESS`; written by `crew.py cast --save` for a crew member locked to a harness. `launch-teammate.sh --harness <h>` overrides it. Launch a custom-role teammate with `--harness <run harness>` when unlocked and `--harness <h>` when its member is locked |
   | `MODEL_<ROLE>` | none | the model for `--role <role>`; see "Set the model explicitly" |
@@ -63,7 +63,7 @@ Put this in every prompt file, or in a shared brief that every prompt points to.
 
 ## Inside an Admiral ship
 
-When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, the scripts use the admiral **host driver** (`scripts/drivers/admiral/`) instead of `drivers/<HARNESS>`. A teammate is then an Admiral crew boat, launched with `admiral crew launch --harness <HARNESS>`, and Admiral decides how it is launched, messaged, watched and stopped. Every script and its arguments stay the same. Two cases keep the harness's own driver: under `ADMIRAL_AUTOPILOT=1` Admiral refuses Codex and Copilot boats, so those harnesses run headless as outside a ship, and a `--read-only` Codex or Copilot teammate always runs headless (the admiral driver hands it to `drivers/<HARNESS>` and routes its `retask.sh`, `close-teammate.sh`, `watch-teammates.sh` and `teammate-tail.sh` calls there by id). Each harness reference has an "Inside an Admiral ship" section with its settings and limits. What changes for you:
+When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, the scripts use the admiral **host driver** (`scripts/drivers/admiral/`) instead of `drivers/<HARNESS>`. A teammate is then an Admiral crew boat, launched with `admiral crew launch --harness <h>` (the teammate's harness: `HARNESS`, or its lock), and Admiral decides how it is launched, messaged, watched and stopped. Every script and its arguments stay the same. Two cases keep the harness's own driver: under `ADMIRAL_AUTOPILOT=1` Admiral refuses Codex and Copilot boats, so those harnesses run headless as outside a ship, and a `--read-only` Codex or Copilot teammate always runs headless (the admiral driver hands it to `drivers/<h>` and routes its `retask.sh`, `close-teammate.sh`, `watch-teammates.sh` and `teammate-tail.sh` calls there by id). Each harness reference has an "Inside an Admiral ship" section with its settings and limits. What changes for you:
 
 - Re-task with `retask.sh`, never SendMessage. The driver declares `SEND=script`, and `notify_when_idle` isn't available.
 - Find who is live with `admiral crew list --json`, not `claude agents`. Read output with `teammate-tail.sh`, not `claude logs`.

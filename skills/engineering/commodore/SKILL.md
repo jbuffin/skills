@@ -49,7 +49,7 @@ This skill knows nothing about any particular project. Toolchain, conventions, C
 
 ## The harness
 
-The run's harness is the agent CLI it starts in. `team-init.sh` detects it and writes `HARNESS` to `team.env`. Read `references/harness-<HARNESS>.md`, with `HARNESS` from the run's `team.env`. With no `team.env`, or no `HARNESS` line in it, the harness is `claude`: read [`references/harness-claude.md`](references/harness-claude.md). It holds the default model per role, the advisor rules and how to see who is live. Before your first launch, and again on every resume, also read agent-teammates' `references/harness-<HARNESS>.md` (agent-teammates' directory is the one above `TEAMMATES_SCRIPTS` in `team.env`), which covers launching, messaging and watching.
+The run's harness is the agent CLI it starts in. `team-init.sh` detects it and writes `HARNESS` to `team.env`. Read `references/harness-<HARNESS>.md`, with `HARNESS` from the run's `team.env`. With no `team.env`, or no `HARNESS` line in it, the harness is `claude`: read [`references/harness-claude.md`](references/harness-claude.md). It holds the default model per role, the advisor rules and how to see who is live. Before your first launch, and again on every resume, also read agent-teammates' `references/harness-<HARNESS>.md` (agent-teammates' directory is the one above `TEAMMATES_SCRIPTS` in `team.env`), which covers launching, messaging and watching. For each harness a crew member is locked to (`HARNESS_<ROLE>` in `team.env`), read `references/harness-<h>.md` in both skills too before you launch that member.
 
 ## Launching teammates
 

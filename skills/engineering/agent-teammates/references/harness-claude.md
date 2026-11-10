@@ -1,6 +1,6 @@
 # Teammates on Claude Code
 
-Read this when the run's `HARNESS` is `claude`, which is the default when `team.env` has no `HARNESS` line. Outside an Admiral ship this harness declares `LIVE_MESSAGING=1` and `SEND=tool` in `scripts/drivers/claude/driver.env`: a live teammate takes new work by message, and sending is a tool call, not a script. Inside one the admiral driver declares `SEND=script`: re-task with `retask.sh` ("Inside an Admiral ship"). The operations and exit codes every driver follows are in `scripts/drivers/CONTRACT.md`.
+Read this when the run's `HARNESS` is `claude` (the default when `team.env` has no `HARNESS` line), or a teammate is locked to `claude` (`HARNESS_<ROLE>`). Outside an Admiral ship this harness declares `LIVE_MESSAGING=1` and `SEND=tool` in `scripts/drivers/claude/driver.env`: a live teammate takes new work by message, and sending is a tool call, not a script. Inside one the admiral driver declares `SEND=script`: re-task with `retask.sh` ("Inside an Admiral ship"). The operations and exit codes every driver follows are in `scripts/drivers/CONTRACT.md`.
 
 ## What a teammate is
 

@@ -92,7 +92,7 @@ else
     role=${${(L)var}//_/-}
     lh=${(P)${:-HARNESS_$var}}
     if [[ -n $lh && $lh != $HARNESS ]]; then   # a locked role's model belongs to another harness's advisor, not this run's
-      echo "ADVISOR n/a ($role locked to $lh)"; continue
+      ok "ADVISOR n/a ($role locked to $lh)"; continue
     fi
     [[ -n $m ]] && add_model $m $role
   done
