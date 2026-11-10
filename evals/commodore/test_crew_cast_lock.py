@@ -33,7 +33,9 @@ class LockCase(WorldCase):
         d = self.w.drivers / name
         send = "tool" if name == "claude" else "script"
         (d / "driver.env").write_text(f"LIVE_MESSAGING={int(send == 'tool')}\nSEND={send}\nSKILL_PREFIX={prefix}\n")
-        answer = f"echo '{reason}'\nexit 1\n" if reason else (f"echo '{out}'\n" if out else "") + "exit 0\n"
+        said = reason or out
+        echo = f'echo "{said}"\n' if said else ""
+        answer = echo + ("exit 1\n" if reason else "exit 0\n")
         stub = d / "available"
         stub.write_text(f'#!/bin/sh\necho "$TEAMMATE_HARNESS" >> "{self.avail_log}"\n{answer}')
         stub.chmod(0o755)

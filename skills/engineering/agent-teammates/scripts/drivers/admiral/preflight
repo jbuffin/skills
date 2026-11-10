@@ -28,8 +28,8 @@ fi
 
 # Startup prompts. Folder trust and (Codex) hook trust are settled once per dock; a boat that meets an unsettled one never fires
 # a hook. Both are WARNs: they are read from the harness's config files, which only the harness itself fully understands.
-if [[ $HARNESS == (codex|copilot) ]] && command -v $HARNESS >/dev/null; then
-  python3 - $HARNESS "$REPO" "$ADMIRAL_SHIP" <<'PY'
+if [[ $TH == (codex|copilot) ]] && command -v $TH >/dev/null; then
+  python3 - $TH "$REPO" "$ADMIRAL_SHIP" <<'PY'
 import json, os, re, subprocess, sys
 
 harness, repo, ship = sys.argv[1:4]

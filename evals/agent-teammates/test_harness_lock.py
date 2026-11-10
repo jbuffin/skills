@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from admiral_world import SCRIPTS, SHIP, WorldCase, boat, split_launch
+from admiral_world import SCRIPTS, SHIP, WorldCase, boat, rfc3339, split_launch
 
 LAUNCH = SCRIPTS / "launch-teammate.sh"
 CLOSE = SCRIPTS / "close-teammate.sh"
@@ -38,6 +38,8 @@ class LockCase(WorldCase):
 
     def launch(self, name, *flags, role="implementer", ship=None, **env):
         self.w.prompt(name)
+        if ship:  # the crew boat the fake admiral lists once it has fired its first hook; launch waits for that
+            self.w.boats(boat(name, last_activity=rfc3339(time.time())))
         return self.w.run(LAUNCH, *flags, "--role", role, self.w.team, name, self.w.work, ship=ship, **env)
 
     def row(self, name):
@@ -181,6 +183,7 @@ class TestCloseRetaskTail(LockCase):
         msg = self.w.message()
         done = self.w.run(RETASK, self.w.team, "impl", msg, ship=None)
         self.assertEqual(done.code, 0, done.text)
+        self.assertTrue(self.w.wait_finished("codex", count=2), self.w.calls("codex"))  # the resume runs in the background
         resumes = [c for c in self.w.calls("codex") if c["argv"][:2] == ["exec", "resume"]]
         self.assertEqual(len(resumes), 1, self.w.calls("codex"))
         row = self.row("impl")

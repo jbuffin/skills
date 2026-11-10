@@ -3,7 +3,7 @@
 # One line per teammate the registry holds an open row for: underway is working, needs_you and idle are blocked, anchored is stopped, and
 # a boat absent from `crew list` is missing. Boats the run didn't register are not printed (a ship holds other boats too).
 # The epoch is last_activity, `-` until the boat's first hook. A read-only Codex/Copilot teammate (`delegated`, in lib.zsh) is
-# no crew boat: its line comes from the harness driver's status, after the boats', and it is never missing.
+# no crew boat: its line comes from the status of the harness in its registry row (column 6), after the boats', and it is never missing.
 [[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh
@@ -31,7 +31,19 @@ for i in sys.argv[1:]:
     print(i, "-", STATES.get(b.get("state"), b.get("state") or "-") if b else "missing", epoch(b.get("last_activity")) if b else "-")' $boats) || exit 3
 [[ -n $rows ]] && print -r -- "$rows"
 if (( $#held )); then
-  all=$($HARNESS_DRIVER/status $D) || exit 3
-  print -r -- "$all" | awk -v ids="${held// /|}" 'BEGIN {n = split(ids, a, "|"); for (i = 1; i <= n; i++) want[a[i]] = 1} $1 in want'
+  # Each delegated id goes to the status of the harness in its registry row (column 6, read only now that `delegated` has accepted
+  # the id; the run's HARNESS for a five-column row). A bad value is skipped: that id then reads as missing to the watchdog.
+  typeset -A byharness
+  byharness=()
+  for i in $held; do
+    h=$(awk -v i=$i '$2 == i {v = $6} END {print v}' $REG)
+    select_driver ${h:-$HARNESS} >/dev/null || continue
+    byharness[$TH]+="$i "
+  done
+  for h in ${(k)byharness}; do
+    select_driver $h >/dev/null
+    all=$(export TEAMMATE_HARNESS=$h; $HARNESS_DRIVER/status $D) || exit 3
+    print -r -- "$all" | awk -v ids="${${byharness[$h]% }// /|}" 'BEGIN {n = split(ids, a, "|"); for (i = 1; i <= n; i++) want[a[i]] = 1} $1 in want'
+  done
 fi
 exit 0

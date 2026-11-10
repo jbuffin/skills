@@ -14,7 +14,7 @@ crew_takes_arg() {
 OLD_ADMIRAL="admiral crew launch has no --arg: Admiral newer than 0.3.0 is needed (main at 992f678 or later)"
 NAME_RULE="lowercase letters and digits, with '-' inside (not first)"
 DRIVERS=${0:A:h:h}
-# harness_driver <team-dir>: the run harness's driver directory. Reads team.env alone, without team-env.zsh, which creates
+# harness_driver <team-dir>: the run harness's driver directory (has-skill, list-skills and advisor-probe). Reads team.env alone, without team-env.zsh, which creates
 # files in the run dir; has-skill and list-skills write nothing and advisor-probe cleans up after itself.
 harness_driver() {
   local h
