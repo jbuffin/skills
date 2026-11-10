@@ -3,18 +3,22 @@
 # Drafts Commodore crew members (commodore/references/crew-members.md) in a scratch run dir, using commodore's crew.py and
 # the harness driver's list-skills and has-skill. Run it from the repo.
 #   init   makes the run dir, its team.env (HARNESS, REPO, TARGET) and <run>/draft/, and copies the target's role-named
-#          members into the draft. Prints the run dir, then `FROM <dir>` or `NEW <dir>`, then `ROLESJSON <file>` when the
+#          members into the draft, skipping a symlink or a file that resolves outside the target with a `WARN` line on
+#          stderr. Prints on stdout the run dir, then `FROM <dir>` or `NEW <dir>`, then `ROLESJSON <file>` when the
 #          target still holds a roles.json, then `ROLES <commodore's references/roles.md>`. The harness comes from
 #          detect-harness.sh unless named. check and save use this target alone.
 #   skills prints `<name><TAB><file><TAB><description>` for each skill the harness can load here; <file> is the skill's
 #          SKILL.md or agent file, `-` for none, and so is a missing description.
-#   check  casts the crew with the draft as the run layer, which pins each role it holds. Prints the cast table, and on stderr its
-#          WARN lines, a SHADOWED line for each draft member the repo has a member of the same name for, an OUTRANKED line for
-#          each differently named repo member of a draft role, an UNSET line for each role the draft leaves out (never the
-#          fix checker), then `CLEAN` or `NOT CLEAN: <n> warnings`. The security reviewer's warning doesn't count.
-#   save   copies each draft file into the target dir and removes the target's role-named member for a role the draft
-#          leaves out. Prints `SAVED <file>` or `REMOVED <file>` per change. No other member is touched.
-# Exits 1 when cast fails or list-skills fails, 3 when the harness has no list-skills, 5 on a bad call.
+#   check  casts the crew with the draft as the run layer (the ADMIRAL_ variables unset), which pins each role it holds.
+#          Prints on stdout the cast table, a SHADOWED line for each draft member that the repo has a member of the same
+#          name for (user target only), an OUTRANKED line for each differently named repo member of a draft role, an UNSET
+#          line for each role the draft leaves out (never the fix checker), then `CLEAN` or `NOT CLEAN: <n> warnings`.
+#          Its WARN lines go to stderr; the security reviewer's warning doesn't count against CLEAN.
+#   save   copies each draft file into the target dir through a temp file and removes the target's role-named member for
+#          a role the draft leaves out. Prints `SAVED <file>` or `REMOVED <file>` per change. No other member is touched.
+#          Exits 1 and changes nothing when the target dir or its parent below the target root is a symlink, or a member
+#          file it would write or remove is one.
+# Exits 1 when cast fails, list-skills fails or save refuses, 3 when the harness has no list-skills, 5 on a bad call.
 usage() { sed -n 2p $0 >&2; exit 5; }
 # commodore and agent-teammates: siblings when installed, under skills/engineering in this repo's checkout.
 for SK in ${0:A:h:h:h} ${0:A:h:h:h:h}/skills/engineering; do [[ -f $SK/commodore/scripts/crew.py ]] && break; done
@@ -46,11 +50,17 @@ case $cmd in
     d=$(target_dir $1) || exit $?
     h=${2:-$($AT/detect-harness.sh)}
     [[ $h =~ '^[a-z0-9-]+$' ]] || { print -u2 "can't tell the harness (detect-harness.sh said '${h//$'\n'/, }'): name it, e.g. crew-draft.sh init $1 claude"; exit 5; }
-    [[ $REPO == *\'* ]] && { print -u2 "the repo path has a quote in it: $REPO"; exit 5; }
+    [[ $REPO == *[\'$'\n']* ]] && { print -u2 "the repo path has a quote or a line break in it: $REPO"; exit 5; }
     RUN=$(mktemp -d ${TMPDIR:-/tmp}/setup-commodore.XXXXXX) || exit 1
     print -rl -- "HARNESS='$h'" "REPO='$REPO'" "TARGET='$1'" > $RUN/team.env
     mkdir $RUN/draft
-    for r in $ROLES; do [[ -f $d/$r.md ]] && cp $d/$r.md $RUN/draft/$r.md; done
+    for r in $ROLES; do
+      f=$d/$r.md
+      if [[ -L $f ]]; then print -u2 -r -- "WARN  $f is a symlink; not copied"; continue; fi
+      [[ -f $f ]] || continue
+      if [[ ${f:A} != ${d:A}/* ]]; then print -u2 -r -- "WARN  $f resolves outside $d; not copied"; continue; fi
+      cp $f $RUN/draft/$r.md
+    done
     print -r -- $RUN
     if [[ -d $d ]]; then print -r -- "FROM $d"; else print -r -- "NEW $d"; fi
     [[ -f ${d:h}/roles.json ]] && print -r -- "ROLESJSON ${d:h}/roles.json"
@@ -82,7 +92,9 @@ case $cmd in
     load_run $1; target_dir $TARGET >/dev/null || exit $?
     # The draft is the run layer, so each role it holds is pinned and the rest are cast as in this repo today.
     [[ -e $RUN/crew ]] || ln -s draft $RUN/crew
-    table=$($CREW cast --run $RUN 2> $RUN/check.err); rc=$?
+    # The Admiral variables would swap in the fleet and run layers, so the check runs without them.
+    nocrew=(env -u ADMIRAL_SHIP -u ADMIRAL_CREW_DIR -u ADMIRAL_RUN_CREW)
+    table=$($nocrew $CREW cast --run $RUN 2> $RUN/check.err); rc=$?
     if (( rc )); then cat $RUN/check.err >&2; exit $rc; fi
     print -r -- $table
     drafted=(${${(f)"$(print -rl -- $RUN/draft/*.md(N:t:r))"}:#})
@@ -93,12 +105,12 @@ case $cmd in
       [[ $w == 'WARN  security-reviewer has no role skill'* ]] || (( n++ ))
     done < $RUN/check.err
     for r in $drafted; do
-      if [[ $TARGET == user ]]; then
-        [[ -f $REPO/.commodore/crew/$r.md ]] && print -r -- "SHADOWED $r: $REPO/.commodore/crew/$r.md has the same name, so this member does nothing in this repo"
-        for o in ${(f)"$($CREW resolve --layer repo=$REPO/.commodore/crew | jq -r --arg r $r '.members[]? | select(.role == $r and .name != $r) | .name')"}; do
-          print -r -- "OUTRANKED $r: $o"
-        done
+      if [[ $TARGET == user && -f $REPO/.commodore/crew/$r.md ]]; then
+        print -r -- "SHADOWED $r: $REPO/.commodore/crew/$r.md has the same name, so this member does nothing in this repo"
       fi
+      for o in ${(f)"$($nocrew $CREW resolve --layer repo=$REPO/.commodore/crew | jq -r --arg r $r '.members[]? | select(.role == $r and .name != $r) | .name')"}; do
+        print -r -- "OUTRANKED $r: $o"
+      done
     done
     for r in $ROLES; do
       (( ${drafted[(Ie)$r]} )) && continue
@@ -110,9 +122,17 @@ case $cmd in
   save)
     [[ $# -eq 1 ]] || usage
     load_run $1; d=$(target_dir $TARGET) || exit $?
+    # Refuse before any write: a symlink in the target path or at a member file would send the write elsewhere.
+    for p in ${d:h} $d; do
+      [[ -L $p ]] && { print -u2 -r -- "$p is a symlink; nothing saved"; exit 1; }
+    done
+    for f in $d/${^ROLES}.md $RUN/draft/*.md(N:t); do
+      [[ -L $d/${f:t} ]] && { print -u2 -r -- "$d/${f:t} is a symlink; nothing saved"; exit 1; }
+    done
     mkdir -p $d || exit 1
     for f in $RUN/draft/*.md(N); do
-      cp $f $d/${f:t}.tmp.$$ && mv $d/${f:t}.tmp.$$ $d/${f:t} || { rm -f $d/${f:t}.tmp.$$; exit 1; }
+      tmp=$(mktemp $d/.crew-draft.XXXXXX) || exit 1
+      cp $f $tmp && chmod 644 $tmp && mv $tmp $d/${f:t} || { rm -f $tmp; exit 1; }
       print -r -- "SAVED $d/${f:t}"
     done
     for r in $ROLES; do

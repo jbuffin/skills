@@ -82,6 +82,33 @@ class TestInit(DraftCase):
         _, lines = self.init("user")
         self.assertFalse([ln for ln in lines if ln.startswith("ROLESJSON")])
 
+    def test_a_symlinked_member_is_not_copied_and_a_warning_goes_to_stderr(self):
+        secret = self.w.root / "secret.md"
+        secret.write_text(member_text("implementer", "implementer", body="PRIVATE"))
+        self.user_dir.mkdir(parents=True)
+        (self.user_dir / "implementer.md").symlink_to(secret)
+        self.put(self.user_dir, "reviewer", skills=["code-review"])
+        done = self.draft("init", "user", "claude")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        run = Path(done.stdout.splitlines()[0])  # the first stdout line is still the run dir
+        self.assertEqual(sorted(p.name for p in (run / "draft").iterdir()), ["reviewer.md"])
+        self.assertIn(f"WARN  {self.user_dir / 'implementer.md'} is a symlink; not copied", done.stderr.splitlines())
+        self.assertNotIn("WARN", done.stdout)
+
+    def test_a_dangling_symlinked_member_is_skipped_too(self):
+        self.user_dir.mkdir(parents=True)
+        (self.user_dir / "scribe.md").symlink_to(self.w.root / "nowhere.md")
+        run, _ = self.init("user")
+        self.assertEqual(list((run / "draft").iterdir()), [])
+
+    def test_a_repo_path_with_a_line_break_exits_5(self):
+        odd = self.w.root / "two\nlines"
+        odd.mkdir()
+        self.git_init(odd)
+        done = self.w.sh([self.draft_sh, "init", "repo", "claude"], cwd=odd)
+        self.assertEqual(done.returncode, 5, done.stdout + done.stderr)
+        self.assertIn("line break", done.stderr)
+
     def test_a_bad_call_exits_5(self):
         for args in ([], ["init"], ["init", "nowhere", "claude"], ["frobnicate"]):
             with self.subTest(args=args):
@@ -179,6 +206,29 @@ class TestCheck(DraftCase):
         self.assertRegex(out, r"(?m)^OUTRANKED reviewer: rev-strict$")
         self.assertNotIn("SHADOWED", out)
 
+    def test_outranked_on_the_repo_target_lists_the_targets_own_other_members(self):
+        self.put(self.repo_dir, "aaa-writer", "scribe")
+        self.put(self.repo_dir, "reviewer", skills=["a-skill"])
+        run, _ = self.init("repo")
+        self.put(run / "draft", "scribe", skills=[])
+        _, out = self.check(run)
+        self.assertRegex(out, r"(?m)^OUTRANKED scribe: aaa-writer$")
+        self.assertNotRegex(out, r"(?m)^OUTRANKED reviewer")  # the draft holds no reviewer
+        self.assertNotIn("SHADOWED", out)
+
+    def test_check_casts_the_draft_even_with_the_admiral_variables_set(self):
+        self.put(self.repo_dir, "rev-strict", "reviewer")
+        run, _ = self.init("user")
+        self.put(run / "draft", "scribe", skills=[], body="Mine.")
+        self.w.write_member("fleet", "fleet-scribe", "scribe")
+        self.w.write_member("admiral-run", "pinned-scribe", "scribe")
+        self.put(run / "draft", "reviewer", skills=[])
+        done = self.w.sh([self.draft_sh, "check", run], cwd=self.w.repo, env=self.w.admiral_env())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        _, _, rows, _ = parse_table(done.stdout)
+        self.assertEqual((rows["scribe"][1], rows["scribe"][7]), ("scribe", "run (pinned)"))
+        self.assertRegex(done.stdout, r"(?m)^OUTRANKED reviewer: rev-strict$")
+
     def test_a_clean_draft_prints_clean(self):
         run, _ = self.init("user")
         (run / "installed.txt").write_text("code-review\n")
@@ -252,6 +302,80 @@ class TestSave(DraftCase):
         # members the draft never held are not touched
         self.assertTrue((self.user_dir / "docs-writer.md").is_file())
         self.assertTrue((self.user_dir / "rev-strict.md").is_file())
+
+    def assert_save_refused(self, run, snapshot):
+        done = self.draft("save", run)
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertNotRegex(done.stdout, r"SAVED|REMOVED")
+        self.assertIn("symlink", done.stderr)
+        self.assertEqual(snapshot(), self.snap_before)
+
+    def snap(self, *roots):
+        found = sorted(str(p) for root in roots for p in Path(root).rglob("*"))
+        return found
+
+    def test_save_refuses_when_the_target_dir_is_a_symlink(self):
+        real = self.w.root / "real-crew"
+        self.put(real, "implementer", skills=["tdd"])
+        self.user_dir.parent.mkdir(parents=True)
+        self.user_dir.symlink_to(real)
+        run, _ = self.init("user")
+        (run / "draft" / "implementer.md").unlink()  # leaving it out would remove it
+        self.put(run / "draft", "scribe", skills=[])
+        self.snap_before = self.snap(real)
+        self.assert_save_refused(run, lambda: self.snap(real))
+        self.assertTrue((real / "implementer.md").is_file())
+
+    def test_save_refuses_when_the_parent_dir_is_a_symlink(self):
+        real = self.w.root / "real-commodore"
+        real.mkdir()
+        self.repo_dir.parent.symlink_to(real)
+        run, _ = self.init("repo")
+        self.put(run / "draft", "scribe", skills=[])
+        self.snap_before = self.snap(real)
+        self.assert_save_refused(run, lambda: self.snap(real))
+
+    def test_save_does_not_refuse_a_symlinked_config_root(self):
+        real = self.w.root / "dotfiles-config"
+        real.mkdir()
+        if self.w.xdg.exists():
+            self.w.xdg.rmdir()
+        self.w.xdg.symlink_to(real)
+        run, _ = self.init("user")
+        self.put(run / "draft", "scribe", skills=[])
+        done = self.draft("save", run)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue((real / "commodore" / "crew" / "scribe.md").is_file())
+
+    def test_save_refuses_when_a_file_it_would_write_is_a_symlink(self):
+        victim = self.w.root / "victim" / "authorized_keys"
+        victim.parent.mkdir()
+        self.user_dir.mkdir(parents=True)
+        (self.user_dir / "scribe.md").symlink_to(victim)  # dangling
+        run, _ = self.init("user")
+        self.put(run / "draft", "scribe", skills=[])
+        self.put(run / "draft", "reviewer", skills=[])
+        self.snap_before = self.snap(self.user_dir, victim.parent)
+        self.assert_save_refused(run, lambda: self.snap(self.user_dir, victim.parent))
+        self.assertFalse(victim.exists())
+
+    def test_save_refuses_when_a_file_it_would_remove_is_a_symlink(self):
+        other = self.w.root / "other.md"
+        other.write_text("mine\n")
+        self.user_dir.mkdir(parents=True)
+        (self.user_dir / "implementer.md").symlink_to(other)
+        run, _ = self.init("user")  # the symlink is not copied, so the draft leaves implementer out
+        self.put(run / "draft", "scribe", skills=[])
+        self.snap_before = self.snap(self.user_dir)
+        self.assert_save_refused(run, lambda: self.snap(self.user_dir))
+        self.assertEqual(other.read_text(), "mine\n")
+
+    def test_save_leaves_no_temp_file_and_keeps_readable_modes(self):
+        run, _ = self.init("user")
+        self.put(run / "draft", "scribe", skills=[])
+        self.assertEqual(self.draft("save", run).returncode, 0)
+        self.assertEqual([p.name for p in self.user_dir.iterdir()], ["scribe.md"])
+        self.assertEqual((self.user_dir / "scribe.md").stat().st_mode & 0o777, 0o644)
 
     def test_creates_the_target_directory(self):
         run, _ = self.init("repo")

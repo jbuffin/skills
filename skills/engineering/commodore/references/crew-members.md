@@ -35,7 +35,7 @@ Five override layers, in order. A member in a later layer replaces the whole mem
 - Otherwise the pick wins. Otherwise the member from the latest layer wins for each of the nine roles, ties broken by name in byte order, with a warning when the role had several candidates.
 - A custom role is in the cast only when pinned or picked. It launches with its `based-on` role's contract.
 - Each skill goes through the run's harness driver (`has-skill`); one the harness can't load is dropped with a warning. A driver without `has-skill` keeps every skill, with one warning.
-- A `model` that doesn't match `^[A-Za-z0-9][A-Za-z0-9._:/@\[\]-]{0,127}$` is dropped with a warning and the role keeps its default. The fix checker's `model` is ignored: it runs on the implementer's model.
+- Each `model` goes through [the `model` launch rule](#fields).
 - `--save` writes `<run>/cast.json` (the explicit picks and the cast) and rewrites the `# crew models (crew.py cast)` block of `MODEL_<ROLE>='<model>'` lines in `team.env`. The next `cast` keeps the saved picks; a saved pick whose member is gone is dropped with a warning.
 - A leftover `roles.json` (user-global outside Admiral, `<REPO>/.commodore/roles.json`, `<run>/roles.json`) is never read; `cast` warns once per file and points to `setup-commodore`'s `convert-roles.py`.
 
@@ -76,6 +76,8 @@ Checked in this order. An optional key with an empty value and no block list cou
 | `ad-hoc-run` | optional string: the run that made an ad hoc member | `bad-field` |
 | `based-on` | custom roles only, see below | |
 | `skills` | list of strings, or one string; default `[]` | `bad-field` |
+
+**The `model` launch rule.** The resolver keeps `model` as written. Every launcher applies this rule before it passes the value on: Commodore's `crew.py cast` and Admiral's `crew launch --member`. A `model` that doesn't match `^[A-Za-z0-9][A-Za-z0-9._:/@\[\]-]{0,127}$` is dropped with a warning and the role keeps its default. The fix checker's `model` is ignored, since it runs on the implementer's model.
 
 The nine roles: `implementer`, `test-writer`, `reviewer`, `security-reviewer`, `brief-checker`, `triager`, `target-steward`, `scribe`, `fix-checker`. A role outside them is a custom role.
 

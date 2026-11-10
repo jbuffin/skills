@@ -91,6 +91,9 @@ ROUND_TRIPS = [
         [],
         "  indented first\nsecond",
     ),
+    ("null skills mean no skills", "reviewer", {"skills": None, "instructions": "keep me"}, [], "keep me"),
+    ("false skills mean no skills", "reviewer", {"skills": False, "instructions": "keep me"}, [], "keep me"),
+    ("null instructions are absent", "reviewer", {"skills": ["a-skill"], "instructions": None}, ["a-skill"], ""),
     ("blank lines inside the body stay", "reviewer", {"instructions": "one\n\n\ntwo"}, [], "one\n\n\ntwo"),
 ]
 
@@ -363,6 +366,51 @@ class TestRefusals(ConvertCase):
         self.assert_refused(self.convert(), before)
         self.assertEqual((self.crew / "scribe.md").read_text(), "mine\n")
         self.assertFalse((self.crew / "reviewer.md").exists())
+
+    def test_null_instructions_print_no_warning(self):
+        self.write({"reviewer": {"skills": ["a-skill"], "instructions": None}})
+        done = self.convert()
+        self.assertEqual((done.returncode, done.stderr), (0, ""))
+
+    def test_a_dangling_symlink_at_a_target_refuses_and_is_not_followed(self):
+        self.crew.mkdir(parents=True)
+        victim = self.root / "victim" / "authorized_keys"
+        victim.parent.mkdir()
+        (self.crew / "scribe.md").symlink_to(victim)
+        self.write({"reviewer": {"skills": ["a-skill"]}, "scribe": {"skills": ["b-skill"]}})
+        before = self.tree()
+        self.assert_refused(self.convert(), before)
+        self.assertFalse(victim.exists())
+        self.assertFalse((self.crew / "reviewer.md").exists())
+
+    def test_a_symlink_to_an_existing_file_refuses_and_leaves_it_alone(self):
+        self.crew.mkdir(parents=True)
+        other = self.root / "other.md"
+        other.write_text("mine\n")
+        (self.crew / "scribe.md").symlink_to(other)
+        self.write({"scribe": {"skills": ["b-skill"]}})
+        before = self.tree()
+        self.assert_refused(self.convert(), before)
+        self.assertEqual(other.read_text(), "mine\n")
+
+    def test_a_symlinked_crew_dir_refuses_and_writes_nothing_through_it(self):
+        real = self.root / "real-crew"
+        real.mkdir()
+        self.crew.parent.mkdir()
+        self.crew.symlink_to(real)
+        self.write({"reviewer": {"skills": ["a-skill"]}})
+        before = self.tree()
+        self.assert_refused(self.convert(), before)
+        self.assertEqual(list(real.iterdir()), [])
+
+    def test_a_dangling_symlinked_crew_dir_refuses_and_is_not_created(self):
+        real = self.root / "not-there"
+        self.crew.parent.mkdir()
+        self.crew.symlink_to(real)
+        self.write({"reviewer": {"skills": ["a-skill"]}})
+        before = self.tree()
+        self.assert_refused(self.convert(), before)
+        self.assertFalse(real.exists())
 
     def test_a_body_over_65536_bytes_is_refused(self):
         self.write({"reviewer": {"instructions": "a" * 65537}, "scribe": {"skills": ["a-skill"]}})

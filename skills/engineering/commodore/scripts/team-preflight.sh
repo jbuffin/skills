@@ -114,11 +114,14 @@ fi
 # Crew (docs/adr/0007): crew.py cast's warnings pass through (a dropped skill, a security reviewer without one, a leftover
 # roles.json); its errors, and any other failure, fail the preflight.
 cast=$(${0:A:h}/crew.py cast --run $1 2>&1 >/dev/null); rc=$?
-print -r -- ${(F)${(M)${(f)cast}:#WARN*}}
+warns=(${(M)${(f)cast}:#WARN*})
+(( $#warns )) && print -rl -- $warns
 if (( rc )); then
   errs=(${(M)${(f)cast}:#ERROR*})
   for e in $errs; do bad "crew: ${e#ERROR }"; done
-  (( $#errs )) || bad "crew: ${${(f)cast}[-1]:-crew.py cast exited $rc}"
+  # A bad call prints its reason, then the usage text: report the first line that isn't usage.
+  reasons=(${${(f)cast}:#(WARN|ERROR|usage:|labels:|--admiral|[[:space:]])*})
+  (( $#errs )) || bad "crew: ${reasons[1]:-crew.py cast exited $rc}"
 fi
 ${SKILLS_DIR:-${0:A:h:h:h}}/run-preflight/scripts/preflight.sh $1 || fail=1
 exit $fail

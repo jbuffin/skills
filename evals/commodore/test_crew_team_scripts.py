@@ -58,6 +58,25 @@ class TestPreflightPassThrough(PreflightCase):
         self.assertTrue([ln for ln in done.stdout.splitlines() if ln.startswith("FAIL")], done.stdout)
         self.assertIn("broken.md", done.stdout)
 
+    def test_a_bad_call_to_cast_reports_the_reason_not_the_usage_text(self):
+        self.team_env(advisor="none", harness="Not A Harness")
+        done = self.run_preflight(probe=False)
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        fails = [ln for ln in done.stdout.splitlines() if ln.startswith("FAIL") and "crew" in ln]
+        self.assertEqual(len(fails), 1, done.stdout)
+        self.assertIn("HARNESS", fails[0])
+        self.assertNotIn("--admiral", done.stdout)
+
+    def test_no_warnings_print_no_blank_line(self):
+        skill = self.repo / ".claude" / "skills" / "sec-skill"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("---\nname: sec-skill\ndescription: x\n---\n")
+        self.put(self.user_crew, "security-reviewer", "security-reviewer", skills=["sec-skill"])
+        done = self.run_preflight(probe=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("security-reviewer", done.stdout)  # cast had nothing to warn about
+        self.assertNotIn("", done.stdout.splitlines())
+
     def test_two_run_layer_members_for_one_role_fail_the_preflight(self):
         run_crew = self.team / "crew"
         self.put(run_crew, "pin-a", "reviewer")

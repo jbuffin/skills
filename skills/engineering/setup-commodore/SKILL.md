@@ -19,7 +19,7 @@ Ask the engineer which crew directory to edit:
 
 Run `scripts/crew-draft.sh init <user|repo>`. The run keeps that target to the end. On exit 5 about the harness, ask the engineer which harness this session runs in, and pass it as a third argument (`claude`, `codex` or `copilot`). It prints these lines:
 
-- `<run>`;
+- `<run>` (any `WARN` line `init` prints for a member it skipped, a symlink or a file outside the target, goes to stderr: show it to the engineer);
 - `FROM <dir>` (the draft starts with that directory's role-named members) or `NEW <dir>` (the draft starts empty);
 - `ROLESJSON <file>`, only when the target still holds a `roles.json`, which Commodore no longer reads. Offer `scripts/convert-roles.py <file> <dir>` before going on; it writes member files and never deletes the JSON. Once the engineer confirms the members resolve, they delete it. Then run `init` again so the draft picks up the converted members;
 - `ROLES <path>`: commodore's role reference. Read its Crew members section and every role's **contract** and **fallback**. Skip the fix checker's section: it takes no role skills and has no fallback, so don't offer it as a role to configure.
@@ -75,10 +75,10 @@ Done when it prints `CLEAN`, or the engineer has accepted each remaining warning
 Show each file the save will write and each file it will remove (a role the draft leaves out loses its member in the target), and get the engineer's go-ahead. To save to the other target instead, start again from step 1 with that target, so its members load first. Before saving, tell the engineer:
 
 - For each `SHADOWED` line, the repo has a member of the same name, and the repo layer replaces the whole member, so their user-global member does nothing in this repo.
-- For each `OUTRANKED` line, the repo has a differently named member for that role, and it wins the default pick in this repo over their user-global member.
+- For each `OUTRANKED` line, the repo has a differently named member for that role, and it wins the default pick in this repo over the draft's member. On the user target that member outranks their user-global one. On the repo target both are in the same layer, so the other member competes with the new one and the name order decides: offer to rename or remove it.
 - The check covered this harness only, but the file applies on every harness. A skill missing on another harness is dropped there, like Claude Code's built-in `code-review` on Codex. Offer to rerun this skill from another harness to check.
 
-Run `scripts/crew-draft.sh save <run>`. It writes the draft's files into the target, removes the role-named members the draft left out, touches no other member, and prints `SAVED <file>` or `REMOVED <file>` for each.
+Run `scripts/crew-draft.sh save <run>`. It writes the draft's files into the target, removes the role-named members the draft left out, touches no other member, and prints `SAVED <file>` or `REMOVED <file>` for each. Exit 1 with a `symlink` message means the target dir, its parent or a member file is a symlink and nothing was written: show the engineer the path and stop until they resolve it.
 
 For `user`, that's it. For `repo`, show `git diff` (or the new files), then offer to commit them on a new branch and open a PR. Only once the engineer agrees, branch, commit `.commodore/crew/` alone, push, and open the PR with `gh pr create`.
 

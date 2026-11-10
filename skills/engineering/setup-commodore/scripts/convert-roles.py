@@ -4,11 +4,13 @@
     convert-roles.py <roles.json> <crew-dir>
 
 Writes <crew-dir>/<role>.md for each role entry, prints `WROTE <path>` per file and then a `NEXT` line. It never
-changes or deletes roles.json. Exit 1 and nothing written when the JSON is unusable or a target file exists;
+changes or deletes roles.json. Exit 1 and nothing written when the JSON is unusable, the crew dir is a symlink, or a
+target path exists (a dangling symlink counts); each file is created with O_EXCL and O_NOFOLLOW;
 exit 5 on a bad call. The member format is in commodore/references/crew-members.md.
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -40,6 +42,8 @@ def refuse(text):
 
 def entry_skills(role, value):
     """The bare skill names the old resolver kept, or None when the entry's skills are unusable."""
+    if value is None or value is False:  # the old resolver read `skills // []`
+        return []
     if isinstance(value, str):
         value = [value]
     if not isinstance(value, list):
@@ -91,7 +95,7 @@ def build(data, source):
                 warn(f"{role}: skills is neither a list nor a string; skipped")
                 continue
         body = ""
-        if "instructions" in entry:
+        if entry.get("instructions") is not None:
             if isinstance(entry["instructions"], str):
                 body = trim_blank_lines(entry["instructions"])
             else:
@@ -119,15 +123,20 @@ def main(argv):  # noqa: PLR0911
     files = build(data, source)
     if isinstance(files, str):
         return refuse(files)
-    taken = [role for role in files if (crew_dir / f"{role}.md").exists()]
+    if os.path.islink(crew_dir):
+        return refuse(f"{crew_dir} is a symlink; nothing written")
+    taken = [role for role in files if os.path.lexists(crew_dir / f"{role}.md")]  # a dangling symlink counts
     if taken:
         return refuse(f"{crew_dir / (taken[0] + '.md')} already exists; nothing written")
     if not files:
         return 0
     crew_dir.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     for role, text in files.items():
-        (crew_dir / f"{role}.md").write_text(text, encoding="utf-8")
-        sys.stdout.write(f"WROTE {crew_dir / (role + '.md')}\n")
+        target = crew_dir / f"{role}.md"
+        with os.fdopen(os.open(target, flags, 0o644), "w", encoding="utf-8") as out:
+            out.write(text)
+        sys.stdout.write(f"WROTE {target}\n")
     sys.stdout.write(f"NEXT delete {roles_json} once the members resolve\n")
     return 0
 

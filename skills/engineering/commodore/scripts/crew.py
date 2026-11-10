@@ -461,7 +461,7 @@ def issue_line(kind, item):
 
 
 class Harness:
-    """The run's harness driver: the skill prefix and has-skill. The one place u3 swaps for a member's own harness."""
+    """The run's harness driver: the skill prefix and has-skill. The one place a member's own harness would swap in."""
 
     def __init__(self, name, run_dir):
         self.name, self.run_dir = name, run_dir
@@ -586,10 +586,6 @@ def build_cast(members, picks, harness, warn):
             errors.append(error)
         if member is None:
             continue
-        if role == "fix-checker":
-            if member["skills"] or member["instructions"]:
-                warn(f"fix-checker: the fix checker takes no skills or instructions; those of {member['name']} dropped")
-            member = {**member, "skills": [], "instructions": ""}
         skills, missed = usable_skills(member, harness, warn)
         unchecked = unchecked or missed
         entries.append(
