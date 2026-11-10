@@ -64,6 +64,7 @@ valid_name() { [[ $1 =~ '^[A-Za-z0-9._-]+$' && $1 != .* ]] || { echo "invalid na
 # returns 0 with TH, DRIVER and HARNESS_DRIVER set and TEAMMATE_HARNESS exported for the next drv call, else 5 with H set and nothing printed.
 reg_harness() {
   H=$(awk -v n=$1 '$1==n || $2==n {v=$6} END {print v}' $REG)
+  HCOL=$H   # the raw column: empty for a five-column row, which later rows keep five columns so it keeps following HARNESS
   : ${H:=$HARNESS}
   select_driver $H >/dev/null || return 5
   export TEAMMATE_HARNESS=$TH
@@ -80,6 +81,6 @@ reg_open() {
 }
 # reg_retask <name>: appends the re-task row (after reg_open), which resets the watchdog clock for the teammate.
 reg_retask() {
-  printf '%s %s %s %s %s %s\n' "$1" "$ID" "$(date -u +%s)" "${V:--}" "$W" "$H" >> $REG
+  printf '%s %s %s %s %s%s\n' "$1" "$ID" "$(date -u +%s)" "${V:--}" "$W" "${HCOL:+ $HCOL}" >> $REG
   echo "$1 re-tasked (session $ID)"
 }
