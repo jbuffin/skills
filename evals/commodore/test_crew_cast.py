@@ -136,7 +136,7 @@ class TestTable(WorldCase):
         _, _, rows, _ = parse_table(done.stdout)
         self.assertEqual(rows["reviewer"][3], "`/a-skill`, `/b-skill`")
         self.assertEqual(rows["scribe"][3], "`/c-skill`")
-        extra = [w for w in self.w.warns(done) if "security-reviewer has no role skill" not in w]
+        extra = [w for w in self.warns(done) if "security-reviewer has no role skill" not in w]
         self.assertEqual(len(extra), 1, done.stderr)
         self.assertIn("nocheck", extra[0])
 
@@ -602,7 +602,7 @@ class TestSave(WorldCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         _, _, rows, _ = parse_table(done.stdout)
         self.assertEqual(rows["reviewer"][1], "rev-a")
-        self.assertNotIn("no pick", done.stderr)
+        self.assertNotIn("pick: reviewer:", done.stderr)  # the unpicked implementer still warns
 
     def test_a_new_pick_replaces_the_saved_one(self):
         self.w.write_member("user", "rev-c", "reviewer")
