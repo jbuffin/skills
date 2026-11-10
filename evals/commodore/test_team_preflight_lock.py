@@ -67,14 +67,15 @@ class PreflightLockCase(WorldCase):
         self.script(
             d / "preflight", f'#!/bin/sh\necho "{name}-preflight $1" >> "{self.log}"\n{printed}exit {preflight_rc}\n'
         )
-        answer = f"echo '{avail_reason}'\nexit 1\n" if avail_reason else "exit 0\n"
+        answer = f"echo '{avail_reason}'\nexit 1\n" if avail_reason else "echo 'WARN  stub dock note'\nexit 0\n"
         self.script(d / "available", f'#!/bin/sh\necho "{name}-available $TEAMMATE_HARNESS" >> "{self.log}"\n{answer}')
 
-    def preflight(self):
+    def preflight(self, **extra):
         env = self.w.env(
             PATH=f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
             CLAUDECODE="1",
             ADVISOR_PROBE=str(self.probe),
+            **extra,
         )
         return self.w.sh([self.w.scripts / "team-preflight.sh", self.w.run], env=env)
 
@@ -94,21 +95,28 @@ class TestLockedHarnessPreflight(PreflightLockCase):
         self.assertEqual(len([c for c in self.calls() if c.startswith("codex-preflight")]), 1)  # once for two roles
         self.assertNotIn("locked harness", done.stdout)  # a passing preflight adds no decision-batch FAIL
 
-    def test_harness_available_runs_for_the_locked_harness(self):
-        self.preflight()
-        self.assertIn("codex-available codex", self.calls())
+    def test_harness_available_runs_in_preflight_and_its_lines_carry_the_prefix(self):
+        done = self.preflight()
+        self.assertIn("[codex] WARN  stub dock note", self.out(done), done.stdout)
+        # cast also checks availability and passes the same WARN through unprefixed, so the prefixed copy is preflight's
+        self.assertIn("WARN  stub dock note", self.out(done), done.stdout)
+
+    def test_inside_a_ship_the_admiral_preflight_still_does_not_run(self):
+        done = self.preflight(ADMIRAL_SHIP="ship-1")
+        self.assertIn(f"codex-preflight {self.w.run}", self.calls())
+        self.assertIn("[codex] OK    codex CLI found", self.out(done), done.stdout)
+        self.assertNotIn("admiral-preflight", self.calls())
 
     def test_a_failing_preflight_prints_the_decision_batch_fail_line(self):
         self.locked_driver("codex", ("FAIL  codex login missing",), preflight_rc=1)
         done = self.preflight()
         self.assertEqual(done.returncode, 1, done.stdout)
         self.assertIn("[codex] FAIL  codex login missing", self.out(done), done.stdout)
-        self.assertIn(
-            "FAIL  locked harness codex (roles: implementer, fix-checker) failed preflight: "
-            "put it in the decision batch",
-            self.out(done),
-            done.stdout,
-        )
+        fails = [ln for ln in self.out(done) if ln.startswith("FAIL  locked harness codex (roles: ")]
+        self.assertEqual(len(fails), 1, done.stdout)
+        self.assertTrue(fails[0].endswith(") failed preflight: put it in the decision batch"), fails[0])
+        for role in ("implementer", "fix-checker"):  # the spec gives no order for the roles
+            self.assertIn(role, fails[0])
 
 
 class TestAdvisorProbeSkipsLockedRoles(PreflightLockCase):

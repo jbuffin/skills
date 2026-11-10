@@ -23,6 +23,7 @@ class LockCase(WorldCase):
     def setUp(self):
         super().setUp()
         self.avail_log = self.w.root / "available.log"
+        self.driver("claude", "/")  # the copied world still holds the real claude driver; keep the machine out of it
         self.driver("codex", "$")
         self.driver("copilot", "/")
 
@@ -30,7 +31,8 @@ class LockCase(WorldCase):
         """A fake drivers/<name>: SEND=script, has-skill from installed.txt, `available` logging its harness."""
         self.w.stub_driver(name, prefix=prefix)
         d = self.w.drivers / name
-        (d / "driver.env").write_text(f"LIVE_MESSAGING=0\nSEND=script\nSKILL_PREFIX={prefix}\n")
+        send = "tool" if name == "claude" else "script"
+        (d / "driver.env").write_text(f"LIVE_MESSAGING={int(send == 'tool')}\nSEND={send}\nSKILL_PREFIX={prefix}\n")
         answer = f"echo '{reason}'\nexit 1\n" if reason else (f"echo '{out}'\n" if out else "") + "exit 0\n"
         stub = d / "available"
         stub.write_text(f'#!/bin/sh\necho "$TEAMMATE_HARNESS" >> "{self.avail_log}"\n{answer}')
@@ -129,7 +131,8 @@ class TestUnlock(LockCase):
         self.assertEqual(rows["implementer"][HARNESS_CELL], "claude (unlocked from codex)")
 
     def test_a_saved_unlock_for_a_role_no_longer_locked_is_dropped_with_a_warning(self):
-        self.w.cast("--unlock", "implementer", "--save")
+        first = self.w.cast("--unlock", "implementer", "--save")
+        self.assertEqual(first.returncode, 0, first.stderr)
         self.member("implementer", "lock-impl", harness=None)
         done = self.w.cast("--save")
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -168,7 +171,8 @@ class TestSave(LockCase):
 
     def test_a_second_save_removes_stale_harness_lines(self):
         self.member("implementer", "lock-impl", model="gpt-5.5")
-        self.w.cast("--save")
+        first = self.w.cast("--save")
+        self.assertEqual(first.returncode, 0, first.stderr)
         self.assertIn("HARNESS_IMPLEMENTER='codex'", self.team_env())
         self.member("implementer", "lock-impl", harness=None, model="sonnet")
         done = self.w.cast("--save")
