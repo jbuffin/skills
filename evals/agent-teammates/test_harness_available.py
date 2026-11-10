@@ -124,7 +124,7 @@ class TestDriversAndBadCalls(AvailableCase):
         self.assertEqual(self.check("codex", ship=None).code, 0)  # control
         self.assertEqual(self.w.run(AVAILABLE, ship=None).code, 5)
         self.assertEqual(self.w.run(AVAILABLE, self.w.team, ship=None).code, 5)
-        for bad in ("admiral", "Bad_Name", "nosuch"):
+        for bad in ("", "admiral", "Bad_Name", "nosuch"):
             with self.subTest(harness=bad):
                 self.assertEqual(self.check(bad, ship=None).code, 5)
 

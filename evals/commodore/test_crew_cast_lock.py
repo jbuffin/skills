@@ -131,6 +131,16 @@ class TestUnlock(LockCase):
         later = self.w.cast()
         _, _, rows, _ = parse_table(later.stdout)
         self.assertEqual(rows["implementer"][HARNESS_CELL], "claude (unlocked from codex)")
+        self.assertIn("WARN  implementer: unlocked from codex by cast.json", later.stderr.splitlines())
+
+    def test_the_fix_checker_keeps_the_implementers_model_message_when_the_implementer_is_unlocked(self):
+        self.member("fix-checker", "lock-fix", harness=None, model="gpt-5.5")
+        done = self.w.cast("--unlock", "implementer")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(
+            'WARN  fix-checker: the fix checker runs on the implementer\'s model; model "gpt-5.5" of lock-fix ignored',
+            done.stderr.splitlines(),
+        )
 
     def test_a_saved_unlock_for_a_role_no_longer_locked_is_dropped_with_a_warning(self):
         first = self.w.cast("--unlock", "implementer", "--save")
@@ -219,6 +229,17 @@ class TestNoModelWarning(LockCase):
             "WARN  reviewer: lock-rev is locked to copilot and names no model; "
             "set MODEL_REVIEWER and EFFORT_REVIEWER for copilot",
             lines,
+        )
+
+    def test_a_locked_custom_role_member_without_a_model_is_told_to_pass_one_at_launch(self):
+        self.member("implementer", "lock-impl", model="gpt-5.5")
+        self.member("docs-writer", "docs-writer", harness="copilot", based_on="scribe")
+        done = self.w.cast("--pick", "docs-writer=docs-writer")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(
+            "WARN  docs-writer: docs-writer is locked to copilot and names no model; "
+            "pass --model and --effort for copilot when launching it",
+            done.stderr.splitlines(),
         )
 
     def test_a_model_or_the_runs_own_harness_gets_no_warning(self):

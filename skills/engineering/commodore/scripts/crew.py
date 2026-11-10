@@ -500,7 +500,7 @@ class Harness:
         return self.answers[name]
 
 
-class Fleet:
+class Harnesses:
     """The harnesses one cast uses: the run's own and each lock's, one Harness each."""
 
     def __init__(self, run_name, run_dir):
@@ -529,15 +529,15 @@ def usable_model(member, role, warn, unlocked_from=None):
     model = member["model"]
     if not model:
         return None
-    if unlocked_from:
-        warn(
-            f"{role}: model {json.dumps(model)} of {member['name']} is for {unlocked_from}; the role keeps its default"
-        )
-        return None
     if role == "fix-checker":
         warn(
             f"fix-checker: the fix checker runs on the implementer's model; "
             f"model {json.dumps(model)} of {member['name']} ignored"
+        )
+        return None
+    if unlocked_from:
+        warn(
+            f"{role}: model {json.dumps(model)} of {member['name']} is for {unlocked_from}; the role keeps its default"
         )
         return None
     if not MODEL.fullmatch(model):
@@ -643,12 +643,13 @@ def build_cast(members, picks, harnesses, unlocks, warn):
         skills, missed = usable_skills(member, harness, warn)
         if missed:
             unchecked.add(on)
-        if lock and not member["model"] and role in ROLES and role != "fix-checker":
-            extra = " (and MODEL_FIX_CHECKER, EFFORT_FIX_CHECKER)" if role == "implementer" else ""
-            warn(
-                f"{role}: {member['name']} is locked to {lock} and names no model; "
-                f"set MODEL_{env_name(role)} and EFFORT_{env_name(role)} for {lock}{extra}"
-            )
+        if lock and not member["model"] and role != "fix-checker":
+            if role in ROLES:
+                extra = " (and MODEL_FIX_CHECKER, EFFORT_FIX_CHECKER)" if role == "implementer" else ""
+                how = f"set MODEL_{env_name(role)} and EFFORT_{env_name(role)} for {lock}{extra}"
+            else:
+                how = f"pass --model and --effort for {lock} when launching it"
+            warn(f"{role}: {member['name']} is locked to {lock} and names no model; {how}")
         entry = {
             "role": role,
             "member": member["name"],
@@ -879,7 +880,7 @@ def effective_picks(members, explicit, run_dir, warn):
 
 
 def check_unlocks(entries, asked, saved, warn):
-    """Raise UsageError for an --unlock of a role with no lock of its own; warn for a saved one that went stale."""
+    """Raise UsageError for an --unlock of a role with no lock of its own; warn for each saved one it applies and for one that went stale."""
     by_role = {e["role"]: e for e in entries}
 
     def locked(role):
@@ -889,7 +890,9 @@ def check_unlocks(entries, asked, saved, warn):
         if not locked(role):
             raise UsageError(f"--unlock {role}: {role} is not a role in the cast with a harness lock")
     for role in saved:
-        if not locked(role):
+        if locked(role):
+            warn(f"{role}: unlocked from {by_role[role]['_own']} by cast.json")
+        else:
             warn(f"unlock: {role}: saved unlock dropped; the role is no longer locked")
 
 
@@ -926,11 +929,11 @@ def cast_main(argv):
     def warn(text):
         notes.append(f"WARN  {text}")
 
-    fleet = Fleet(harness_name, run_dir)
+    harnesses = Harnesses(harness_name, run_dir)
     try:
         picks = effective_picks(members, explicit, run_dir, warn)
         saved = [r for r in read_saved_unlocks(run_dir) if r not in asked]
-        entries, problems = build_cast(members, picks, fleet, {*asked, *saved}, warn)
+        entries, problems = build_cast(members, picks, harnesses, {*asked, *saved}, warn)
         check_unlocks(entries, asked, saved, warn)
     except UsageError as err:
         return usage_error(str(err))
@@ -939,7 +942,7 @@ def cast_main(argv):
             say(line)
         return 1
     unavailable = check_available(entries, run_dir, notes.append)
-    table = cast_table(entries, fleet, warn)
+    table = cast_table(entries, harnesses, warn)
     for line in notes:
         say(line)
     sys.stdout.write(table)

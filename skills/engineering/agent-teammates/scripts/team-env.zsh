@@ -55,19 +55,19 @@ REG=$D/teammates.tsv     # name id tasked-epoch|closed viewer-ref|- workdir harn
 mkdir -p $D/reports; [[ -e $REG ]] || touch $REG 2>/dev/null   # quiet in a writer's sandbox, which can't write here
 # Run a driver operation: drv <op> <args>. The driver is the teammate's harness driver (select_driver).
 # A missing operation returns 9 (no operation can use it as its own exit code) with a message on stderr; the caller decides what to do.
-drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $TH has no $op operation ($DRIVER)" >&2; return 9; }; $DRIVER/$op "$@"; }
+# The driver sees the teammate's harness as TEAMMATE_HARNESS.
+drv() { local op=$1; shift; [[ -x $DRIVER/$op ]] || { echo "harness $TH has no $op operation ($DRIVER)" >&2; return 9; }; TEAMMATE_HARNESS=$TH $DRIVER/$op "$@"; }
 reg_field() { awk -v n=$1 -v f=$2 '$1==n {v=$f} END {print v}' $REG; }   # last row for a name wins
 # Names and labels become file names and registry fields: letters, digits, '.', '_' and '-' only.
 valid_name() { [[ $1 =~ '^[A-Za-z0-9._-]+$' && $1 != .* ]] || { echo "invalid name '$1': use letters, digits, '.', '_' and '-', not starting with '.'"; exit 5; }; }
 # reg_harness <name|id>: the harness in the registry's sixth column for that teammate (the run's HARNESS for a five-column row
 # or an unregistered name), in H. Column 6 is untrusted (a Copilot writer can write the team dir), so it goes through select_driver:
-# returns 0 with TH, DRIVER and HARNESS_DRIVER set and TEAMMATE_HARNESS exported for the next drv call, else 5 with H set and nothing printed.
+# returns 0 with TH, DRIVER and HARNESS_DRIVER set (drv passes TH to the driver), else 5 with H set and nothing printed.
 reg_harness() {
-  H=$(awk -v n=$1 '$1==n || $2==n {v=$6} END {print v}' $REG)
+  H=$(awk -v n=$1 '$1==n {a=$6; hit=1} $2==n {b=$6} END {print hit ? a : b}' $REG)   # a name wins over an id
   HCOL=$H   # the raw column: empty for a five-column row, which later rows keep five columns so it keeps following HARNESS
   : ${H:=$HARNESS}
   select_driver $H >/dev/null || return 5
-  export TEAMMATE_HARNESS=$TH
 }
 # The re-task steps shared by retasked.sh and retask.sh.
 # reg_open <name>: refuses (exit 5) an unregistered or closed teammate or a bad harness in its row; sets ID, V (viewer-ref), W (workdir)

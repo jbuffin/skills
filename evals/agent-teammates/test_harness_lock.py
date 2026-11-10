@@ -177,6 +177,13 @@ class TestCloseRetaskTail(LockCase):
         self.assertEqual(row[2], "closed")
         self.assertEqual(row[5:], ["claude"])
 
+    def test_a_name_beats_an_id_when_both_match_a_registry_row(self):
+        self.six_column_row("dup", "codex", session_id="sess-dup")
+        self.six_column_row("other", "claude", session_id="dup")  # its id is the first row's name, and it comes last
+        done = self.w.run(CLOSE, self.w.team, "dup", ship=None)
+        self.assertEqual(done.code, 0, done.text)
+        self.assertEqual(self.row("dup")[5], "codex")
+
     def test_retask_of_a_codex_row_resumes_the_codex_thread_and_keeps_the_harness(self):
         self.assertEqual(self.launch("impl").code, 0)
         self.assertTrue(self.w.wait_finished("codex"))
