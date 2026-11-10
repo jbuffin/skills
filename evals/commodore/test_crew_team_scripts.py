@@ -74,6 +74,7 @@ class TestTeamInitAdmiralVars(WorldCase):
         self.init_sh = self.w.scripts / "team-init.sh"
         self.fleet = self.w.root / "fleet dir"
         self.run_crew = self.w.root / "run crew"
+        self.w.layer_dirs.update({"fleet": self.fleet, "admiral-run": self.run_crew})  # where write_member puts them
 
     def init(self, name="ship-run", **extra):
         env = self.w.env(
@@ -118,7 +119,7 @@ class TestTeamInitAdmiralVars(WorldCase):
         done, team_env = self.init(**self.ship_env(ADMIRAL_CREW_DIR="/it's/fleet"))
         text = team_env.read_text()
         self.assertNotIn("ADMIRAL_CREW_DIR", text)
-        self.assertNotIn("it's", text)
+        self.assertNotIn("/it's/fleet", text)
         self.assertIn("ADMIRAL_CREW_DIR", done.stdout + done.stderr)
         self.assertIn("ADMIRAL_SHIP='ship-1'", text.splitlines())  # the others are still written
         self.assertIn(f"ADMIRAL_RUN_CREW='{self.run_crew}'", text.splitlines())

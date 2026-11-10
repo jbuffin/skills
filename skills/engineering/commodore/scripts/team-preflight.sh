@@ -111,13 +111,14 @@ if [[ -d $REPO ]]; then
   done
   (( ${#unlisted} )) && warn "ignored in the checkout, so absent from new worktrees: ${(j:, :)unlisted}. Add each one the build or tests read to WORKTREE_SETUP (copy: or clone:)"
 fi
-# Role skills (docs/adr/0004): the resolver's warnings pass through (a dropped skill, a security reviewer without one);
-# an override file it can't read fails.
-if rs=$(${0:A:h}/role-skills.sh $1 2>&1 >/dev/null); then
-  [[ -n $rs ]] && print -r -- $rs
-else
-  [[ $rs == *$'\n'* ]] && print -r -- ${rs%$'\n'*}
-  bad "role skills: ${rs##*$'\n'}"
+# Crew (docs/adr/0007): crew.py cast's warnings pass through (a dropped skill, a security reviewer without one, a leftover
+# roles.json); its errors, and any other failure, fail the preflight.
+cast=$(${0:A:h}/crew.py cast --run $1 2>&1 >/dev/null); rc=$?
+print -r -- ${(F)${(M)${(f)cast}:#WARN*}}
+if (( rc )); then
+  errs=(${(M)${(f)cast}:#ERROR*})
+  for e in $errs; do bad "crew: ${e#ERROR }"; done
+  (( $#errs )) || bad "crew: ${${(f)cast}[-1]:-crew.py cast exited $rc}"
 fi
 ${SKILLS_DIR:-${0:A:h:h:h}}/run-preflight/scripts/preflight.sh $1 || fail=1
 exit $fail
