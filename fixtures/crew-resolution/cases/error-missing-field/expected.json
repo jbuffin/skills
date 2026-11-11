@@ -1,0 +1,42 @@
+{
+  "errors": [
+    {
+      "code": "missing-field",
+      "field": "pick-me-when",
+      "file": "empty-pick.md",
+      "layer": "repo"
+    },
+    {
+      "code": "missing-field",
+      "field": "name",
+      "file": "no-name.md",
+      "layer": "repo"
+    },
+    {
+      "code": "missing-field",
+      "field": "pick-me-when",
+      "file": "no-pick.md",
+      "layer": "repo"
+    },
+    {
+      "code": "missing-field",
+      "field": "role",
+      "file": "no-role.md",
+      "layer": "repo"
+    },
+    {
+      "code": "missing-field",
+      "field": "name",
+      "file": "null-name.md",
+      "layer": "repo"
+    },
+    {
+      "code": "missing-field",
+      "field": "pick-me-when",
+      "file": "null-pick.md",
+      "layer": "repo"
+    }
+  ],
+  "exit": 1,
+  "warnings": []
+}
