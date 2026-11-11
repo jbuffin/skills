@@ -1,0 +1,47 @@
+{
+  "exit": 0,
+  "members": [
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
+      "file": "scribe.md",
+      "harness": null,
+      "instructions": "Scribe.",
+      "layer": "built-in",
+      "model": null,
+      "name": "scribe",
+      "pick-me-when": "Default scribe.",
+      "role": "scribe",
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
+      "file": "triager.md",
+      "harness": null,
+      "instructions": "Repo triager.",
+      "layer": "repo",
+      "model": null,
+      "name": "triager",
+      "pick-me-when": "Pick.",
+      "role": "triager",
+      "skills": []
+    }
+  ],
+  "warnings": [
+    {
+      "code": "ad-hoc-name-taken",
+      "field": "name",
+      "file": "scribe.md",
+      "layer": "ad-hoc"
+    },
+    {
+      "code": "ad-hoc-name-taken",
+      "field": "name",
+      "file": "triager.md",
+      "layer": "ad-hoc"
+    }
+  ]
+}

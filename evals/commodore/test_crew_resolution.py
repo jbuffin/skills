@@ -86,11 +86,13 @@ class ResolverCase(unittest.TestCase):
             cwd=self.tmp,
         )
 
-    def explicit(self, layers, admiral=False, extra_env=None):
+    def explicit(self, layers, admiral=False, extra_env=None, run_id=None):
         """Run explicit mode over {label: dir}; returns (proc, parsed stdout or None)."""
         args = ["resolve"] + (["--admiral"] if admiral else [])
         for label, path in layers.items():
             args += ["--layer", f"{label}={path}"]
+        if run_id is not None:
+            args += ["--run-id", run_id]
         proc = self.crew(args, base_env(self.tmp / "home", **(extra_env or {})))
         return proc, (json.loads(proc.stdout) if proc.stdout.strip() else None)
 
@@ -161,11 +163,17 @@ def load_case(name):
 
 
 class FixtureCases(ResolverCase):
-    def check(self, proc, expected):
+    def check(self, proc, expected, real_run=None, case_run=None):
+        """Compare the output with the case's expectation. In `--run` mode the run id is the run directory's real
+        path, so a member's `ad-hoc-run` equal to it is shown as the case's literal `run` before comparing."""
         want_exit = expected["exit"]
         self.assertEqual(proc.returncode, want_exit, proc.stderr)
         want = {k: v for k, v in expected.items() if k != "exit"}
-        self.assertEqual(strip_messages(json.loads(proc.stdout)), want)
+        got = strip_messages(json.loads(proc.stdout))
+        for item in got.get("members", []):
+            if real_run is not None and item["ad-hoc-run"] == real_run:
+                item["ad-hoc-run"] = case_run
+        self.assertEqual(got, want)
 
     def copy_case(self, name):
         dest = self.tmp / "case"
@@ -177,7 +185,7 @@ class FixtureCases(ResolverCase):
         copy = self.copy_case(name)
         ignored = "user-global" if meta["admiral"] else "fleet"
         layers = {d.name: d for d in sorted((copy / "layers").iterdir()) if d.is_dir() and d.name != ignored}
-        proc, _ = self.explicit(layers, admiral=meta["admiral"])
+        proc, _ = self.explicit(layers, admiral=meta["admiral"], run_id=meta.get("run"))
         self.check(proc, expected)
 
     def run_via_run_mode(self, name):
@@ -193,15 +201,20 @@ class FixtureCases(ResolverCase):
         if (layers / "built-in").is_dir():
             shutil.rmtree(world.builtin)
             link(layers / "built-in", world.builtin)
-        if (layers / "user-global").is_dir():
+        if (layers / "user-global").is_dir() and not (layers / "ad-hoc").is_dir():
             link(layers / "user-global", world.user_global)
         if (layers / "repo").is_dir():
             link(layers / "repo", world.repo_crew)
         world.team_env(f"REPO={world.repo}\n")
         env = {}
+        real_run = str(world.run_dir.resolve())
+        if (layers / "ad-hoc").is_dir():
+            self.place_ad_hoc(world, layers, meta, real_run)
         if meta["admiral"]:
             env["ADMIRAL_SHIP"] = "ship-1"
-            if (layers / "fleet").is_dir():
+            if (layers / "ad-hoc").is_dir():
+                env["ADMIRAL_CREW_DIR"] = str(world.fleet)
+            elif (layers / "fleet").is_dir():
                 env["ADMIRAL_CREW_DIR"] = str(layers / "fleet")
             if (layers / "run").is_dir():
                 env["ADMIRAL_RUN_CREW"] = str(layers / "run")
@@ -211,7 +224,30 @@ class FixtureCases(ResolverCase):
             if (layers / "run").is_dir():
                 link(layers / "run", world.run_crew)
         proc, _ = world.resolve(**env)
-        self.check(proc, expected)
+        self.check(proc, expected, real_run, meta.get("run"))
+
+    def place_ad_hoc(self, world, layers, meta, real_run):
+        """Put layers/ad-hoc/ where `--run` reads the ad hoc directory (`<fleet>/ad-hoc/` inside Admiral,
+        `<user-global>/ad-hoc/` outside), with the run id in each file replaced by the run directory's real path.
+
+        The parent directories are real directories here (a symlinked one is refused), so the fleet or user-global
+        layer is copied rather than linked. A symlinked `layers/ad-hoc` stays a symlink, to its copied target."""
+        source = layers / "ad-hoc"
+        target = source.resolve()
+        for path in sorted(target.rglob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            for old in (f'ad-hoc-run: "{meta["run"]}"', f"ad-hoc-run: {meta['run']}"):
+                text = "\n".join(f'ad-hoc-run: "{real_run}"' if ln == old else ln for ln in text.split("\n"))
+            path.write_text(text, encoding="utf-8")
+        parent = world.fleet if meta["admiral"] else world.user_global
+        label = "fleet" if meta["admiral"] else "user-global"
+        if (layers / label).is_dir():
+            shutil.copytree(layers / label, parent, symlinks=True)
+        parent.mkdir(parents=True, exist_ok=True)
+        if source.is_symlink():
+            (parent / "ad-hoc").symlink_to(target)
+        else:
+            shutil.copytree(source, parent / "ad-hoc", symlinks=True)
 
 
 def make_case_tests(name):
@@ -255,6 +291,10 @@ class FixtureCoverage(unittest.TestCase):
             "bad-based-on",
             "misplaced-ad-hoc",
             "role-change",
+            "ad-hoc-name-taken",
+            "ad-hoc-fix-checker",
+            "ad-hoc-unreadable",
+            "ad-hoc-dir-refused",
         }
     )
 
@@ -263,7 +303,11 @@ class FixtureCoverage(unittest.TestCase):
         errors, warnings = set(), set()
         for name in case_names():
             case, meta, expected = load_case(name)
-            self.assertEqual(set(meta), {"description", "admiral"}, name)
+            self.assertLessEqual({"description", "admiral"}, set(meta), name)
+            self.assertLessEqual(set(meta), {"description", "admiral", "run"}, name)
+            if (case / "layers" / "ad-hoc").exists():
+                self.assertIsInstance(meta.get("run"), str, f"{name}: a case with layers/ad-hoc has a run")
+                self.assertTrue(meta["run"], name)
             self.assertIsInstance(meta["admiral"], bool, name)
             self.assertTrue((case / "layers").is_dir(), name)
             self.assertIn(expected["exit"], (OK, ERRORS), name)
@@ -277,6 +321,12 @@ class FixtureCoverage(unittest.TestCase):
             warnings |= {w["code"] for w in expected["warnings"]}
         self.assertEqual(errors, set(self.ERROR_CODES))
         self.assertEqual(warnings, set(self.WARNING_CODES))
+
+    def test_readme_documents_the_ad_hoc_directory_and_the_run_key(self):
+        """Red until the implementer writes the README (unit spec sections 6 and 9, ruling 7)."""
+        readme = (FIXTURES / "README.md").read_text()
+        for needle in ("layers/ad-hoc/", '"run"', "ad-hoc-run", "exact"):
+            self.assertIn(needle, readme)
 
     def test_readme_and_nested_lint_config_are_in_place(self):
         readme = (FIXTURES / "README.md").read_text()
@@ -442,6 +492,51 @@ class UsageErrors(ResolverCase):
                 self.assertEqual(proc.returncode, USAGE, proc.stderr)
                 self.assertEqual(proc.stdout, "")
                 self.assertTrue(proc.stderr.strip(), "no usage message on stderr")
+
+    def test_ad_hoc_run_id_calls_exit_5_with_a_usage_message_and_no_stdout(self):
+        run_dir = self.tmp / "run"
+        run_dir.mkdir()
+        (run_dir / "team.env").write_text("REPO=/nowhere\n")
+        ad_hoc = f"ad-hoc={self.tmp}"
+        calls = {
+            "ad-hoc without --run-id": ["resolve", "--layer", ad_hoc],
+            "ad-hoc with --admiral and no --run-id": ["resolve", "--admiral", "--layer", ad_hoc],
+            "--run-id without ad-hoc": ["resolve", "--run-id", "r1"],
+            "--run-id twice": ["resolve", "--layer", ad_hoc, "--run-id", "r1", "--run-id", "r1"],
+            "--run-id empty": ["resolve", "--layer", ad_hoc, "--run-id", ""],
+            "--run-id without a value": ["resolve", "--layer", ad_hoc, "--run-id"],
+            "--run-id with --run": ["resolve", "--run", run_dir, "--run-id", "r1"],
+            "ad-hoc twice": ["resolve", "--layer", ad_hoc, "--layer", ad_hoc, "--run-id", "r1"],
+        }
+        for label, args in calls.items():
+            with self.subTest(label):
+                proc = self.crew(args, base_env(self.tmp))
+                self.assertEqual(proc.returncode, USAGE, proc.stderr)
+                self.assertEqual(proc.stdout, "")
+                self.assertTrue(proc.stderr.strip(), "no usage message on stderr")
+        # positive control: the same call, right way round, is accepted (so exit 5 above is about the flaw)
+        proc = self.crew(["resolve", "--layer", ad_hoc, "--run-id", "r1"], base_env(self.tmp))
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+
+    def test_ad_hoc_with_a_run_id_is_accepted_with_and_without_admiral(self):
+        d = self.layer("ad-hoc", {})
+        for admiral in (False, True):
+            with self.subTest(admiral=admiral):
+                proc, parsed = self.explicit({"ad-hoc": d}, admiral=admiral, run_id="r1")
+                self.assertEqual((proc.returncode, parsed), (OK, {"members": [], "warnings": []}), proc.stderr)
+
+    def test_ad_hoc_is_read_after_the_run_layer_and_never_replaces(self):
+        files = {"x.md": member_text("x", "scribe", body="Standing.")}
+        mine = member_text("x", "scribe", body="Mine.", extra='ad-hoc: true\nad-hoc-run: "r1"\n')
+        ad_hoc = self.layer("ad-hoc", {"x.md": mine, "y.md": mine.replace("name: x", "name: y")})
+        run = self.layer("run", files)
+        proc, parsed = self.explicit({"ad-hoc": ad_hoc, "run": run}, run_id="r1")
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        got = [(m["name"], m["layer"], m["instructions"]) for m in parsed["members"]]
+        self.assertEqual(got, [("x", "run", "Standing."), ("y", "ad-hoc", "Mine.")])
+        self.assertEqual(
+            [(w["code"], w["file"], w["field"]) for w in parsed["warnings"]], [("ad-hoc-name-taken", "x.md", "name")]
+        )
 
     def test_fleet_with_admiral_and_user_global_without_are_accepted(self):
         d = self.layer("x", {})
