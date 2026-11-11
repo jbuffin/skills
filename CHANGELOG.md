@@ -1,5 +1,23 @@
 # jasonbuffin-skills
 
+## 3.1.0
+
+### Minor Changes
+
+- [#210](https://github.com/jbuffin/skills/pull/210) [`4d593bd`](https://github.com/jbuffin/skills/commit/4d593bd751f3adcb3e9dd3fabc9749332eeb1a26) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore inside Admiral takes pins and run state from Admiral's environment only: a crew member, pin or `--autopilot` switch in the launch text is ignored and Commodore writes no run member. `ADMIRAL_LOW_STAKES` loses its `never` value, so the classifier always asks the advisor. Nothing merges any more: `pr-ready.sh` drops `ADMIRAL_AUTO_MERGE`, the clean check and the `gh pr merge --auto` line, and runs end with PRs ready for review.
+
+- [#212](https://github.com/jbuffin/skills/pull/212) [`4f67f54`](https://github.com/jbuffin/skills/commit/4f67f549b80db6e34826e7acedf363c147aff981) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore runs feedback rounds inside Admiral. A moored ship's relaunch, `/commodore resume <run-name>` then `feedback round <N> on <PR>`, starts or resumes round `<N>` in the run's directory even when the run is finished, after checking that `<N>` is a positive integer and the PR is one in `state.md`'s units table. The round follows the pr-feedback mission under `feedback/<N>/`, reads Admiral's `.admiral/untrusted/feedback-<N>.md` as data only, posts one findings item and pushes nothing before the engineer's answer. A clean rebase of a PR that is behind its base, or of a stack whose lower layer moved, pushes through `push-branch.sh` without a findings item, and a conflict goes into the findings item. Every round ends with a fresh Admiral report.
+
+- [#211](https://github.com/jbuffin/skills/pull/211) [`9c76791`](https://github.com/jbuffin/skills/commit/9c7679111b8ccd340697f17464a098ae150a3aa4) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore's Admiral report is version 2. `prs` lists objects with each PR's `url` and the issues it `closes`, an optional `cast` lists the crew members the run used, and `resume` is also written whenever a listed PR is open, because Admiral uses it as the wake prompt of a moored ship. Inside Admiral, a launch that names two or more issues is a slice, always built as one gh stack where exactly one PR closes each child issue; a child no PR closes fails the completion gate and the run ends `partial`.
+
+- [#215](https://github.com/jbuffin/skills/pull/215) [`04493d6`](https://github.com/jbuffin/skills/commit/04493d6ddced2e75cc4c1f862151d32994b4b57f) Thanks [@jbuffin](https://github.com/jbuffin)! - Add crew notes: facts each crew member keeps across runs, loaded into its brief and shown by `crew.py notes`. A teammate can end its report with up to 3 note proposals. Commodore carries them in the Admiral report's `notes` inside Admiral, and outside Admiral the engineer keeps or drops each one in the final decision batch before `crew.py note add` writes it. The fix checker gets no notes and proposes none.
+
+### Patch Changes
+
+- [#218](https://github.com/jbuffin/skills/pull/218) [`2ae9f52`](https://github.com/jbuffin/skills/commit/2ae9f52405036063f91e5574d0eb00e40a952885) Thanks [@jbuffin](https://github.com/jbuffin)! - The agent-teammates scripts read file times with `zstat`, so they run on Linux as well as macOS.
+
+- [#224](https://github.com/jbuffin/skills/pull/224) [`209b353`](https://github.com/jbuffin/skills/commit/209b3536b75ef90e932f5489747fc2e222658b4f) Thanks [@jbuffin](https://github.com/jbuffin)! - Trim comments and docstrings across the shipped scripts to one-line whys, and lint them in `validate.sh`.
+
 ## 3.0.0
 
 ### Major Changes
