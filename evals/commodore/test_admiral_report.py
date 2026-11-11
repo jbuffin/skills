@@ -40,6 +40,7 @@ DONE = {
 }
 
 
+URL = "https://github.com/example/fixture/pull/7"
 PATTERN = r"^/prs/0/closes/0: .*doesn't match pattern"
 
 
@@ -114,11 +115,14 @@ class TestValidReports(ReportCase):
     def test_an_extra_key_in_a_cast_object_is_accepted(self):
         self.assertAccepted(with_(cast=[{"member": "ada", "role": "implementer", "ad_hoc": False, "model": "x"}]))
 
+    def test_a_codex_resume_line_is_accepted(self):
+        self.assertAccepted(with_(resume="$commodore resume fixture.run_2"))
+
     def test_an_extra_top_level_key_is_accepted(self):
         self.assertAccepted(with_(later="field"))
 
     def test_a_cross_repo_issue_reference_with_dots_and_hyphens_is_accepted(self):
-        self.assertAccepted(with_(prs=[{"url": "u", "closes": ["my-org/my.repo_x#1234"]}]))
+        self.assertAccepted(with_(prs=[{"url": URL, "closes": ["my-org/my.repo_x#1234"]}]))
 
 
 class TestInvalidReports(ReportCase):
@@ -142,23 +146,48 @@ class TestInvalidReports(ReportCase):
 
     def test_closes_that_is_not_a_list_is_rejected(self):
         self.assertRejected(
-            with_(prs=[{"url": "u", "closes": "example/fixture#12"}]), r"^/prs/0/closes: .*not of type array"
+            with_(prs=[{"url": URL, "closes": "example/fixture#12"}]), r"^/prs/0/closes: .*not of type array"
         )
 
     def test_closes_with_a_non_string_entry_is_rejected(self):
-        self.assertRejected(with_(prs=[{"url": "u", "closes": [12]}]), r"^/prs/0/closes/0: .*not of type string")
+        self.assertRejected(with_(prs=[{"url": URL, "closes": [12]}]), r"^/prs/0/closes/0: .*not of type string")
 
     def test_a_bare_hash_reference_is_rejected(self):
-        self.assertRejected(with_(prs=[{"url": "u", "closes": ["#12"]}]), PATTERN)
+        self.assertRejected(with_(prs=[{"url": URL, "closes": ["#12"]}]), PATTERN)
 
     def test_a_reference_without_an_owner_is_rejected(self):
-        self.assertRejected(with_(prs=[{"url": "u", "closes": ["skills#12"]}]), PATTERN)
+        self.assertRejected(with_(prs=[{"url": URL, "closes": ["skills#12"]}]), PATTERN)
 
     def test_a_reference_with_trailing_text_is_rejected(self):
-        self.assertRejected(with_(prs=[{"url": "u", "closes": ["example/fixture#12 and more"]}]), PATTERN)
+        self.assertRejected(with_(prs=[{"url": URL, "closes": ["example/fixture#12 and more"]}]), PATTERN)
 
     def test_a_reference_without_a_number_is_rejected(self):
-        self.assertRejected(with_(prs=[{"url": "u", "closes": ["example/fixture#"]}]), PATTERN)
+        self.assertRejected(with_(prs=[{"url": URL, "closes": ["example/fixture#"]}]), PATTERN)
+
+    def test_a_url_that_is_not_a_github_pull_url_is_rejected(self):
+        for url in (
+            "u",
+            "http://github.com/example/fixture/pull/7",
+            "https://evil.example/example/fixture/pull/7",
+            "https://github.com/example/fixture/issues/7",
+            "https://github.com/example/fixture/pull/7 and more",
+            "https://github.com/example/fixture/pull/",
+        ):
+            with self.subTest(url=url):
+                self.assertRejected(with_(prs=[{"url": url, "closes": []}]), r"^/prs/0/url: .*doesn't match pattern")
+
+    def test_a_resume_that_is_not_a_commodore_resume_line_is_rejected(self):
+        for text in (
+            "/commodore resume fixture-run --autopilot",
+            "/commodore resume fixture-run; rm -rf ~",
+            "/commodore resume ../x",
+            "/commodore resume",
+            "commodore resume fixture-run",
+            "do something else",
+            "/commodore resume fixture-run\nmore",
+        ):
+            with self.subTest(resume=text):
+                self.assertRejected(with_(resume=text), r"^/resume: .*doesn't match pattern")
 
     def test_a_cast_entry_without_ad_hoc_is_rejected(self):
         self.assertRejected(
@@ -262,7 +291,7 @@ class TestEndingARunReportV2(TextCase):
         self.step2 = self.step(ending, 2)
 
     def test_it_says_the_report_is_version_2(self):
-        self.assertRegex(self.step2, r"`version` \(2\)|version 2")
+        self.assertRegex(self.step2, r"[Vv]ersion 2")
         self.assertNotRegex(self.step2, r"`version` \(1\)")
 
     def test_prs_are_objects_with_url_and_closes(self):
@@ -275,11 +304,13 @@ class TestEndingARunReportV2(TextCase):
     def test_part_of_gives_an_empty_closes(self):
         self.assertRegex(self.step2, r"`Part of`[^.]{0,120}`\[\]`|`\[\]`[^.]{0,120}`Part of`")
 
-    def test_a_pr_feedback_run_lists_the_pr_it_pushed_to(self):
-        self.assertRegex(self.step2, r"pr-feedback")
+    def test_an_existing_pr_run_lists_the_pr_it_works_on_whether_or_not_it_pushed(self):
+        self.assertRegex(self.step2, r"`pr-feedback` run[^.;]{0,60}existing PR[^.;]{0,80}the PR the run works on")
+        self.assertRegex(self.step2, r"whether or not this run pushed to it")
+        self.assertNotRegex(self.step2, r"pr-feedback[^.;]{0,80}the PR it pushed to")
 
     def test_a_review_run_lists_no_pr(self):
-        self.assertRegex(self.step2, r"`review` run lists no PR|review[^.]{0,40}run[^.]{0,40}no PR")
+        self.assertRegex(self.step2, r"A `review` run lists no PR")
 
     def test_cast_lists_each_role_launched_from_cast_json(self):
         self.assertRegex(self.step2, r"`cast`[^.]{0,300}cast\.json")
@@ -294,8 +325,10 @@ class TestEndingARunReportV2(TextCase):
         self.assertIn("never with `--autopilot`", self.step2)
 
     def test_the_report_replaces_the_last_one_at_the_end_of_build_and_pr_feedback_runs(self):
-        self.assertRegex(self.ending, r"replaces the last")
-        self.assertRegex(self.ending, r"(build|every `pr-feedback` run)[^.]{0,200}(build|`pr-feedback`)")
+        self.assertRegex(
+            self.ending, r"Every run publishes one at its end \(the build and every `pr-feedback` run included\)"
+        )
+        self.assertRegex(self.ending, r"each publish replaces the last")
 
     def test_the_finished_run_resume_line_stays_for_u3(self):
         self.assertIn("A `/commodore resume` of a finished run says it's finished and stops.", self.ending)
@@ -311,7 +344,7 @@ class TestEndingARunReportV2(TextCase):
         offenders = []
         for p in sorted(SKILL_DIR.rglob("*.md")):
             for n, ln in enumerate(p.read_text().splitlines(), 1):
-                if "Admiral report" in ln and re.search(r"`version` \(1\)|version 1|lists? of strings", ln):
+                if "Admiral report" in ln and re.search(r"`version` \(1\)|version 1|`prs`[^.]*lists? of strings", ln):
                     offenders.append(f"{p.relative_to(REPO)}:{n}")
         self.assertEqual(offenders, [])
 
@@ -330,7 +363,7 @@ class TestSlices(TextCase):
         self.stack = re.split(r"\n## ", self.modes[self.modes.index("## Stack") :], maxsplit=1)[0]
 
     def test_the_mode_table_makes_a_slice_one_gh_stack_inside_admiral(self):
-        self.assertRegex(self.table, r"(?i)inside Admiral[^|]{0,200}two or more issues[^|]{0,200}slice|slice")
+        self.assertRegex(self.table, r"(?i)inside Admiral, a slice[^|]{0,100}two or more issues")
         self.assertRegex(
             self.table,
             r"(?i)two or more issues[^|]{0,300}(always|even)[^|]{0,300}gh stack|gh stack[^|]{0,300}two or more issues",
@@ -354,10 +387,10 @@ class TestSlices(TextCase):
     def test_closes_rule_other_prs_say_part_of_and_a_pr_may_close_several(self):
         self.assertRegex(self.step6, r"(?i)every other PR[^.]{0,80}`Part of")
         self.assertRegex(self.step6, r"(?i)may close several")
-        self.assertRegex(self.step6, r"(?i)no child is closed by two PRs|never (by|closed by) two PRs|two PRs")
+        self.assertRegex(self.step6, r"No child is closed by two PRs")
 
     def test_the_gate_fails_a_child_no_pr_closes_and_names_it_in_why(self):
-        self.assertRegex(self.gate, r"no PR closes")
+        self.assertRegex(self.gate, r"no PR body closes, or that two do")
         self.assertRegex(self.gate, r"`why`")
 
     def test_the_gate_still_ends_the_run_partial(self):

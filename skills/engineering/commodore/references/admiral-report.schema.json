@@ -8,21 +8,25 @@
     "version": { "const": 2 },
     "result": { "enum": ["done", "partial", "failed"] },
     "why": { "type": "string", "description": "One line." },
-"prs": {
+    "prs": {
       "type": "array",
       "items": {
         "type": "object",
         "required": ["url", "closes"],
         "properties": {
-          "url": { "type": "string", "description": "The PR's URL." },
+          "url": {
+            "type": "string",
+            "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+$",
+            "description": "The PR's URL."
+          },
           "closes": {
             "type": "array",
             "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+$" },
-            "description": "Issues the PR closes, as <owner>/<repo>#<n>. Empty for a PR that closes nothing."
+            "description": "Every issue the PR body names with a closing keyword, as <owner>/<repo>#<n>. Empty when the body only says Part of."
           }
         }
       },
-      "description": "Every PR the run opened, plus the PR a pr-feedback run pushed to."
+      "description": "Every PR the run opened, plus the PR an existing-PR run works on."
     },
     "cast": {
       "type": "array",
@@ -39,7 +43,11 @@
     },
     "assumptions": { "type": "array", "items": { "type": "string" }, "description": "Every default taken without asking." },
     "inbox": { "type": "array", "items": { "type": "string" }, "description": "Ids of the inbox items written." },
-    "resume": { "type": "string", "description": "Text to launch with once every inbox item is answered." }
+    "resume": {
+      "type": "string",
+      "pattern": "^[/$]commodore resume [A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Text to launch with once every inbox item is answered."
+    }
   },
   "allOf": [
     {
