@@ -61,6 +61,16 @@ def parse_table(stdout):
     return (lines[0] if lines else None), (lines[1] if len(lines) > 1 else None), rows, order
 
 
+def link(src, dst):
+    """Hard-link a shipped file; drivers/ is copied: tests write there, and a link would alter the repo."""
+    if "/scripts/drivers/" not in dst:
+        try:
+            return os.link(src, dst)
+        except OSError:
+            pass
+    return shutil.copy2(src, dst)
+
+
 def zsh_value(team_env, *names):
     """The values `source team.env` leaves in zsh for `names`, in one call."""
     script = 'source "$1"; shift; for n in "$@"; do print -r -- "${(P)n}"; done'
@@ -80,7 +90,9 @@ class World:
         self.skills = self.root / "skills"
         self.skills.mkdir()
         for name in COPIED:
-            shutil.copytree(SRC_SKILLS / name, self.skills / name, ignore=shutil.ignore_patterns("__pycache__"))
+            shutil.copytree(
+                SRC_SKILLS / name, self.skills / name, ignore=shutil.ignore_patterns("__pycache__"), copy_function=link
+            )
         self.crew_py = self.skills / "commodore" / "scripts" / "crew.py"
         self.scripts = self.skills / "commodore" / "scripts"
         self.drivers = self.skills / "agent-teammates" / "scripts" / "drivers"
