@@ -1,5 +1,6 @@
 #!/bin/zsh
 # usage: status <team-dir>   (see ../CONTRACT.md)
+zmodload -F zsh/stat b:zstat
 [[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh
@@ -12,6 +13,6 @@ reg_ids=" $(awk '{print $2}' $REG | tr '\n' ' ') "
 print -r -- "$rows" | while read -r id st state; do
   [[ -z $id ]] && continue
   tr=; [[ $reg_ids == *" $id "* ]] && tr=$(transcript_of $id)
-  echo "$id $st $state ${${tr:+$(stat -f %m $tr)}:--}"
+  echo "$id $st $state ${${tr:+$(zstat +mtime -- $tr)}:--}"
 done
 exit 0

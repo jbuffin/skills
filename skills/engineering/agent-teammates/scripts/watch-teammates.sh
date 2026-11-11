@@ -12,6 +12,7 @@
 # printed an event, or after <max-min> polls with none, printing `WATCH timeout <max-min>`. Run it again to keep waiting.
 # The BLOCKED counts and alert times persist in <team-dir>/.watch-state, so a rerun neither repeats a DONE nor resets the
 # two-polls-in-a-row and 10-minute rules. Without the flag nothing changes and no state file is written.
+zmodload -F zsh/stat b:zstat
 BOUND=
 if [[ $1 == --until-event ]]; then
   [[ $2 == <1-> ]] || { sed -n 2,14p $0; exit 5; }
@@ -44,7 +45,7 @@ save_state() {
 POLLS=0
 while true; do
   for f in $R/*.done(N); do
-    m=$(stat -f %m "$f"); [[ "${seen[$f]}" != "$m" ]] && { seen[$f]=$m; print -r -- "$f $m" >> $SEEN; emit "DONE ${${f:t}%.done}"; }
+    m=$(zstat +mtime -- "$f"); [[ "${seen[$f]}" != "$m" ]] && { seen[$f]=$m; print -r -- "$f $m" >> $SEEN; emit "DONE ${${f:t}%.done}"; }
   done
   now=$(date -u +%s)
   # Each open teammate's harness is the registry's sixth column (the run's HARNESS for a five-column row). Teammates are grouped by
@@ -82,7 +83,7 @@ while true; do
     [[ -n ${gok[${gdriver[$name]}]} ]] || continue
     states=${gstates[${gdriver[$name]}]}
     marker=$R/$name.done
-    if [[ -f $marker && $(stat -f %m $marker) -ge $started ]]; then blocked[$name]=0; continue; fi
+    if [[ -f $marker && $(zstat +mtime -- $marker) -ge $started ]]; then blocked[$name]=0; continue; fi
     line=$(print -r -- "$states" | awk -v i=$id '$1==i {print $3}')
     st=${line:-missing}
     case $st in

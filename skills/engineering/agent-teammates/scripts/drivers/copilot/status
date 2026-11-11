@@ -1,5 +1,6 @@
 #!/bin/zsh
 # usage: status <team-dir>   (see ../CONTRACT.md)
+zmodload -F zsh/stat b:zstat
 [[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh
@@ -11,7 +12,7 @@ for f in $D/copilot-*(N); do
   if cp_alive $f; then state=working; else state=done; fi
   [[ -n $(cp_get $f stopped) ]] && state=stopped
   ev=$(cp_events $id); act=$(cp_num $f started)
-  [[ -f $ev ]] && act=$(stat -f %m $ev)
+  [[ -f $ev ]] && act=$(zstat +mtime -- $ev)
   # A resume's fresh start counts as activity until the new turn writes an event.
   r=$(cp_num $f resumed); [[ -n $r && ( -z $act || $r -gt $act ) ]] && act=$r
   echo "$id - $state ${act:--}"

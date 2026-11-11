@@ -80,7 +80,7 @@ attempt() {
         RESULT=ON; stop_session; return
       fi
     fi
-    sleep 2
+    sleep ${ADVISOR_PROBE_POLL:-2}
   done
   RESULT=NONE; stop_session
 }
