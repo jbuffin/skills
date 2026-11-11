@@ -48,7 +48,7 @@ class PreflightCase(WorldCase):
 
     def assertWarnsThenSettles(self, settle, **kw):
         """Nothing settled warns once about folder trust; after `settle()` it doesn't."""
-        before = self.preflight(**kw)
+        before = self.before = self.preflight(**kw)
         self.assertEqual(len(trust_warns(before.out)), 1, before.out)
         settle()
         after = self.preflight(**kw)
@@ -88,10 +88,9 @@ class TestCodexTrustWarns(PreflightCase):
         (self.dock / "config.toml").write_text(config_toml(*trusted, **kw))
 
     def test_a_trusted_repo_root_and_hook_state_raise_no_warn(self):
-        before = self.preflight()
-        self.assertEqual(before.code, OK, before.text)
-        self.assertEqual(len(hook_warns(before.out)), 1, before.out)
         done = self.assertWarnsThenSettles(lambda: self.settled(self.w.checkout))
+        self.assertEqual(self.before.code, OK, self.before.text)
+        self.assertEqual(len(hook_warns(self.before.out)), 1, self.before.out)
         self.assertEqual(hook_warns(done.out), [])
 
     def test_a_trusted_ancestor_of_the_repo_root_counts(self):
