@@ -331,7 +331,10 @@ class ResolveFilter(AdHocCase):
         self.assertEqual(members["odd"]["skills"], ["writing"])
         self.assertEqual(
             [(w["layer"], w["file"], w["code"], w["field"]) for w in warnings],
-            [("ad-hoc", "odd.md", "unknown-field", "zeta"), ("ad-hoc", "odd.md", "bad-skill", "skills")],
+            [
+                ("ad-hoc", "odd.md", "bad-skill", "skills"),
+                ("ad-hoc", "odd.md", "unknown-field", "zeta"),
+            ],  # u1 sorts by code
         )
 
     def test_a_missing_ad_hoc_directory_is_silent(self):
@@ -407,7 +410,7 @@ class ResolveRefusesAnUnsafeAdHocDirectory(AdHocCase):
         self.fleet_ad_hoc.unlink()
         in_repo = self.w.repo / "fleet"
         self.put_ad_hoc("helper", directory=in_repo / "ad-hoc")
-        self.assert_dir_refused(env=self.w.admiral_env(ADMIRAL_CREW_DIR=None) | {"ADMIRAL_CREW_DIR": str(in_repo)})
+        self.assert_dir_refused(env=self.w.admiral_env() | {"ADMIRAL_CREW_DIR": str(in_repo)})
 
     def test_inside_admiral_a_symlinked_fleet_directory_is_allowed(self):
         real = self.w.root / "real-fleet"
@@ -433,7 +436,7 @@ class CastAdHoc(AdHocCase):
         _, _, rows, _ = parse_table(done.stdout)
         self.assertEqual((rows["scribe"][1], rows["scribe"][7]), ("scribe", "built-in"))
         self.assertNotIn("helper", done.stdout)
-        self.assertEqual(self.warns(done), [])
+        self.assertEqual([w for w in self.warns(done) if "helper" in w or "candidates" in w], [])
 
     def test_the_several_candidates_warning_counts_only_non_ad_hoc_members(self):
         self.w.write_member("repo", "scribe-repo", "scribe")

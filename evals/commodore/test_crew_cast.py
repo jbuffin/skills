@@ -575,7 +575,19 @@ class TestSave(WorldCase):
         for entry in data["cast"]:
             self.assertEqual(
                 set(entry),
-                {"role", "member", "based-on", "skills", "instructions", "model", "harness", "layer", "pinned"},
+                {
+                    "role",
+                    "member",
+                    "based-on",
+                    "skills",
+                    "instructions",
+                    "model",
+                    "harness",
+                    "layer",
+                    "pinned",
+                    "ad-hoc",
+                    "ad-hoc-run",
+                },
             )
         reviewer = next(e for e in data["cast"] if e["role"] == "reviewer")
         self.assertEqual(reviewer["member"], "rev-a")
