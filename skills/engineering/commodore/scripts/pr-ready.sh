@@ -1,7 +1,7 @@
 #!/bin/zsh
 # usage: pr-ready.sh <run-dir> <unit>
 # Decides what to run to leave <unit>'s PR ready for review. Reads the PR once with `gh pr view` and makes no gh
-# write. Nothing is merged: no output line ever runs `gh pr merge`.
+# write. Nothing is merged: it prints no merge command.
 # Exit 0, the PR is open: prints `run: gh pr ready <url>` while it is draft, otherwise `ready: <url>`. Run the `run:`
 # line as its own tool call, so Admiral's guard sees it.
 # Exit 1, can't be marked ready: prints `not ready: <url>: <reason>` (gh pr view failed, or the PR isn't OPEN).

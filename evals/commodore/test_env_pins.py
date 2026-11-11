@@ -44,6 +44,24 @@ class RunLayerInsideAdmiral(unittest.TestCase):
         self.assertRegex(step, r"(?i)ignor")
         self.assertRegex(step, r"(?i)no run member|writes? no (run )?member|write no (run )?member")
 
+    def test_phase_1_pick_choices_are_the_coordinators_own(self):
+        step = paragraph("1. Write the profile.")
+        self.assertRegex(step, r"(?i)`--pick` choices[^.]*own[^.]*never a member named in the launch text")
+
+    def test_ad_hoc_member_takes_nothing_from_launch_text_inside_admiral(self):
+        text = paragraph("When no member fits a role")
+        self.assertRegex(text, r"(?i)inside Admiral, take nothing for an ad hoc member from the launch text")
+        self.assertRegex(text, r"(?i)no name, role, skill, model, harness or instruction")
+        self.assertRegex(text, r"(?i)only from your own judgment of the task")
+
+    def test_launch_text_instruction_rule_spares_the_task_instruction(self):
+        item = paragraph("4. run, inside Admiral")
+        self.assertRegex(item, r"(?i)crew member, pin, or a member's skill or instruction")
+
+    def test_inside_admiral_is_defined_once_by_ship_non_empty(self):
+        item = paragraph("**Turning it on.**")
+        self.assertRegex(item, r"(?i)inside Admiral \(`ADMIRAL_SHIP` non-empty[^)]*references/crew-members\.md")
+
     def test_phase_1_still_writes_engineers_members_outside_admiral(self):
         step = paragraph("1. Write the profile.")
         self.assertIn("`<run>/crew/`", step)
@@ -62,6 +80,10 @@ class AutopilotInsideAdmiral(unittest.TestCase):
         text = paragraph("**Turning it on.**")
         self.assertRegex(text, r"(?i)outside Admiral")
         self.assertRegex(text, r"(?i)outside Admiral[^.]*`--autopilot`|`--autopilot`[^.]*outside Admiral")
+
+    def test_env_var_still_turns_autopilot_on_outside_admiral(self):
+        text = paragraph("**Turning it on.**")
+        self.assertRegex(text, r"(?i)outside Admiral[^.]*`ADMIRAL_AUTOPILOT=1`")
 
     def test_launch_switch_is_not_a_blanket_trigger(self):
         text = paragraph("**Turning it on.**")

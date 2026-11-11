@@ -1,10 +1,10 @@
 """Tests for skills/engineering/commodore/scripts/pr-ready.sh.
 
 The only seam is the script's command line: a run directory and a unit in, exit code and `run:` /
-`ready:` / `not ready:` lines out. Every test builds a fixture run directory in a temp
-dir (team.env, state.md, a small git repo whose branch head the PR can match) and puts a stub `gh` first on
-PATH. The stub prints canned `gh pr view` JSON and records its argv, so a test can also prove the script
-never writes. Expected values are literals worked out by hand from the fixtures.
+`ready:` / `not ready:` lines out. Every test builds a fixture run directory in a temp dir (state.md only: the
+script reads nothing else) and puts a stub `gh` first on PATH. The stub prints canned `gh pr view` JSON and records
+its argv, so a test can also prove the script never writes.
+Expected values are literals worked out by hand from the fixtures.
 
 Run from the repo root: python3 -m unittest discover -s evals/commodore -v
 """
@@ -35,24 +35,6 @@ fi
 exit 0
 """
 
-GREEN = {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"}
-RED = {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FAILURE"}
-PENDING = {"__typename": "CheckRun", "status": "IN_PROGRESS", "conclusion": None}
-
-
-def git(cwd, *args):
-    env = {
-        **os.environ,
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_SYSTEM": os.devnull,
-        "GIT_AUTHOR_NAME": "t",
-        "GIT_AUTHOR_EMAIL": "t@example.com",
-        "GIT_COMMITTER_NAME": "t",
-        "GIT_COMMITTER_EMAIL": "t@example.com",
-    }
-    out = subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True, text=True)
-    return out.stdout.strip()
-
 
 class Result:
     def __init__(self, proc, calls):
@@ -67,16 +49,6 @@ class PrReadyCase(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
-        self.repo = self.tmp / "repo"
-        self.repo.mkdir()
-        git(self.repo, "init", "-q", "-b", BASE)
-        (self.repo / "f.txt").write_text("x\n")
-        git(self.repo, "add", "f.txt")
-        git(self.repo, "commit", "-q", "-m", "init")
-        git(self.repo, "checkout", "-q", "-b", BRANCH)
-        (self.repo / "f.txt").write_text("y\n")
-        git(self.repo, "commit", "-q", "-am", "unit")
-        self.head = git(self.repo, "rev-parse", BRANCH)
         self.bin = self.tmp / "bin"
         self.bin.mkdir()
         gh = self.bin / "gh"
@@ -95,11 +67,7 @@ class PrReadyCase(unittest.TestCase):
         unit=UNIT,
         draft=True,
         state="OPEN",
-        base=BASE,
-        checks=(GREEN,),
-        pr_head=None,
         view_fails=False,
-        findings=(),
         pr_cell=URL,
         units_unit=UNIT,
     ):
@@ -113,9 +81,7 @@ class PrReadyCase(unittest.TestCase):
         self.log.write_text("")
         run = self.tmp / "run"
         run.mkdir(exist_ok=True)
-        (run / "team.env").write_text(f"REPO={self.repo}\nBASE_BRANCH={BASE}\n")
         mode = "mission: build\nmode: single\n" + ("autopilot: on\n" if state_line else "")
-        rows = "".join(f"| f{i} | {u} | low | something | {s} |\n" for i, (u, s) in enumerate(findings))
         (run / "state.md").write_text(
             "# Run state (read this first on every start)\n\n"
             f"## Mode, phase, current unit\n\n{mode}current unit: {units_unit}\n\n"
@@ -125,22 +91,10 @@ class PrReadyCase(unittest.TestCase):
             f"| {units_unit} | {BRANCH} | /wt | {BASE} |  | {pr_cell} |  | building |  |\n\n"
             "## Acceptance trace (criterion from the source of truth)\n\n"
             "| criterion | unit | test or scenario | status | evidence |\n| --- | --- | --- | --- | --- |\n\n"
-            "## Non-blocking findings (unfixed ones go in the final report)\n\n"
-            "| id | unit | severity | finding | status |\n| --- | --- | --- | --- | --- |\n"
-            f"{rows}\n## Ground rules (from the engineer)\n"
+            "## Ground rules (from the engineer)\n"
         )
         pr = self.tmp / "pr.json"
-        pr.write_text(
-            json.dumps(
-                {
-                    "isDraft": draft,
-                    "state": state,
-                    "baseRefName": base,
-                    "headRefOid": pr_head or self.head,
-                    "statusCheckRollup": list(checks),
-                }
-            )
-        )
+        pr.write_text(json.dumps({"isDraft": draft, "state": state}))
         env = {k: v for k, v in os.environ.items() if not k.startswith("ADMIRAL_")}
         env["PATH"] = f"{self.bin}{os.pathsep}{env['PATH']}"
         env["GH_LOG"] = str(self.log)
@@ -161,32 +115,14 @@ class PrReadyCase(unittest.TestCase):
 
 
 class MarkReady(PrReadyCase):
-    def test_clean_draft_prints_ready_command_only(self):
+    def test_draft_prints_ready_command_only(self):
         r = self.go()
         self.assertEqual((r.code, r.out), (0, [READY]))
         self.assertEqual(len(r.calls), 1)
         self.assertTrue(r.calls[0].startswith(f"pr view {URL} --json "))
 
-    def test_not_clean_draft_still_prints_ready_command(self):
-        cases = {
-            "human row": dict(findings=[(UNIT, "human")]),
-            "red check": dict(checks=(GREEN, RED)),
-            "pending check": dict(checks=(PENDING,)),
-            "no checks": dict(checks=()),
-            "stale head": dict(pr_head="0" * 40),
-            "stacked base": dict(base="u0-branch"),
-        }
-        for name, kwargs in cases.items():
-            with self.subTest(name):
-                r = self.go(**kwargs)
-                self.assertEqual((r.code, r.out), (0, [READY]))
-
     def test_already_ready_prints_ready_url(self):
         r = self.go(draft=False)
-        self.assertEqual((r.code, r.out), (0, [f"ready: {URL}"]))
-
-    def test_already_ready_and_not_clean_prints_ready_url(self):
-        r = self.go(draft=False, checks=(RED,))
         self.assertEqual((r.code, r.out), (0, [f"ready: {URL}"]))
 
     def test_no_merge_line_even_with_autopilot_and_auto_merge_set(self):
@@ -195,6 +131,11 @@ class MarkReady(PrReadyCase):
                 r = self.go(on=True, auto_merge="squash", draft=draft)
                 self.assertEqual((r.code, r.out), (0, expected))
                 self.assertEqual([line for line in r.out if "merge" in line], [])
+
+    def test_run_directory_without_team_env_is_accepted(self):
+        r = self.go()
+        self.assertFalse((self.tmp / "run" / "team.env").exists())
+        self.assertEqual((r.code, r.out), (0, [READY]))
 
     def test_auto_merge_value_is_not_read(self):
         r = self.go(on=True, auto_merge="yolo")
@@ -251,7 +192,6 @@ class Preconditions(PrReadyCase):
     def test_missing_state_md_exits_5_with_stderr(self):
         run = self.tmp / "empty"
         run.mkdir()
-        (run / "team.env").write_text(f"REPO={self.repo}\nBASE_BRANCH={BASE}\n")
         proc = subprocess.run([str(SCRIPT), str(run), UNIT], capture_output=True, text=True, timeout=60, check=False)
         self.assertEqual((proc.returncode, proc.stdout), (5, ""))
         self.assertNotEqual(proc.stderr, "")

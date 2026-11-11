@@ -1,8 +1,9 @@
 """Nothing in Commodore merges, and `ADMIRAL_LOW_STAKES` has no `never` value (issue #200, ADR 0009).
 
 The seam is a text walk over every file under `skills/engineering/commodore/`. A line fails when it mentions
-`merge --auto`, `auto-merge`, `auto_merge`, `ADMIRAL_AUTO_MERGE`, or `ADMIRAL_LOW_STAKES` together with `never`. This
-file lives under `evals/`, so its own patterns never trip the walk; a test proves it stays out of that tree.
+`merge --auto`, `auto-merge`, `auto_merge`, `ADMIRAL_AUTO_MERGE`, `gh pr merge` (bare merge included), or
+`ADMIRAL_LOW_STAKES` together with `never`. The one allowed line is SKILL.md's ban on `gh pr merge`. This file lives
+under `evals/`, so its own patterns never trip the walk; a test proves it stays out of that tree.
 
 Run from the repo root: python3 -m unittest evals/commodore/test_no_auto_merge.py -v
 """
@@ -15,11 +16,11 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 TREE = REPO / "skills" / "engineering" / "commodore"
 
-BANNED = re.compile(r"merge --auto|auto-merge|auto_merge|ADMIRAL_AUTO_MERGE", re.IGNORECASE)
+BANNED = re.compile(r"merge --auto|auto-merge|auto_merge|ADMIRAL_AUTO_MERGE|gh pr merge", re.IGNORECASE)
 LOW_STAKES_NEVER = re.compile(r"ADMIRAL_LOW_STAKES.*\bnever\b|\bnever\b.*ADMIRAL_LOW_STAKES")
 
 # Exact lines (stripped) that may match. Keep this empty unless a line has a real reason.
-ALLOWED = frozenset()
+ALLOWED = frozenset({"- Never run `gh pr merge` in any form."})
 
 
 def offending_lines():
@@ -34,6 +35,9 @@ def offending_lines():
 class NoAutoMerge(unittest.TestCase):
     def test_no_line_mentions_auto_merge_or_low_stakes_never(self):
         self.assertEqual(offending_lines(), [])
+
+    def test_skill_md_bans_every_form_of_gh_pr_merge(self):
+        self.assertIn("Never run `gh pr merge` in any form", (TREE / "SKILL.md").read_text(encoding="utf-8"))
 
     def test_this_eval_is_not_under_the_commodore_tree(self):
         self.assertFalse(Path(__file__).resolve().is_relative_to(TREE))
