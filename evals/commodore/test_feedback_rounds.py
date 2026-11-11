@@ -109,7 +109,7 @@ class RoundStart(unittest.TestCase):
         self.assertRegex(ending(), r"(?i)finished and stops")
 
     def test_outside_admiral_nothing_changes(self):
-        self.assertRegex(mission(), r"(?i)outside Admiral[^\n]*(no feedback round|nothing changes|finished)")
+        self.assertRegex(mission(), r"(?i)outside Admiral[^\n]*starts nothing[^\n]*finished")
 
     def test_hand_wake_with_free_text_is_a_follow_up(self):
         text = mission() + "\n" + ending()
@@ -183,7 +183,8 @@ class FeedbackRoundSection(unittest.TestCase):
 
     def test_per_round_paths(self):
         text = round_section()
-        self.assertIn("rounds/<N>", text)
+        self.assertIn("feedback/<N>", text)
+        self.assertNotIn("rounds/<N>", text)
         for name in ("triage/", "findings-draft.json", "replies/", "proposals/"):
             self.assertIn(name, text)
         self.assertIn("triager-r<N>", text)
@@ -354,10 +355,133 @@ class Report(unittest.TestCase):
         self.assertRegex(text, r"(?i)`inbox`")
 
 
+class RoundLifecycle(unittest.TestCase):
+    """Review round 1: what happens to a round across a stop, a resume and the next round."""
+
+    def test_a_stop_waiting_on_an_answer_leaves_the_round_open(self):
+        text = ending()
+        self.assertRegex(
+            text,
+            r"(?i)feedback round[^\n]*(findings item|question item|high-stakes stop)"
+            r"[^\n]*leaves `feedback status` `open`",
+        )
+        self.assertRegex(text, r"(?i)only when nothing is waiting on an answer")
+        self.assertIn("feedback status=closed", text)
+
+    def test_the_high_stakes_stop_keeps_the_round_open(self):
+        text = autopilot()
+        step4 = text[text.find("4. Write `result: partial`") :].split("\n", 1)[0]
+        self.assertRegex(step4, r"(?i)feedback round[^\n]*`feedback status` `open`")
+
+    def test_resume_reads_the_answer_and_never_restarts_the_round(self):
+        text = autopilot()
+        resume = text[text.find("**Resume.**") :]
+        self.assertRegex(resume, r"(?i)steps 1\D5")
+        self.assertRegex(resume, r"(?i)after a findings item[^\n]*Resuming after a findings item")
+        self.assertRegex(resume, r"(?i)never run the round's phase 1 gather again")
+        self.assertIn("feedback/<N>/", resume)
+
+    def test_one_open_round_at_a_time(self):
+        text = mission()
+        self.assertRegex(text, r"(?i)one open round at a time")
+        self.assertRegex(text, r"(?i)another PR[^\n]*(don't|do not) start round `?<N>`?")
+        self.assertRegex(text, r"(?i)next relaunch")
+        self.assertRegex(round_section(), r"(?i)supersede[^\n]*only[^\n]*same PR|same PR[^\n]*supersede")
+
+    def test_a_round_never_ends_the_run_better_than_it_found_it(self):
+        text = mission() + "\n" + ending()
+        self.assertRegex(text, r"(?i)never ends the run better than it found it")
+        self.assertRegex(text, r"(?i)open items[^\n]*`## Autopilot calls`[^\n]*`## Inbox questions`")
+        self.assertRegex(text, r"(?i)result=partial[^\n]*`?inbox`?")
+
+    def test_launch_text_forms(self):
+        text = mission()
+        self.assertIn("$commodore resume <run-name>", text)
+        self.assertRegex(text, r"(?i)outside Admiral[^\n]*starts nothing")
+        self.assertRegex(text, r"(?i)`feedback status` is already `open`[^\n]*(still )?resumes")
+
+    def test_failed_check_options_and_used_round_numbers(self):
+        text = mission()
+        self.assertRegex(text, r"(?i)`Stop` \(recommended\)")
+        self.assertRegex(text, r"(?i)keeps? (a finished run's|its) old `result:` line")
+        self.assertRegex(text, r"(?i)counts as used when `<run>/feedback/<N>/` exists")
+
+    def test_an_ambiguous_bare_number_fails_the_check(self):
+        self.assertRegex(mission(), r"(?i)more than one[^\n]*(row|URL)[^\n]*(check )?fails")
+
+
+class RoundIsolation(unittest.TestCase):
+    def test_unit_names_and_item_ids_are_per_round(self):
+        text = round_section()
+        self.assertIn("r<N>-u<k>", text)
+        self.assertIn("review-round.sh", text)
+        self.assertIn("r<N>-t1", text)
+        self.assertIn("r<N>-ci1", text)
+
+    def test_briefs_never_overwrite_the_runs_common_brief(self):
+        text = round_section()
+        self.assertIn("feedback/<N>/brief-common.md", text)
+        self.assertIn("prompts/triager-r<N>.md", text)
+        self.assertRegex(text, r"(?i)never over `?<run>/brief-common\.md`?")
+
+    def test_launch_is_in_the_prs_own_unit(self):
+        self.assertRegex(round_section(), r"(?i)launch[^\n]*(triager|fix units)[^\n]*PR's own unit[^\n]*never `u1`")
+
+    def test_a_round_triages_only_what_is_new(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)newest comment is a reply this run recorded")
+        self.assertRegex(text, r"(?i)gather time[^\n]*per round|per round[^\n]*gather time")
+        self.assertRegex(text, r"(?i)name the dropped ones in the final report")
+
+    def test_order_inside_a_round(self):
+        self.assertRegex(
+            round_section(),
+            r"(?i)fast-forward the reused worktree[^\n]*head check[^\n]*clean rebase[^\n]*CI wait[^\n]*gather",
+        )
+
+    def test_triager_brief_and_cards(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)triager's brief points at[^\n]*triage/feedback\.md[^\n]*context")
+        self.assertRegex(text, r"(?i)cards cover only `items\.md` ids")
+
+    def test_with_autopilot_off_the_batch_is_one_question_item(self):
+        self.assertRegex(round_section(), r"(?i)with autopilot off[^\n]*step 11[^\n]*one question item")
+
+    def test_feedback_directories_must_be_real(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)neither `<top>/\.admiral` nor `<top>/\.admiral/untrusted` is a symlink")
+        self.assertRegex(text, r"(?i)`git ls-files`[^\n]*(error|fails)[^\n]*tracked")
+
+
+class PushSafety(unittest.TestCase):
+    def test_every_pushed_branch_is_caught_up(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)every branch the rebase moves")
+        self.assertRegex(text, r"(?i)every layer from the round's PR up")
+        self.assertRegex(text, r"(?i)caught-up remote head")
+
+    def test_remote_head_is_rechecked_right_before_each_push(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)right before each[^\n]*push-branch\.sh")
+        self.assertIn("git rev-parse origin/<branch>", text)
+        self.assertRegex(text, r"(?i)(not|no longer) equal[^\n]*question item[^\n]*push nothing more")
+
+    def test_upstack_conflict_after_a_fix_is_not_a_second_findings_item(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)upstack[^\n]*conflict[^\n]*(not|never)[^\n]*second findings item")
+        self.assertRegex(text, r"(?i)pushes no more layers")
+        self.assertRegex(text, r"(?i)finish(es)? the round's Phase 3")
+        self.assertRegex(text, r"(?i)ends? the round `partial`[^\n]*`why`")
+
+
 class Changeset(unittest.TestCase):
     def test_changeset_is_minor(self):
         self.assertTrue(CHANGESET.is_file(), ".changeset/admiral-feedback-rounds.md is missing")
         self.assertIn('"jasonbuffin-skills": minor', CHANGESET.read_text(encoding="utf-8"))
+
+    def test_no_text_uses_the_old_rounds_directory(self):
+        for path in (SKILL, PF, MODES, CHANGESET):
+            self.assertNotIn("rounds/<N>", path.read_text(encoding="utf-8"), path.name)
 
 
 class StateSetAcceptsFeedbackKeys(unittest.TestCase):
