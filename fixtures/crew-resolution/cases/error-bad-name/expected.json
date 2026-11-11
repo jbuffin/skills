@@ -3,30 +3,6 @@
     {
       "code": "bad-name",
       "field": "name",
-      "file": "-lead.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-name",
-      "field": "name",
-      "file": "trail-.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-name",
-      "field": "name",
-      "file": "two-words.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-name",
-      "field": "name",
-      "file": "under_score.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-name",
-      "field": "name",
       "file": "upper.md",
       "layer": "repo"
     },

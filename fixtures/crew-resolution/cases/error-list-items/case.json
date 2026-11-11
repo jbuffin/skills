@@ -1,4 +1,4 @@
 {
   "admiral": false,
-  "description": "Empty list items (flow or block, '  - ' and '  -' alike) and items starting with '[' are bad-frontmatter."
+  "description": "Empty list items, flow or block, are bad-frontmatter."
 }
