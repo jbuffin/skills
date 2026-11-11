@@ -1,10 +1,4 @@
-"""Shared temp world for the crew-member evals (issue #199, unit u2).
-
-A world copies the shipped skill directories next to each other under a temp root, so `crew.py` finds its built-in
-members and the harness drivers the way an installed copy does (`<skills>/agent-teammates/scripts/drivers/`). The
-drivers it uses are fakes: a `has-skill` stub that answers from `<run>/installed.txt`, and a `driver.env` with the
-`SKILL_PREFIX` the test wants. No test reads the machine's real skills.
-"""
+"""A temp world of copied skills, fake harness drivers and a preflight fixture for the crew-member tests."""
 
 import json
 import os
@@ -19,7 +13,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 SRC_SKILLS = REPO / "skills" / "engineering"
 COPIED = ("commodore", "agent-teammates", "setup-commodore", "run-preflight", "target-evaluation")
-BASE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
+BASE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
 NINE = [
     "implementer",
     "test-writer",
@@ -35,11 +29,6 @@ HAS_SKILL_STUB = """#!/bin/sh
 # usage: has-skill <team-dir> <name>: installed when <team-dir>/installed.txt lists the name on a line of its own
 grep -qxF -- "$2" "$1/installed.txt" 2>/dev/null
 """
-HEADER = "| Role | Member | Based on | Skills | Instructions | Model | Harness | Source |"
-SEPARATOR = "| --- | --- | --- | --- | --- | --- | --- | --- |"
-ROLES_JSON_WARNING = (
-    "WARN  {path} is ignored: crew members replaced roles.json. Convert it with setup-commodore's convert-roles.py"
-)
 
 
 def member_text(name, role, *, pick=None, body=None, skills=None, based_on=None, model=None, extra=""):  # noqa: PLR0913
@@ -113,7 +102,6 @@ class World:
         self.stub_driver("claude", prefix="/")
         self.team_env()
 
-    # ------------------------------------------------------------------------------------------ setup
     def stub_driver(self, name, prefix="/", has_skill=True, list_skills=None):
         """Make drivers/<name> a fake: SKILL_PREFIX (none when `prefix` is None) and the has-skill stub."""
         d = self.drivers / name
@@ -146,7 +134,6 @@ class World:
         path.write_text(member_text(name, role or name, **kw))
         return path
 
-    # ------------------------------------------------------------------------------------------ running
     def env(self, **extra):
         env = {
             "PATH": BASE_PATH,
@@ -194,12 +181,8 @@ class WorldCase(unittest.TestCase):
     def warns(self, done):
         return [ln for ln in done.stderr.splitlines() if ln.startswith("WARN")]
 
-    def assert_cast_works(self, *args, env=None):
-        """Positive control for a "bad call is refused" test: the same world casts fine without the bad part."""
-        done = self.w.cast(*args, env=env)
-        self.assertEqual(done.returncode, 0, f"the control cast failed: {done.stderr}")
-        self.assertEqual(done.stdout.splitlines()[0], HEADER)
-        return done
+    def roles_json_warnings(self, done, path):
+        return [ln for ln in self.warns(done) if str(path) in ln and "convert-roles.py" in ln]
 
     def git_init(self, path):
         subprocess.run(["git", "-C", str(path), "init", "-q"], check=True)
@@ -207,3 +190,102 @@ class WorldCase(unittest.TestCase):
 
 def is_root():
     return hasattr(os, "geteuid") and os.geteuid() == 0
+
+
+PREFLIGHT = SRC_SKILLS / "commodore" / "scripts" / "team-preflight.sh"
+# The roles and models team-init.sh writes for Claude, in its order.
+DEFAULT_ROLES = [
+    "MODEL_BRIEF_CHECKER=opus",
+    "MODEL_TEST_WRITER=sonnet",
+    "MODEL_IMPLEMENTER=sonnet",
+    "MODEL_FIX_CHECKER=sonnet",
+    "MODEL_REVIEWER=opus",
+    "MODEL_SECURITY_REVIEWER=opus",
+    "MODEL_TRIAGER=opus",
+    "MODEL_TARGET_STEWARD=sonnet",
+    "MODEL_SCRIBE=sonnet",
+]
+# The claude driver's own preflight needs `claude` on PATH and `claude agents --json` to succeed.
+FAKE_CLAUDE = """#!/bin/sh
+[ "$1" = agents ] && echo "[]"
+exit 0
+"""
+PROBE_STUB = """#!/bin/sh
+printf '%s %s\\n' "$1" "$2" >> "$PROBE_LOG"
+echo "ADVISOR ON $2"
+"""
+
+
+class PreflightCase(unittest.TestCase):
+    """team-preflight.sh against a hand-written team.env, a git checkout and an ADVISOR_PROBE stub that logs."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        self.team = self.root / "team"
+        self.team.mkdir()
+        self.repo = self.root / "checkout"
+        self.repo.mkdir()
+        git = ["git", "-C", str(self.repo)]
+        subprocess.run([*git, "init", "-q"], check=True)
+        subprocess.run([*git, "config", "user.email", "test@example.com"], check=True)
+        subprocess.run([*git, "config", "user.name", "Test"], check=True)
+        self.log = self.root / "probe.log"
+        self.stub = self.root / "probe-stub"
+        self.stub.write_text(PROBE_STUB)
+        self.stub.chmod(0o755)
+        self.home = self.root / "home"
+        self.home.mkdir()
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        fake = self.bin / "claude"
+        fake.write_text(FAKE_CLAUDE)
+        fake.chmod(0o755)
+
+    def team_env(self, *lines, model="sonnet", advisor="opus", roles=DEFAULT_ROLES, harness="claude"):
+        body = [
+            f"HARNESS={harness}",
+            f"REPO={self.repo}",
+            "REQUIRED_TOOLS=git",
+            "MODE=single",
+            f"MODEL={model}",
+            f"ADVISOR={advisor}",
+            "REQUIRE_ROLE=1",
+            *roles,
+            *lines,
+        ]
+        (self.team / "team.env").write_text("\n".join(body) + "\n")
+
+    def run_preflight(self, probe=True, claudecode="1", **extra):
+        # Without CLAUDECODE, detect-harness.sh prints nothing and no probe starts at all.
+        env = {
+            "PATH": f"{self.bin}:{BASE_PATH}",
+            "HOME": str(self.home),
+            "LANG": "en_US.UTF-8",
+            "PROBE_LOG": str(self.log),
+            "CLAUDECODE": claudecode,
+        }
+        if not claudecode:
+            del env["CLAUDECODE"]
+        if probe:
+            env["ADVISOR_PROBE"] = str(self.stub)
+        env.update(extra)
+        return subprocess.run(
+            [str(PREFLIGHT), str(self.team)],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+
+    def probed(self):
+        """(run-dir, model) for every probe the stub logged, sorted."""
+        if not self.log.exists():
+            return []
+        return sorted(tuple(line.split(" ", 1)) for line in self.log.read_text().splitlines())
+
+    def lines(self, done, prefix):
+        return [line for line in done.stdout.splitlines() if line.startswith(prefix)]
