@@ -2,15 +2,7 @@
 r"""Check that a workflow's branch filters let PRs based on a given branch run.
 
 usage: ci-branch-check.py <workflow.yml> <branch-name>
-
-Exit 0 if a PR whose BASE is <branch-name> runs the workflow through pull_request or pull_request_target (a
-trigger with no branch filter lets every PR run); exit 1 if the filters skip it; exit 2 if the workflow has no
-pull_request trigger at all. Prints why. Stacked PRs target the branch below them, so a filter naming only the
-trunk gives every PR above the bottom one no CI at all.
-Reads both `branches:` and `branches-ignore:`, as block lists, flow lists, single values or a flow mapping on
-the event's line. Uses PyYAML when it's installed, else a line parser. Understands GitHub's filter patterns:
-* (no slash), ** (anything), ? (zero or one of the preceding character), + (one or more of it), [] (a character
-class), \ (escape) and a leading ! (negation). Comments ignored. Runs on Python 3.9 and later.
+Exit 0 if a PR based on <branch-name> runs the workflow, 1 if the branch filters skip it, 2 if it has no PR trigger.
 """
 
 from __future__ import annotations

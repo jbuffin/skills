@@ -1,24 +1,9 @@
 #!/usr/bin/env python3
 """Turn a triager's report into a `findings` inbox item draft.
-
 usage: cards-draft.py <report.md> <out-draft.json> <pr-url> <id> <title> <items.md>
 
-The report must hold exactly one fenced `json` block (the info string is case-insensitive, and the fence starts at
-column 0): the cards array (references/finding-cards.md). Other fences are ignored. The report is untrusted data:
-this script only parses the block as strict JSON (a duplicate key is an error) and never evaluates anything. items.md
-is the coordinator's triage item list; each item's line starts with its ID (`t1`, `r1`, `c1`, `ci1`), optionally
-behind a list marker, a number or a table `|`, and holds exactly one https URL, the item's link (an `r`, `c` or `ci`
-line may hold none, and then a `rerun` card for that item is refused). The cards must be objects whose string ids are
-unique and equal the items' ids in items.md's order. A `t` card's first `evidence` entry is the item's link. A `rerun`
-proposal is allowed only on a `ci` card, with the item's link as its content. The
-finished draft must pass admiral-inbox-item.schema.json. The draft is `version` 1, `kind` `findings`, `id`, `created`
-now, `title` and `findings.{pr_url, cards}`.
-
-Exit 0 with the draft written. Exit 1 with nothing written when the triager's report is wrong (no block, more than one,
-not UTF-8, not an array, nested too deep, a lone surrogate, a bad card, or a card the rules above or the schema
-refuse): send the triager back. Exit 2 with nothing written when the coordinator or the environment is wrong (an
-unreadable file or items.md, an items.md with no ids, a repeated id, a line with two URLs or a `t` line without one,
-a bad id, pr-url or title argument, a write error): never send the triager back. Exit 5 on usage.
+Exit 0 with the draft written. Exit 1, writing nothing, when the triager's report is wrong: send the triager back.
+Exit 2, writing nothing, when the coordinator's input or the environment is wrong. Exit 5 on usage.
 """
 
 import json
@@ -71,11 +56,7 @@ def cards(report):
 
 
 def items(text):
-    """item id -> its link (None for an r, c or ci item without one), in items.md's order.
-
-    items.md is the coordinator's file: a repeated id, a line with more than one URL, or a t line with no URL is
-    its mistake, not the triager's.
-    """
+    """item id -> its link (None for an r, c or ci item without one), in order; a bad line is the coordinator's."""
     found = {}
     for item_id, rest in ITEM_RE.findall(text):
         links = [link.rstrip(".,;:!?") for link in LINK_RE.findall(rest)]

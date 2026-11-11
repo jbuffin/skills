@@ -2,19 +2,16 @@
 # usage: state-set.sh <run> mode <key> <value>
 #        state-set.sh <run> mode --set <key>=<value> [<key>=<value> ...]
 #        state-set.sh <run> <units|trace|findings> <row-key> <column> <value>
-#        state-set.sh <run> <units|trace|findings> --set <row-key> <column>=<value> [<column>=<value> ...] [--set <row-key> ...]
+#        state-set.sh <run> <units|trace|findings> --set <row-key> <column>=<value> ... [--set <row-key> ...]
 #        state-set.sh <run> <units|trace|findings> --add <row-key> [<column>=<value> ...]
 #        state-set.sh <run> <units|trace|findings> --drop <row-key>
-# Edits <run>/state.md in place and prints nothing. `mode` adds or replaces a `key: value` line under
-# `## Mode, phase, current unit`; the tables address a row by its first column and a column by its header, without the
-# part in brackets. A status must be one of its table's set: units planned|building|review|shipping|closed, trace
-# open|partial|done|blocked, findings open|fixed|human; --add starts it at the first. A value can't hold a newline, and
-# a `|` in a cell is escaped. A section from before this format is refused: edit it by hand. --set changes several
-# fields of one section in one call, the same as setting them one call at a time in order, or none of them: a
-# `<key>=<value>` pair splits at its first `=`, and a table call takes one `--set <row-key> <column>=<value> ...` per row.
+# Edits <run>/state.md in place and prints nothing. A row is addressed by its first column, a column by its header
+# without the part in brackets. Statuses: units planned|building|review|shipping|closed, trace open|partial|done|blocked,
+# findings open|fixed|human; --add starts at the first. A value can't hold a newline; a `|` is escaped. --set applies
+# all its fields in order, or none. A section in an older format is refused: edit it by hand.
 # Exits 1 on a refusal, with one line on stderr, and 5 on bad usage.
 SELF=$0
-usage() { sed -n 2,15p $SELF >&2; exit 5; }
+usage() { sed -n 2,12p $SELF >&2; exit 5; }
 # Fills FR, FC and FV with one entry per field from <key>=<value> pairs (mode) or --set groups (tables).
 parsebatch() {
   local r p

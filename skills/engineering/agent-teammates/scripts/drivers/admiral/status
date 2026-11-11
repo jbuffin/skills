@@ -1,10 +1,7 @@
 #!/bin/zsh
 # usage: status <team-dir>   (see ../CONTRACT.md)
-# One line per teammate the registry holds an open row for: underway is working, needs_you and idle are blocked, anchored is stopped, and
-# a boat absent from `crew list` is missing. Boats the run didn't register are not printed (a ship holds other boats too).
-# The epoch is last_activity, `-` until the boat's first hook. A read-only Codex/Copilot teammate (`delegated`, in lib.zsh) is
-# no crew boat: its line comes from the status of the harness in its registry row (column 6), after the boats', and it is never missing.
 [[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
+# boats the run didn't register are left out: a ship holds other boats too
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
@@ -31,8 +28,7 @@ for i in sys.argv[1:]:
     print(i, "-", STATES.get(b.get("state"), b.get("state") or "-") if b else "missing", epoch(b.get("last_activity")) if b else "-")' $boats) || exit 3
 [[ -n $rows ]] && print -r -- "$rows"
 if (( $#held )); then
-  # Each delegated id goes to the status of the harness in its registry row (column 6, read only now that `delegated` has accepted
-  # the id; the run's HARNESS for a five-column row). A bad value is skipped: that id then reads as missing to the watchdog.
+  # column 6 is read only after `delegated` accepted the id; a bad value is skipped, so the watchdog sees the id as missing
   typeset -A byharness
   byharness=()
   for i in $held; do

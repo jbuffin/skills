@@ -1,20 +1,14 @@
 #!/bin/zsh
-# Every unit works in its own git worktree, never in the engineer's checkout. Records "unit branch path"
-# in <run>/worktrees.tsv; agent-teammates' launch-teammate.sh starts each teammate in its unit's worktree.
-#
-# usage:
-#   unit-worktree.sh <run> new   <unit> <branch> [base]     single unit / independent units: new branch from origin/<base>
-#   unit-worktree.sh <run> pr    <unit> <pr-number>         existing PR: a worktree on the PR's head branch, brought up
-#                                                           to date with origin (fails if the local branch has diverged)
-#   unit-worktree.sh <run> stack <base> <unit>=<branch>...  a stack: branch + worktree per unit, each from the one below,
-#                                                           then `gh stack init` adopts them (needs gh-stack >= 0.2.0)
-#   unit-worktree.sh <run> stack-add <unit> <branch>        add a unit on top of the existing stack
-#   unit-worktree.sh <run> path  <unit>                     print a unit's worktree path
-# Worktrees go in $WORKTREES_DIR/<run-name>-<unit> (default <repo>/.claude/worktrees).
-# WORKTREE_SETUP in team.env lists the untracked files each worktree needs from the repository's checkout,
-# space separated: copy:<path> (cp) or clone:<path> (an APFS clone, cp -c, for large trees like node_modules).
-# A path already present in the worktree is left alone. Stack order (bottom to top) is kept in <run>/stack.txt.
-[[ -z $1 || -z $2 || ! -f $1/team.env ]] && { sed -n 2,16p $0; exit 5; }
+# usage: unit-worktree.sh <run> new   <unit> <branch> [base]     new branch from origin/<base>
+#        unit-worktree.sh <run> pr    <unit> <pr-number>         the PR's head branch, fast-forwarded to origin
+#        unit-worktree.sh <run> stack <base> <unit>=<branch>...  a branch per unit, each on the one below, adopted
+#                                                                by `gh stack init` (needs gh-stack >= 0.2.0)
+#        unit-worktree.sh <run> stack-add <unit> <branch>        add a unit on top of the stack
+#        unit-worktree.sh <run> path  <unit>                     print a unit's worktree path
+# Makes the unit's worktree in $WORKTREES_DIR/<run-name>-<unit> (default <repo>/.claude/worktrees) and records it in
+# <run>/worktrees.tsv. WORKTREE_SETUP in team.env lists untracked files to bring from the checkout, space separated:
+# copy:<path> or clone:<path> (an APFS clone). A path already in the worktree is left alone.
+[[ -z $1 || -z $2 || ! -f $1/team.env ]] && { sed -n 2,10p $0; exit 5; }
 source $1/team.env; RUN=${1:A}; MODE=$2; shift 2
 REPO=${REPO:-$WORKTREE}
 WT_DIR=${WORKTREES_DIR:-$REPO/.claude/worktrees}
@@ -44,8 +38,7 @@ not_repo() {
   echo "branch $2 is checked out in the repository's own checkout ($REPO). Switch that checkout off $2 (e.g. git switch ${BASE_BRANCH:-main}) and rerun, so the unit gets its own worktree."
   exit 1
 }
-# A branch that already exists locally may be behind the PR; working on it and then pushing --force-with-lease
-# against the freshly fetched ref would throw the newer commits away. Fast-forward it, or stop.
+# Pushing --force-with-lease from a local branch behind the PR would throw its newer commits away.
 catch_up() {
   local wt=$1 b=$2
   [[ -z $(git -C $wt rev-list -1 HEAD..origin/$b 2>/dev/null) ]] && return 0
@@ -109,5 +102,5 @@ case $MODE in
     (cd $topp && gh stack add $B) || exit 1
     record $U $B $P; print -r -- $U >> $RUN/stack.txt ;;
   path) path_of $1 ;;
-  *) sed -n 2,16p $0; exit 5 ;;
+  *) sed -n 2,10p $0; exit 5 ;;
 esac

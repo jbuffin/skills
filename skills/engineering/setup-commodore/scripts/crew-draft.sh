@@ -1,25 +1,15 @@
 #!/bin/zsh
-# usage: crew-draft.sh init <user|repo> [harness] | skills <run> | check <run> | save <run>
-# Drafts Commodore crew members (commodore/references/crew-members.md) in a scratch run dir, using commodore's crew.py and
-# the harness driver's list-skills and has-skill. Run it from the repo.
-#   init   makes the run dir, its team.env (HARNESS, REPO, TARGET) and <run>/draft/, and copies the target's role-named
-#          members into the draft, skipping a symlink or a file that resolves outside the target with a `WARN` line on
-#          stderr. Prints on stdout the run dir, then `FROM <dir>` or `NEW <dir>`, then `ROLESJSON <file>` when the
-#          target still holds a roles.json, then `ROLES <commodore's references/roles.md>`. The harness comes from
-#          detect-harness.sh unless named. check and save use this target alone.
-#   skills prints `<name><TAB><file><TAB><description>` for each skill the harness can load here; <file> is the skill's
-#          SKILL.md or agent file, `-` for none, and so is a missing description.
-#   check  casts the crew with the draft as the run layer (the ADMIRAL_ variables unset), which pins each role it holds.
-#          Prints on stdout the cast table, a SHADOWED line for each draft member that the repo has a member of the same
-#          name for (user target only), an OUTRANKED line for each differently named repo member of a draft role, an UNSET
-#          line for each role the draft leaves out (never the fix checker), then `CLEAN` or `NOT CLEAN: <n> warnings`.
-#          Its WARN lines go to stderr; the security reviewer's warning doesn't count against CLEAN.
-#   save   copies each draft file into the target dir through a temp file and removes the target's role-named member for
-#          a role the draft leaves out. Prints `SAVED <file>` or `REMOVED <file>` per change. No other member is touched.
-#          Exits 1 and changes nothing when the target dir or its parent below the target root is a symlink, or a member
-#          file it would write or remove is one.
-# Exits 1 when cast fails, list-skills fails or save refuses, 3 when the harness has no list-skills, 5 on a bad call.
-usage() { sed -n 2p $0 >&2; exit 5; }
+# usage: crew-draft.sh init <user|repo> [harness] | skills <run> | check <run> | save <run>     (run it from the repo)
+#   init   makes the run dir, its team.env and <run>/draft/, and copies the target's role-named members into the draft
+#          (a symlink or a file outside the target is skipped with a WARN on stderr). Prints the run dir, `FROM <dir>`
+#          or `NEW <dir>`, `ROLESJSON <file>` when the target holds a roles.json, then `ROLES <roles.md>`.
+#   skills prints `<name><TAB><file><TAB><description>` per skill the harness can load, `-` for no file or description.
+#   check  casts the crew with the draft as the run layer. Prints the cast table, SHADOWED, OUTRANKED and UNSET lines,
+#          then `CLEAN` or `NOT CLEAN: <n> warnings`; WARN lines go to stderr.
+#   save   copies the draft into the target and removes the role-named member of a role the draft leaves out. Prints
+#          `SAVED <file>` or `REMOVED <file>`; refuses with exit 1, changing nothing, on a symlinked dir or member file.
+# Exits 1 when cast, list-skills or save fails, 3 when the harness has no list-skills, 5 on a bad call.
+usage() { sed -n 2,11p ${ZSH_ARGZERO:-$0} >&2; exit 5; }
 # commodore and agent-teammates: siblings when installed, under skills/engineering in this repo's checkout.
 for SK in ${0:A:h:h:h} ${0:A:h:h:h:h}/skills/engineering; do [[ -f $SK/commodore/scripts/crew.py ]] && break; done
 [[ -f $SK/commodore/scripts/crew.py ]] || { print -u2 "can't find commodore's crew.py next to ${0:A:h:h}"; exit 5; }
@@ -35,7 +25,7 @@ target_dir() {  # target_dir <user|repo>: the crew directory for the target; REP
   esac
 }
 env_value() { sed -n "s/^$1='\(.*\)'\$/\1/p" $RUN/team.env; }
-load_run() {  # load_run <run>: sets RUN, HARNESS, REPO and TARGET from the run's team.env
+load_run() {
   [[ -n $1 && -f $1/team.env && -d $1/draft ]] || { print -u2 "$1 isn't a run dir from crew-draft.sh init"; exit 5; }
   RUN=${1:A}
   HARNESS=$(env_value HARNESS); REPO=$(env_value REPO); TARGET=$(env_value TARGET)

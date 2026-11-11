@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Check a question answer against the inbox item it answers: what references/admiral-answer.schema.json can't say.
-
-usage: answer-check.py <item.json> <answer.json>
-
-Exit 0 if the answer fits the item; 1 if it doesn't (one reason per line on stderr); 2 if a file can't be read or
-isn't strict JSON. Run schema-check.py on the answer as well: this script checks only the cross-file rules.
-
-The answer must name the item's id, the item must be a question item, the answer's question ids must be exactly the
-item's, and each answer needs a `choice` or an `other`. A `choice` is one of that question's option labels, and a list
-of labels only on a `multi` question. These are the rules Admiral's own inbox answers follow (ADR 0016).
-"""
+"""Check an answer against the question item it answers, for the cross-file rules its schema can't express."""
 
 import importlib.util
 import sys

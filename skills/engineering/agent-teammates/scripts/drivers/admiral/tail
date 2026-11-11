@@ -1,11 +1,7 @@
 #!/bin/zsh
 # usage: tail <team-dir> <label> <session-id> <n>   (see ../CONTRACT.md)
-# Finds the boat's transcript in `crew list --json` (ADR 0021). Claude: runs the claude driver's tail on it, with the id the
-# transcript's basename without .jsonl and CLAUDE_CONFIG_DIR its ../../.. (<config>/projects/<project>/<id>.jsonl). Codex and
-# Copilot: their tails can't read a crew boat's transcript (codex needs its state file and `exec --json` events, copilot
-# hard-codes ~/.copilot), so this prints the path and the last <n> lines raw, each cut to 300 characters. A read-only
-# teammate (`delegated`, in lib.zsh) is no crew boat: its harness driver's tail runs instead.
-[[ $# -eq 4 ]] || { sed -n 2,4p $0; exit 5; }
+[[ $# -eq 4 ]] || { sed -n 2p $0; exit 5; }
+# codex's and copilot's tails can't read a crew boat's transcript, so for those this prints its last lines raw
 D=${1:A}; W=$2; id=$3; N=$4
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
@@ -21,9 +17,8 @@ if [[ $TH != claude ]]; then
   fi
   [[ -r $tr ]] || { echo "can't read the transcript of $W ($id): $tr"; exit 3; }
   echo "transcript: $tr"
-  # The cut counts characters, not bytes (a byte cut can split a multi-byte one).
-  # Split on \n alone (JSON may carry U+2028 raw) and blank the control characters, as drivers/codex/tail does: a transcript
-  # line can quote anything, including escape sequences for the coordinator's terminal.
+  # split on \n alone (JSON may carry U+2028 raw), cut by characters, and blank control characters: a line can quote
+  # escape sequences for the coordinator's terminal
   command tail -n $N $tr | python3 -c 'import re, sys
 lines = sys.stdin.buffer.read().decode("utf-8", "replace").split("\n")
 if lines and lines[-1] == "": lines.pop()
@@ -32,8 +27,7 @@ for line in lines:
   exit 0
 fi
 [[ -n $tr ]] || { echo "no transcript recorded for $W ($id) yet: Admiral records it at the boat's first hook"; exit 3; }
-# The claude tail sources team-env.zsh, and team.env's CLAUDE_CONFIG_DIR (Commodore writes one) would override an environment
-# variable. A scratch team dir with a team.env of its own makes the transcript's directory the one it reads.
+# team.env's CLAUDE_CONFIG_DIR would override an environment variable, so the claude tail gets a scratch team dir of its own
 S=$(mktemp -d) || exit 1
 trap 'rm -rf $S' EXIT
 print -r -- "CLAUDE_CONFIG_DIR=${(q)tr:h:h:h}" > $S/team.env

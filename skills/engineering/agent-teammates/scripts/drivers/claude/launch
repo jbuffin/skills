@@ -10,8 +10,7 @@ live_named "$LIVE" $NAME && { echo "a live session is already named $NAME; close
 
 # --disallowedTools takes several values, so it goes before another flag, never right before the prompt.
 DENY=(); [[ -n $RO ]] && DENY=(--disallowedTools "Edit(/$W/**)" "NotebookEdit(/$W/**)")
-# A teammate gets the built-in advisor (ADVISOR, default opus; none turns it off) unless its model is in the same family as
-# ADVISOR: none by design. A refused pairing is dropped silently.
+# a refused advisor pairing is dropped silently, with no error
 ADV=(); [[ $ADVISOR != none ]] && ! advisor_same_family $CHOSEN $ADVISOR && ADV=(--advisor $ADVISOR)
 OUT=$(cd $W && claude --bg -n $NAME $DENY $ADV --model $CHOSEN --permission-mode $PERMISSION_MODE \
   "You are teammate $NAME. Read $P and do exactly what it says." 2>&1)

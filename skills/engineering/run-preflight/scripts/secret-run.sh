@@ -1,7 +1,6 @@
 #!/bin/zsh
 # usage: secret-run.sh <keychain-service> <ENV_VAR> -- <command> [args...]
-# Runs <command> with a Keychain secret in one environment variable. The value is never printed;
-# the command must not echo it either.
+# Runs <command> with a Keychain secret in <ENV_VAR>. The value is never printed; the command must not echo it either.
 setopt no_xtrace
 SVC=$1; VAR=$2; shift 2
 [[ $1 == -- ]] && shift

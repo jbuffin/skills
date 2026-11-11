@@ -8,8 +8,7 @@ ok()   { echo "OK    $*"; }
 bad()  { echo "FAIL  $*"; fail=1; }
 
 command -v copilot >/dev/null && ok "copilot found" || { bad "copilot not on PATH"; exit 1; }
-# turn <cwd> <prompt>: one headless turn with $CP_FLAGS in <cwd>. Sets TURN to ok, or to why not (timeout or exit code),
-# and leaves stdout in $OUT and stderr in $ERR. Own process group, so a timeout kills copilot's children too.
+# turn <cwd> <prompt>: sets TURN to ok or why not; its own process group, so a timeout kills copilot's children too
 turn() {
   perl -e 'chdir(shift) or die; setpgrp(0, 0); exec @ARGV' $1 copilot $CP_FLAGS -p $2 < /dev/null > $OUT 2> $ERR &
   local pid=$! i
@@ -27,8 +26,7 @@ OUT=$(mktemp) || { bad "couldn't create a temp file for the headless turn"; exit
 ERR=$(mktemp) || { rm -f $OUT; bad "couldn't create a temp file for the headless turn"; exit 1; }
 WT=; TT=
 trap 'rm -rf $OUT $ERR $WT $TT' EXIT
-# One cheap headless turn with the trimmed read-only tool set. Too many MCP tool definitions overflow the context
-# and `copilot -p` then exits 0 with no output.
+# too many MCP tool definitions overflow the context, and `copilot -p` then exits 0 with no output
 M=${MODEL_REVIEWER:-${MODEL_IMPLEMENTER:-${MODEL:--}}}
 cp_flags 1 "$M" - $(cp_uuid)
 turn . "Reply with the single word OK."
@@ -38,10 +36,8 @@ elif [[ -s $OUT ]]; then ok "copilot headless turn returned output"
 else bad "copilot headless turn printed nothing: the tool definitions probably overflow the context; trim your MCP servers"
 fi
 (( fail )) && exit 1
-# One headless turn with the writer flags, as a real writer from this run dir gets them, in a throwaway git dir with a
-# throwaway team dir declaring a trivial proof. It runs evidence.sh from this driver's scripts dir, which is the
-# --add-dir under test: Copilot's path guard refuses a shell command that touches a path outside the working directory
-# and the added dirs, even with --allow-all-tools.
+# a writer turn runs evidence.sh from the --add-dir under test: Copilot's path guard refuses a command touching a path
+# outside the working directory and the added dirs, even with --allow-all-tools
 WT=$(mktemp -d) && TT=$(mktemp -d) || { bad "couldn't create temp dirs for the writer turn"; exit 1; }
 git -C $WT init -q 2>/dev/null
 mkdir -p $TT/prompts

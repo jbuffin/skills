@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Check that every relative Markdown link in the repo points at a file or directory that exists.
-
-usage: check-links.py [root]
-
-Skips URLs, in-page anchors, placeholder targets like <path>, and anything inside fenced code blocks.
-Prints one line per broken link and exits 1 if there are any.
-"""
+"""Check that every relative Markdown link outside code fences resolves (usage: check-links.py [root])."""
 
 import re
 import subprocess

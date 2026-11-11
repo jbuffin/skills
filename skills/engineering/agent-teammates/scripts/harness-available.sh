@@ -1,11 +1,8 @@
 #!/bin/zsh
 # usage: harness-available.sh <team-dir> <harness>
-# Whether <harness> can start a teammate here, from the harness driver's `available` operation (the admiral driver's inside a ship).
-# Exit 0: available, with an optional WARN line on stdout; 1: not available, one line of reason on stdout; 5: a bad call or a bad
-# harness name. A driver with no `available` counts as available (WARN  harness <h> has no available operation). A harness
-# whose driver can't message a teammate of its own harness from this lead (SEND=tool outside Admiral) is not available either.
-# Starts no session. Writes only what team-env.zsh creates in the team dir.
-[[ $# -eq 2 && -d $1 && -n $2 ]] || { sed -n 2,3p $0; exit 5; }
+# Whether <harness> can start a teammate here, from its driver's `available` operation (the admiral driver's inside a ship).
+# Exit 0: available, maybe with a WARN line; 1: not available, with one line of reason; 5: a bad call or harness name.
+[[ $# -eq 2 && -d $1 && -n $2 ]] || { sed -n 2,4p $0; exit 5; }
 D=${1:A}; export TEAMMATE_HARNESS=$2
 source ${0:A:h}/team-env.zsh
 # A lead can only re-task a SEND=tool teammate (Claude's SendMessage) from the same harness, or from inside Admiral.

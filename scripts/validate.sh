@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Check every SKILL.md in skills/ and incubator/ against the Agent Skills frontmatter rules,
-# plus this repo's conventions: incubator skills are internal, promoted skills are not; every
-# category is in plugin.json; every promoted skill is in the README; both plugin manifests carry the
-# package.json version; scripts are executable; relative links resolve.
+# Check every SKILL.md against the Agent Skills frontmatter rules and this repo's conventions: internal flags,
+# plugin.json categories, README rows, manifest versions, executable scripts, links and comments.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -87,6 +85,11 @@ done < <(git -C "$root" grep -n -i -E 'gh pr merge|merge --auto|auto[-_]merge' -
 python3 "$root/scripts/check-links.py" "$root" >/dev/null || {
   python3 "$root/scripts/check-links.py" "$root" | sed 's/^/  ✗ /' >&2 || true
   fail "links" "broken relative links (see above)"
+}
+
+python3 "$root/scripts/check-comments.py" "$root" >/dev/null || {
+  python3 "$root/scripts/check-comments.py" "$root" | sed 's/^/  ✗ /' >&2 || true
+  fail "comments" "comments break the rule in AGENTS.md (see above)"
 }
 
 if (( errors > 0 )); then

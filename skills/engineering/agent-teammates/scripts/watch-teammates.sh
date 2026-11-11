@@ -48,9 +48,7 @@ while true; do
     m=$(zstat +mtime -- "$f"); [[ "${seen[$f]}" != "$m" ]] && { seen[$f]=$m; print -r -- "$f $m" >> $SEEN; emit "DONE ${${f:t}%.done}"; }
   done
   now=$(date -u +%s)
-  # Each open teammate's harness is the registry's sixth column (the run's HARNESS for a five-column row). Teammates are grouped by
-  # the driver select_driver picks for them, and each group is listed once with its own TEAMMATE_HARNESS: inside a ship with autopilot
-  # off that is one admiral call, which routes a delegated teammate by its column.
+  # one status call per driver; inside a ship with autopilot off that is one admiral call for every harness
   typeset -A gdriver gth gstates gok
   gdriver=(); gth=(); gstates=(); gok=()
   groups=()

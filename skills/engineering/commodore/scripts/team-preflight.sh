@@ -1,10 +1,7 @@
 #!/bin/zsh
-# usage: team-preflight.sh <run-dir>
-# The team-specific static checks (runtime, mode, gh-stack, advisor, worktrees, role skills, the harness each locked crew
-# member runs on), then the generic ones from the run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
-# Run it in the background or with a long timeout: it starts one real session per distinct teammate model that is not in the
-# same family as ADVISOR (in parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
-# A model in the same family as ADVISOR starts no probe: it has no advisor by design, and gets one OK line.
+# usage: team-preflight.sh <run-dir>    (run in the background: the advisor probes take 15 s to 5 min)
+# The team checks (runtime, mode, gh-stack, advisor, worktrees, role skills, each locked member's harness), then
+# run-preflight's. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2,4p $0; exit 5; }
 unset HARNESS HARNESS_{IMPLEMENTER,TEST_WRITER,REVIEWER,SECURITY_REVIEWER,BRIEF_CHECKER,TRIAGER,TARGET_STEWARD,SCRIBE,FIX_CHECKER}
 # HARNESS and HARNESS_<ROLE> come from team.env alone, never from the caller's environment
@@ -18,8 +15,7 @@ MODEL=${MODEL:-sonnet}; ADVISOR=${ADVISOR:-opus}
 # Not team-env.zsh: sourcing that creates teammates.tsv and reports/ in the run directory.
 source ${0:A:h:h:h}/agent-teammates/scripts/advisor-family.zsh
 
-# The harness this run was started from: HARNESS in team.env (a team.env from before drivers has none; every earlier
-# run was Claude) must match the environment, and have a driver.
+# A team.env from before drivers has no HARNESS: that run was Claude.
 HARNESS=${HARNESS:-claude}
 harness_ok=1
 if [[ ! $HARNESS =~ '^[a-z0-9-]+$' ]]; then
@@ -35,9 +31,7 @@ else
     $DRIVER/preflight $1 || fail=1
   fi
 fi
-# Locked crew members (docs/adr/0008): every distinct locked harness gets its own driver's preflight (never the Admiral
-# host driver's, even inside a ship) and harness-available.sh, output prefixed [<h>]. A failure is a FAIL line the
-# Commodore puts in the decision batch. Roles are in cast order.
+# Each distinct locked harness gets its own driver's preflight, never the Admiral host driver's, even inside a ship.
 cast_roles=(implementer test-writer reviewer security-reviewer brief-checker triager target-steward scribe fix-checker)
 typeset -A locked_roles; locked=()
 for r in $cast_roles; do
@@ -73,10 +67,8 @@ if [[ $MODE == stack ]]; then
   else bad "gh-stack $v keeps stack tracking per worktree; one worktree per unit needs >= 0.2.0 (gh extension upgrade gh-stack)"; fi
   [[ $(git -C $REPO config rerere.enabled) == true ]] && ok "rerere enabled" || warn "git rerere off (git config rerere.enabled true helps stack rebases)"
 fi
-# The built-in advisor comes on silently or not at all in a background session, so probe it once per distinct
-# teammate model: MODEL plus every non-empty MODEL_<ROLE> assigned in team.env itself (not the environment). A model in the
-# same family as ADVISOR has no advisor by design: no probe, one OK line.
-# ADVISOR_PROBE is a test seam: an executable that replaces advisor-probe.sh, called as `<probe> <run-dir> <model>`.
+# The advisor comes on silently or not at all in a background session, so probe each distinct teammate model.
+# ADVISOR_PROBE is a test seam that replaces advisor-probe.sh, called as `<probe> <run-dir> <model>`.
 if [[ $ADVISOR == none ]]; then
   ok "advisor check skipped (ADVISOR=none)"
 elif [[ -z $harness_ok ]]; then
@@ -142,8 +134,7 @@ if [[ -d $REPO ]]; then
   done
   (( ${#unlisted} )) && warn "ignored in the checkout, so absent from new worktrees: ${(j:, :)unlisted}. Add each one the build or tests read to WORKTREE_SETUP (copy: or clone:)"
 fi
-# Crew (docs/adr/0007): crew.py cast's warnings pass through (a dropped skill, a security reviewer without one, a leftover
-# roles.json); its errors, and any other failure, fail the preflight.
+# crew.py cast's warnings pass through; its errors, and any other failure, fail the preflight.
 cast=$(${0:A:h}/crew.py cast --run $1 2>&1 >/dev/null); rc=$?
 warns=(${(M)${(f)cast}:#WARN*})
 (( $#warns )) && print -rl -- $warns

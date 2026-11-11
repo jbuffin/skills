@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-r"""Check a JSON file against a JSON Schema (the draft 2020-12 keywords Commodore's Admiral schemas use).
-
-usage: schema-check.py <schema.json> <instance.json> [--into <dir> | --to <file> | --new <file>]
-       schema-check.py --json <file>
-
-Exit 0 if the instance is valid; 1 if it is invalid or isn't JSON (one reason per line on stderr, each naming the
-offending field by its path); 2 if the check can't run (unreadable or malformed schema, unreadable instance, a
-schema keyword this script doesn't implement, or a failed publish). Stdlib only, because `jsonschema` isn't installed.
-
-JSON is parsed strictly: a duplicate object key, NaN, Infinity and numbers that overflow to infinity are errors, so
-every parser reads the same value. With --into <dir> a valid instance is published, re-serialised from the parsed
-value, to <dir>/<its id>.json, and an existing entry there (file, directory or symlink) is an error. With --to <file> it
-replaces <file>. With --new <file> it is written to <file>, and an existing entry there is an error. All three go
-through a dot-prefixed temp file in the destination directory, and nothing is created for an invalid instance.
-`--json <file>` only checks that the file is strict JSON (exit 0, else 1).
-
-Implemented: type, required, properties, additionalProperties, items, enum, const, pattern, allOf, if/then/else, not,
-and boolean schemas. Annotations ($schema, $id, $comment, title, description, default, examples) are ignored. Any other
-keyword exits 2, naming it, wherever it sits in the schema, so a schema can't silently stop asserting.
-
-Strings are matched with an unanchored search, as JSON Schema says. `$` means end of string only (as in ECMA 262),
-not "before a trailing newline" as in Python, and \d and \w stay ASCII.
-"""
+"""Check a JSON file against the JSON Schema draft 2020-12 keywords the Admiral schemas use; stdlib only."""
 
 import json
 import math

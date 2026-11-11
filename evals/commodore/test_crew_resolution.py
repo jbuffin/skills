@@ -94,8 +94,7 @@ class ResolverCase(unittest.TestCase):
 
 
 class World:
-    """A temp world for `--run`: a copy of crew.py beside its own `crew/` built-in directory, a run dir, a repo and a
-    home."""
+    """A temp world for `--run`: crew.py with its built-in `crew/`, a run dir, a repo and a home."""
 
     def __init__(self, test):
         self.test = test

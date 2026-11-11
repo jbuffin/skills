@@ -98,10 +98,7 @@ if "--bg" in args:
 sys.exit(0)
 """
 
-# The fake codex and copilot answer like the CLIs the harness drivers start, quickly: `codex exec` prints
-# thread.started, an agent message and turn.completed on stdout and writes its last message to the `-o` file;
-# `copilot -p` prints the report. A file `<tool>.sleep` in ctl/ (seconds) keeps the call alive so `stop` has something
-# to kill. Every call is logged on entry; `<tool>.finished` gets one line per call that ran to its end.
+# A ctl/<tool>.sleep file (seconds) keeps a fake call alive so `stop` has something to kill.
 FAKE_CODEX = """#!{python}
 import json, os, sys, time, uuid
 ctl = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ctl")

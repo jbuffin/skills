@@ -49,8 +49,7 @@ class PrReadyCase(unittest.TestCase):
         self.log.write_text("")
 
     def go(self, *, on=False, auto_merge=None, unit=UNIT, draft=True, state="OPEN", view_fails=False, pr_cell=URL):  # noqa: PLR0913
-        """Builds the fixture run, runs the script, and returns a Result. `on` is ADMIRAL_AUTOPILOT=1 plus
-        state.md's `autopilot: on`."""
+        """Run the script on the fixture run; `on` sets ADMIRAL_AUTOPILOT=1 and state.md's `autopilot: on`."""
         self.log.write_text("")
         run = self.tmp / "run"
         run.mkdir(exist_ok=True)
