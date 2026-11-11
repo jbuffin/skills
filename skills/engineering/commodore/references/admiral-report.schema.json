@@ -47,6 +47,30 @@
       "type": "string",
       "pattern": "^[/$]commodore resume [A-Za-z0-9][A-Za-z0-9._-]*$",
       "description": "Text to launch with once every inbox item is answered."
+    },
+    "notes": {
+      "type": "array",
+      "description": "Crew note proposals for Admiral's Inbox to approve, at most 3 per member (Commodore enforces that). A fleet proposal carries the run's repo when one is known, else null. ad-hoc is true when the member is an ad hoc member.",
+      "items": {
+        "type": "object",
+        "required": ["member", "role", "scope", "repo", "note", "replaces", "ad-hoc"],
+        "additionalProperties": false,
+        "properties": {
+          "member": { "type": "string" },
+          "role": { "type": "string" },
+          "scope": { "enum": ["fleet", "repo"] },
+          "repo": { "type": ["string", "null"], "description": "<owner>/<repo>, or null." },
+          "note": { "type": "string", "pattern": "\\S", "description": "One-line fact." },
+          "replaces": { "type": ["string", "null"], "description": "The exact note line it replaces, without the leading \"- \", or null." },
+          "ad-hoc": { "type": "boolean" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "scope": { "const": "repo" } }, "required": ["scope"] },
+            "then": { "properties": { "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" } } }
+          }
+        ]
+      }
     }
   },
   "allOf": [

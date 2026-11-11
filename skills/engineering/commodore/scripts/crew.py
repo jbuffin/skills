@@ -9,6 +9,7 @@ import re
 import stat
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 LAYERS = ["built-in", "fleet", "user-global", "repo", "run", "ad-hoc", "memory"]
@@ -58,6 +59,7 @@ USAGE = (
     "       crew.py resolve [--admiral] [--layer <label>=<dir> ...] [--layer memory=<dir>] [--repo <owner>/<repo>]\n"
     "       crew.py resolve --run <run-dir>\n"
     "       crew.py notes --run <run-dir> --member <name>\n"
+    "       crew.py note add --run <run-dir> --member <name> --proposal <json-file>\n"
     "       crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--unlock <role> ...] [--save]\n"
     "       crew.py adhoc --run <run-dir> --name <name> --role <role> --pick-me-when <line>\n"
     "                     [--based-on <role>] [--skill <skill> ...] [--model <model>] [--harness <h>]\n"
@@ -605,6 +607,17 @@ def read_note_file(path, rel):
     return text.split("\n")
 
 
+# Characters the engineer can't see when approving a note; other spaces (Zs) show as spaces and are allowed.
+HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"})
+
+
+def hidden_char(text):
+    for char in text:
+        if unicodedata.category(char) in HIDDEN_CATEGORIES:
+            return f"U+{ord(char):04X}"
+    return None
+
+
 def real_date(year, month, day):
     try:
         datetime.date(int(year), int(month), int(day))
@@ -621,7 +634,7 @@ def parse_notes(lines, rel, warnings):
         if not line.startswith("- "):
             continue
         found = NOTE.fullmatch(line)
-        if not found or not real_date(*found.group(1, 2, 3)):
+        if not found or not real_date(*found.group(1, 2, 3)) or hidden_char(line):
             warnings.append(
                 memory_warning("bad-note", rel, f"line {number} is not a note (- YYYY-MM-DD (<run>): <fact>), skipped")
             )
@@ -1400,26 +1413,26 @@ def check_adhoc_fields(opts, skills):
     return adhoc_skills(skills)
 
 
-def read_body(path, run_dir):
-    """The body file's text. It must be a regular file whose real path is inside <run-dir>/prompts/."""
+def read_body(path, run_dir, what="body file"):
+    """The file's text. It must be a regular file whose real path is inside <run-dir>/prompts/."""
     prompts = os.path.realpath(os.path.join(run_dir, "prompts"))
     real = os.path.realpath(path)
     if real == prompts or not inside_path(real, prompts):
-        raise Refusal(f"body file {path} is not inside {run_dir}/prompts/")
+        raise Refusal(f"{what} {path} is not inside {run_dir}/prompts/")
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as handle:
             if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-                raise Refusal(f"body file {path} is not a regular file")
+                raise Refusal(f"{what} {path} is not a regular file")
             raw = handle.read(MAX_BYTES + 1)
     except OSError as err:
-        raise Refusal(f"body file {path} can't be read: {err.strerror or err}") from None
+        raise Refusal(f"{what} {path} can't be read: {err.strerror or err}") from None
     if len(raw) > MAX_BYTES:
-        raise Refusal(f"body file {path} is over {MAX_BYTES} bytes")
+        raise Refusal(f"{what} {path} is over {MAX_BYTES} bytes")
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
-        raise Refusal(f"body file {path} is not valid UTF-8") from None
+        raise Refusal(f"{what} {path} is not valid UTF-8") from None
 
 
 def quoted(value):
@@ -1536,6 +1549,219 @@ def adhoc_main(argv):
         return usage_error(str(err))
     try:
         return write_ad_hoc(opts, skills)
+    except Refusal as err:
+        say(f"ERROR {err}")
+        return 1
+
+
+NOTE_FLAGS = {"--run": "run", "--member": "member", "--proposal": "proposal"}
+PROPOSAL_KEYS = {"scope", "note", "replaces", "member", "role", "repo", "ad-hoc"}
+ASCII_SPACE = " \t\n\r\f\v"
+NOTE_MAX_CHARS = 300
+RUN_NAME = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def parse_note_args(argv):
+    opts = {}
+    args = iter(argv)
+    for arg in args:
+        value = next(args, None)
+        if arg not in NOTE_FLAGS:
+            raise UsageError(f"unknown argument {arg}")
+        if value is None or (value == "" and arg != "--member"):
+            raise UsageError(f"{arg} needs a value")
+        if NOTE_FLAGS[arg] in opts:
+            raise UsageError(f"{arg} given twice")
+        opts[NOTE_FLAGS[arg]] = value
+    if len(opts) != len(NOTE_FLAGS):
+        raise UsageError("note add needs --run <run-dir> --member <name> --proposal <json-file>")
+    return opts
+
+
+def no_duplicates(pairs):
+    found = {}
+    for key, value in pairs:
+        if key in found:
+            raise ValueError(f"duplicate key {key!r}")
+        found[key] = value
+    return found
+
+
+def note_text_problem(text):
+    if not text:
+        return "is empty"
+    if text.strip(ASCII_SPACE) != text:
+        return "has leading or trailing whitespace"
+    if text.splitlines() != [text]:
+        return "has a line break or control character"
+    hidden = hidden_char(text)
+    if hidden:
+        return f"has an invisible or unassigned character ({hidden})"
+    return None
+
+
+def load_proposal_object(path, run_dir):
+    text = read_body(path, run_dir, "proposal file")
+    try:
+        data = json.loads(text, object_pairs_hook=no_duplicates)
+    except (ValueError, RecursionError) as err:
+        raise Refusal(f"the proposal file is not valid JSON: {err}") from None
+    if not isinstance(data, dict):
+        raise Refusal("the proposal file must hold one JSON object")
+    return data
+
+
+def read_proposal(path, run_dir):
+    data = load_proposal_object(path, run_dir)
+    unknown = sorted(set(data) - PROPOSAL_KEYS)
+    if unknown:
+        raise Refusal(f"the proposal file has unknown keys: {', '.join(unknown)}")
+    for key in ("scope", "note"):
+        if key not in data:
+            raise Refusal(f"the proposal file needs {key}")
+    replaces = data.get("replaces")
+    for key, value in data.items():
+        if key == "ad-hoc":
+            ok = isinstance(value, bool)
+        else:
+            ok = isinstance(value, str) or (value is None and key in ("replaces", "repo"))
+        if not ok:
+            raise Refusal(f"proposal {key} has the wrong type")
+    if data["scope"] not in ("fleet", "repo"):
+        raise Refusal("proposal scope must be fleet or repo")
+    if len(data["note"]) > NOTE_MAX_CHARS:
+        raise Refusal(f"the note is over {NOTE_MAX_CHARS} characters")
+    for key, value in (("note", data["note"]), ("replaces", replaces)):
+        problem = value is not None and note_text_problem(value)
+        if problem:
+            raise Refusal(f"proposal {key} {problem}")
+    return data["scope"], data["note"], replaces
+
+
+def find_member(run_dir, name):
+    members, errors, _ = resolve_run(run_dir)
+    if errors:
+        more = f" (and {len(errors) - 1} more)" if len(errors) > 1 else ""
+        raise Refusal(f"the crew doesn't resolve{more}: " + issue_line("ERROR", errors[0])[len("ERROR ") :])
+    found = next((m for m in members if m["name"] == name), None)
+    if found is None:
+        raise Refusal(f"no crew member named {name!r}")
+    return found
+
+
+def note_dirs(root, name, scope, slug):
+    member_dir = os.path.join(root, name)
+    if scope == "fleet":
+        return [member_dir], "fleet.md"
+    owner, repo = slug.split("/")
+    repos = os.path.join(member_dir, "repos")
+    return [member_dir, repos, os.path.join(repos, owner)], f"{repo}.md"
+
+
+def check_note_chain(root, chain, repo):
+    """Directories above `commodore/` aren't checked: `~/.config` is often a dotfiles symlink."""
+    crew = os.path.dirname(root)
+    try:
+        for path in (os.path.dirname(crew), crew):
+            if not look_dir(path, os.path.basename(path)):
+                return
+        problem = root_problem(root, repo)
+        if problem:
+            raise Refusal(problem["message"])
+        rel = "memory"
+        for path in chain:
+            rel = f"{rel}/{os.path.basename(path)}"
+            if not look_dir(path, rel):
+                return
+    except MemoryProblem as err:
+        raise Refusal(err.message) from None
+
+
+def note_file_text(path, rel, line, replaces):
+    try:
+        lines = read_note_file(path, rel)
+    except MemoryProblem as err:
+        raise Refusal(err.message) from None
+    lines = lines or []
+    valid = []
+    for number, raw in enumerate(lines):
+        found = NOTE.fullmatch(raw.removesuffix("\r")) if raw.startswith("- ") else None
+        if found and real_date(*found.group(1, 2, 3)) and not hidden_char(raw.removesuffix("\r")):
+            valid.append(number)
+    if replaces is not None:
+        at = next((n for n in valid if lines[n].removesuffix("\r")[2:] == replaces), None)
+        if at is None:
+            raise Refusal(f"no note in {rel} matches replaces")
+        result = "\n".join([*lines[:at], line, *lines[at + 1 :]])
+    else:
+        if len(valid) >= NOTE_CAP:
+            raise Refusal(f"{rel} already holds {NOTE_CAP} notes: name the note this one replaces")
+        text = "\n".join(lines)
+        result = text + ("\n" if text and not text.endswith("\n") else "") + line + "\n"
+    if len(result.encode("utf-8")) > MAX_BYTES:
+        raise Refusal(f"{rel} would be over {MAX_BYTES} bytes, which the reader rejects: replace a shorter note")
+    return result
+
+
+def write_note_file(directory, name, text):
+    """A temp file and a rename in the same directory, so a reader never sees half a note file."""
+    target = os.path.join(directory, name)
+    tmp = os.path.join(directory, f".{name}.tmp.{os.getpid()}")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except OSError as err:
+        raise Refusal(f"can't write {target}: {err.strerror or err}") from None
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(text.encode("utf-8"))
+        os.replace(tmp, target)
+    except OSError as err:
+        os.unlink(tmp)
+        raise Refusal(f"can't write {target}: {err.strerror or err}") from None
+    return target
+
+
+def add_note(opts):
+    run_dir = opts["run"]
+    _, inside, repo, _ = run_settings(run_dir)
+    if inside:
+        raise UsageError("note add is not used inside Admiral: Admiral's Inbox writes crew notes")
+    run_name = os.path.basename(os.path.normpath(run_dir))
+    if not RUN_NAME.fullmatch(run_name):
+        raise Refusal(f"the run directory's name {run_name!r} is not letters, digits, dots, underscores and dashes")
+    run_id_of(run_dir)
+    scope, note, replaces = read_proposal(opts["proposal"], run_dir)
+    member = find_member(run_dir, opts["member"])
+    if member["role"] == "fix-checker":
+        raise Refusal("the fix checker gets no notes and makes no proposals")
+    slug = None
+    if scope == "repo":
+        slug, _ = origin_repo(repo) if repo else (None, False)
+        if slug is None:
+            raise Refusal("a repo note needs a run whose repo origin is github.com/<owner>/<repo>")
+    line = f"- {datetime.datetime.now(datetime.timezone.utc).date().isoformat()} ({run_name}): {note}"
+    if not NOTE.fullmatch(line):
+        raise Refusal("the note doesn't make a valid note line")
+    root = memory_root(run_dir)
+    chain, name = note_dirs(root, member["name"], scope, slug)
+    check_note_chain(root, chain, repo)
+    path = os.path.join(chain[-1], name)
+    text = note_file_text(path, os.path.relpath(path, root), line, replaces)
+    make_directory(chain[-1])
+    # Again: the first check stopped at the first directory that didn't exist yet.
+    check_note_chain(root, chain, repo)
+    sys.stdout.write(f"wrote {write_note_file(chain[-1], name, text)}\n")
+    return 0
+
+
+def note_main(argv):
+    if not argv or argv[0] != "add":
+        return usage_error("note takes the add subcommand")
+    try:
+        opts = parse_note_args(argv[1:])
+        return add_note(opts)
+    except UsageError as err:
+        return usage_error(str(err))
     except Refusal as err:
         say(f"ERROR {err}")
         return 1
@@ -1698,6 +1924,8 @@ def notes_main(argv):
 def main(argv):
     if argv and argv[0] == "notes":
         return notes_main(argv[1:])
+    if argv and argv[0] == "note":
+        return note_main(argv[1:])
     if argv and argv[0] == "cast":
         return cast_main(argv[1:])
     if argv and argv[0] == "adhoc":

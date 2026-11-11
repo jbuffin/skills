@@ -18,6 +18,14 @@ The run's crew is the cast table in `profile.md`, which `<team>/crew.py cast --r
 
 For a role other than the fix checker, the brief pastes the output of `<team>/crew.py notes --run <run> --member <member>` after the member's instructions, when it prints anything. The output is the member's own approved notes under a fixed `## Crew notes` heading; paste it as printed. The fix checker's brief gets none.
 
+## Crew note proposals
+
+Every role's brief pastes this paragraph, except the fix checker's, which pastes none: the fix checker writes no proposals.
+
+> Your report has a `## Crew note proposals` section, with `none` when you have nothing to propose. Put at most 3 lines in it, each `- scope: <fleet|repo>; replaces: <the exact note line it replaces, without the leading "- ", or none>; note: <one-line fact>`. `fleet` is for every repo, `repo` for this repo only. A proposal is knowledge the next run can use, such as how this repo builds or what its tests need. It is never a verdict, an opinion on code quality, a past review finding or an account of what happened on this run. Nothing is saved until the engineer approves it. A scope that already holds 30 of your notes takes a proposal only when `replaces` names one of them.
+
+The triager puts the section before its cards' json block.
+
 ## Lifetimes
 
 | Role | Lifetime | Why |
@@ -64,7 +72,7 @@ Then end your turn the way the teammate contract says. On a fix round, apply the
 
 ## Fix checker
 
-**Contract.** You're launched `--read-only --role fix-checker`, in round 2 only: a fix check, not a second review. Your input is the fix range `<reviewed SHA>..HEAD` and the fix job file. Investigate nothing else, whatever else your brief says. Run no role skills and no sub-agents, and make no advisor calls: write `none` under `## Advisor consults`. Your output is the report alone: no edits, no GitHub comments, and nothing you need `gh` for.
+**Contract.** You're launched `--read-only --role fix-checker`, in round 2 only: a fix check, not a second review. Your input is the fix range `<reviewed SHA>..HEAD` and the fix job file. Investigate nothing else, whatever else your brief says. Run no role skills and no sub-agents, and make no advisor calls: write `none` under `## Advisor consults`. Your output is the report alone: no edits, no GitHub comments, and nothing you need `gh` for. Write no crew note proposals, and expect no crew notes.
 
 Your report has three sections:
 

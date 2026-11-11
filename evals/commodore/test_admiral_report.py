@@ -35,6 +35,15 @@ DONE = {
     "resume": "/commodore resume fixture-run",
 }
 URL = "https://github.com/example/fixture/pull/7"
+NOTE = {
+    "member": "ada",
+    "role": "implementer",
+    "scope": "repo",
+    "repo": "example/fixture",
+    "note": "Run the tests with `make test`.",
+    "replaces": None,
+    "ad-hoc": False,
+}
 PATTERN = r"^/prs/0/closes/0: .*doesn't match pattern"
 
 
@@ -101,6 +110,9 @@ class TestValidReports(ReportCase):
         closes = [ref("my-org/my.repo_x", 1234), ref("example/.github", 12)]
         self.assertAccepted(with_(prs=[{"url": URL, "closes": closes}]))
 
+    def test_a_report_with_a_crew_note_proposal_is_published(self):
+        self.assertAccepted(with_(notes=[NOTE, {**NOTE, "scope": "fleet", "repo": None}]))
+
 
 class TestInvalidReports(ReportCase):
     def test_version_1_is_rejected(self):
@@ -141,6 +153,18 @@ class TestInvalidReports(ReportCase):
 
     def test_an_unknown_result_is_rejected(self):
         self.assertRejected(with_(result="maybe"), r"^/result")
+
+    def test_a_note_proposal_missing_a_key_is_rejected(self):
+        item = {k: v for k, v in NOTE.items() if k != "replaces"}
+        self.assertRejected(with_(notes=[item]), r"^/notes/0: missing required property 'replaces'")
+
+    def test_a_note_proposal_with_an_extra_key_is_rejected(self):
+        self.assertRejected(with_(notes=[{**NOTE, "why": "x"}]), r"^/notes/0")
+
+    def test_a_repo_note_proposal_without_an_owner_slash_repo_is_rejected(self):
+        for repo in (None, "fixture"):
+            with self.subTest(repo=repo):
+                self.assertRejected(with_(notes=[{**NOTE, "repo": repo}]), r"^/notes/0/repo")
 
 
 class TestPublishing(ReportCase):
