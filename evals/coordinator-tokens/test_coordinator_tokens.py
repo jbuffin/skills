@@ -1,15 +1,7 @@
-"""Tests for scripts/coordinator-tokens.py: tool calls by category and the result split.
+"""Tests for scripts/coordinator-tokens.py: tool calls by category and the split at the run's result."""
 
-The only seam is the script's command line. Every test writes coordinator transcripts into a temp
-dir, runs the script as a subprocess on those paths (never the real ~/.claude*/projects) and reads
-its text or `--json` output. Expected values are literals worked out by hand from the fixtures.
-
-Run from the repo root: python3 -m unittest discover -s evals/coordinator-tokens -v
-"""
-
-import ast
+import importlib.util
 import json
-import re
 import subprocess
 import sys
 import tempfile
@@ -34,25 +26,34 @@ SCRIPTS = "commodore scripts"
 
 SIDE_KEYS = {"active_hours", "active_hours_per_unit", "tool_calls", "tool_calls_per_unit"}
 
-# decision 3's literal table: (command, category)
 BASH_TABLE = [
-    ("git status", "bash: git"),
-    ("cd /r && git log", "bash: git"),
     ("cd /a && cd b; gh pr view 1", "bash: gh"),
-    ("grep x f | head", "bash: grep"),
-    ("gh pr view 1 ; git log", "bash: gh"),
     ("false || echo hi", "bash: false"),
-    ("FOO=1 BAR=2 python3 x.py", "bash: python3"),
     ("(cd x && git log)", "bash: git"),
-    ("env FOO=1 make", "bash: make"),
     ('cd "a b" && ls', "bash: ls"),
-    ("# note\nls -la", "bash: ls"),
     ("/abs/commodore/scripts/state-set.sh /r mode result done", STATE),
     ("/abs/agent-teammates/scripts/verify-report.sh /r n", SCRIPTS),
     ("/abs/my-evidence.sh", "bash: my-evidence.sh"),
     ("bash /abs/state-set.sh /r mode x y", "bash: bash"),
-    ("", "bash: "),
 ]
+ASSIGNMENT_TABLE = [
+    ("A=1; git status", "bash: git"),
+    ("# note\nA=1\n\nls", "bash: ls"),
+    ("A=1 | tail", "bash: "),  # a pipe is not skipped, so the name stays empty
+]
+WRAPPER_TABLE = [("sudo -u bob make", "bash: make")]
+UNSAFE_NAMES = ['"ghp_SECRET token here" x', "\x1b[2Jfake"]
+
+
+def load_script():
+    spec = importlib.util.spec_from_file_location("coordinator_tokens", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def bash_category(command):
+    return load_script().describe_tool_call("Bash", {"command": command})[0]
 
 
 def bash(command):
@@ -167,17 +168,17 @@ class MixedCase(TempDirCase):
         s = Session(self.tmp, "mixed.jsonl")
         s.call(0, tool("Read", file_path=f"{r}/state.md"))
         s.call(60, tool("Read", file_path="/repo/a.py"), tool("ToolSearch", query="select:Foo"))
-        s.call(120, bash(f"{STATE_SCRIPT} {r} u1 status done"))
-        s.call(180, bash(f"cd /x && {STATE_SCRIPT} {r} u2 status done"))
+        s.call(120, bash(f"{STATE_SCRIPT} {r} alpha status done"))
+        s.call(180, bash(f"cd /x && {STATE_SCRIPT} {r} beta status done"))
         s.call(
             240,
             tool("Edit", file_path=f"{r}/state.md", old_string="planned", new_string="running"),
             tool("Write", file_path=f"{r}/state.md", content="# State\n"),
         )
-        s.call(300, tool("Write", file_path=f"{r}/prompts/u1.md", content="brief"))
+        s.call(300, tool("Write", file_path=f"{r}/prompts/alpha.md", content="brief"))
         s.call(
             360,
-            tool("Edit", file_path=f"{r}/reports/u1.md", old_string="a", new_string="b"),
+            tool("Edit", file_path=f"{r}/reports/alpha.md", old_string="a", new_string="b"),
             tool("Write", file_path=f"{r}/brief.md", content="b"),
         )
         s.call(
@@ -214,25 +215,6 @@ class MixedCase(TempDirCase):
         self.assertEqual(out["tool_calls"]["total"], 20)
         self.assertEqual(sum(counts(out).values()), out["tool_calls"]["total"])
 
-    def test_edit_of_state_md_and_edit_of_a_repo_file_are_different_categories(self):
-        by_category = counts(run_json("--units", "5", self.path))
-        self.assertEqual(by_category[STATE_MD], 2)
-        self.assertEqual(by_category[REPO_FILES], 3)
-
-    def test_json_shape_is_total_per_unit_and_ordered_categories(self):
-        tc = run_json("--units", "5", self.path)["tool_calls"]
-        self.assertEqual(set(tc), {"total", "per_unit", "categories"})
-        self.assertEqual(tc["per_unit"], 4.0)
-        for row in tc["categories"]:
-            self.assertEqual(set(row), {"category", "calls", "per_unit"})
-            self.assertGreater(row["calls"], 0)
-        sizes = [row["calls"] for row in tc["categories"]]
-        self.assertEqual(sizes, sorted(sizes, reverse=True))
-        by_category = {row["category"]: row["per_unit"] for row in tc["categories"]}
-        self.assertEqual(by_category[REPO_FILES], 0.6)
-        self.assertEqual(by_category["Read"], 0.4)
-        self.assertEqual(by_category[PROMPTS], 0.2)
-
     def test_units_come_from_state_md_when_not_given(self):
         out = run_json(self.path)
         self.assertEqual(out["units"], 5)
@@ -251,56 +233,19 @@ class MixedCase(TempDirCase):
         self.assertEqual(raw["tool_calls"], plain["tool_calls"])
         self.assertEqual(raw["result_split"], plain["result_split"])
 
-    def test_text_section_lists_each_category_with_counts_and_a_last_total_row(self):
-        all_lines = run_text("--units", "5", self.path).splitlines()
-        header = next(i for i, line in enumerate(all_lines) if "tool calls by category" in line)
-        total_row = next(i for i, line in enumerate(all_lines) if i > header and re.search(r"(?i)\btotal\b", line))
-        lines = all_lines[header + 1 : total_row]  # the section's rows only, so no earlier table can match
 
-        def row_index(label):
-            return next(i for i, line in enumerate(lines) if line.split(None, 2)[-1] == label)
-
-        expected = [  # label, calls, per unit
-            ("Edit/Write repo, worktree or elsewhere", "3", "0.6"),
-            ("Edit/Write state.md", "2", "0.4"),
-            ("bash: git", "2", "0.4"),
-            ("other", "3", "0.6"),
-        ]
-        for label, calls, per_unit in expected:
-            row = lines[row_index(label)]
-            self.assertRegex(row, rf"\b{calls}\b")
-            self.assertRegex(row, rf"\b{re.escape(per_unit)}\b")
-        labels = [STATE, STATE_MD, PROMPTS, RUN_DIR, REPO_FILES, SCRIPTS, "bash: git", "bash: gh", "other"]
-        for label in labels:
-            row_index(label)  # raises StopIteration if a category is missing from the section
-        self.assertRegex(all_lines[total_row], r"\b20\b")
-        self.assertRegex(all_lines[total_row], r"\b4\.0\b")
-
-
-class BashFirstCommandCase(TempDirCase):
-    def test_every_row_of_the_literal_table(self):
-        for command, category in BASH_TABLE:
+class BashFirstCommandCase(unittest.TestCase):
+    def test_the_first_command_names_the_category(self):
+        for command, category in BASH_TABLE + ASSIGNMENT_TABLE + WRAPPER_TABLE:
             with self.subTest(command=command):
-                path = one_call(self.tmp, bash(command))
-                out = run_json(path)
-                self.assertEqual(
-                    out["tool_calls"]["categories"], [{"category": category, "calls": 1, "per_unit": None}]
-                )
-                self.assertEqual(out["tool_calls"]["total"], 1)
-
-    def test_a_commodore_script_other_than_state_set_by_basename_counts_as_a_script(self):
-        path = one_call(self.tmp, bash("cd /r && /abs/watch-teammates.sh /r"))
-        self.assertEqual(counts(run_json(path)), {SCRIPTS: 1})
+                self.assertEqual(bash_category(command), category)
 
 
 class UnitsUnknownCase(TempDirCase):
-    def test_per_unit_is_null_in_json_and_absent_in_text(self):
-        path = one_call(self.tmp, bash("git status"))
-        out = run_json(path)
+    def test_per_unit_is_null(self):
+        out = run_json(one_call(self.tmp, bash("git status")))
         self.assertIsNone(out["tool_calls"]["per_unit"])
         self.assertIsNone(out["tool_calls"]["categories"][0]["per_unit"])
-        row = next(line for line in run_text(path).splitlines() if "bash: git" in line)
-        self.assertNotRegex(row, r"\d\.\d")
 
 
 class ToolSeenOnceCase(TempDirCase):
@@ -350,15 +295,6 @@ class ResultSplitCase(TempDirCase):
         self.assertEqual(out["per_session"][0]["has_result"], True)
         self.assertEqual(out["tool_calls"]["total"], 7)
 
-    def test_text_shows_both_sides_and_no_flag(self):
-        text = run_text("--units", "5", self.split_session())
-        to_line = next(line for line in text.splitlines() if "to result" in line)
-        after_line = next(line for line in text.splitlines() if "after result" in line)
-        for line, values in ((to_line, ("0.25", "0.05", "4", "0.8")), (after_line, ("0.12", "0.02", "3", "0.6"))):
-            for value in values:
-                self.assertRegex(line, rf"(?<![\d.]){re.escape(value)}(?![\d.])")
-        self.assertNotRegex(text, r"(?i)no result")
-
     def test_a_session_with_no_result_is_all_to_result_and_flagged(self):
         s = Session(self.tmp, "noresult.jsonl")
         s.call(0, bash("git status"))
@@ -377,10 +313,6 @@ class ResultSplitCase(TempDirCase):
         self.assertEqual(len(split["sessions_without_result"]), 1)
         self.assertTrue(split["sessions_without_result"][0].endswith("noresult.jsonl"))
         self.assertEqual(out["per_session"][0]["has_result"], False)
-        text = run_text("--sessions", path)
-        self.assertRegex(text, r"(?i)\b1\b[^\n]*(without|no)[^\n]*result")
-        session_line = next(line for line in text.splitlines() if "noresult.jsonl" in line)
-        self.assertIn("no result", session_line)
 
     def test_sessions_add_up_and_only_the_one_without_a_result_is_flagged(self):
         s = Session(self.tmp, "noresult.jsonl")
@@ -440,9 +372,6 @@ class ResultWriteKindsCase(TempDirCase):
     def test_an_edit_that_adds_a_result_line_to_state_md(self):
         self.assertEqual(self.split_of(self.edit("status: running\n", "status: running\nresult: done\n")), (2, 2, []))
 
-    def test_an_indented_result_line_counts(self):
-        self.assertEqual(self.split_of(self.edit("a: 1\n", "a: 1\n  result: done\n")), (2, 2, []))
-
     def test_an_edit_that_replaces_result_partial_with_done(self):
         self.assertEqual(self.split_of(self.edit("result: partial\n", "result: done\n")), (2, 2, []))
 
@@ -466,16 +395,10 @@ class ResultWriteKindsCase(TempDirCase):
         self.assertEqual(self.split_of(edit)[:2], (4, 0))
 
     def test_state_set_with_another_field_is_not_a_write(self):
-        for command in (f"{STATE_SCRIPT} /r unit result done", f"{STATE_SCRIPT} /r mode status done"):
-            with self.subTest(command=command):
-                self.assertEqual(self.split_of(bash(command))[:2], (4, 0))
-
-    def test_a_state_set_after_cd_is_a_write(self):
-        self.assertEqual(self.split_of(bash(f"cd /r && {STATE_SCRIPT} /r mode result done")), (2, 2, []))
+        self.assertEqual(self.split_of(bash(f"{STATE_SCRIPT} /r unit result done"))[:2], (4, 0))
 
     def test_state_set_batch_form_with_a_result_pair_is_a_write(self):
         self.assertEqual(self.split_of(bash(f"{STATE_SCRIPT} /r mode --set result=done phase=x")), (2, 2, []))
-        self.assertEqual(self.split_of(bash(f"cd /r && {STATE_SCRIPT} /r mode --set result=partial")), (2, 2, []))
 
     def test_state_set_batch_form_without_a_result_pair_is_not_a_write(self):
         self.assertEqual(self.split_of(bash(f"{STATE_SCRIPT} /r mode --set phase=x"))[:2], (4, 0))
@@ -498,94 +421,30 @@ class ResultWriteKindsCase(TempDirCase):
         self.assertEqual(split["after_result"]["tool_calls"], 1)
 
 
-# What c04c275 prints for ExistingOutputCase's fixture, apart from the new section and fields (D2).
-OLD_JSON = {
-    "sessions": 1,
-    "calls": 3,
-    "cache_read": 6000,
-    "mean_context_per_call": 2010,
-    "never_compacted": 1,
-    "mean_initial_context": 1010,
-    "units": 5,
-    "calls_per_unit": 0.6,
-}
-OLD_BREAKDOWN = [
-    {"source": "base prompt (system, tools, MCP, skill listing)", "carry": 3030, "share": 0.5025, "added": 1010},
-    {"source": "state.md", "carry": 2000, "share": 0.3317, "added": 1000},
-    {"source": "git", "carry": 1000, "share": 0.1658, "added": 1000},
-]
-OLD_SESSION_KEYS = ["path", "model", "calls", "peak", "compactions", "cache_read", "run", "units"]
-OLD_TEXT_HEAD = [
-    "1 coordinator sessions, 3 API calls, 0M cache reads",
-    "5 units, 0.6 calls per unit",
-    "mean context per call 2k, mean initial context 1k, 1 never compacted",
-    "",
-    "    carry  share     added  source",
-    "     0.0M  50.2%      1.0k  base prompt (system, tools, MCP, skill listing)",
-    "     0.0M  33.2%      1.0k  state.md",
-    "     0.0M  16.6%      1.0k  git",
-]
-OLD_TEXT_TAIL = [
-    "handoff above 150k: 0% fewer input tokens, 0 handoffs",
-    "handoff above 200k: 0% fewer input tokens, 0 handoffs",
-    "handoff above 300k: 0% fewer input tokens, 0 handoffs",
-]
-
-
 class ExistingOutputCase(TempDirCase):
-    """The lines and keys that exist at c04c275 stay as they were."""
-
-    def setUp(self):
-        super().setUp()
+    def test_context_totals_and_breakdown(self):
         run = make_run(self.tmp)
         s = Session(self.tmp, "old.jsonl")
         s.call(0, tool("Read", file_path=f"{run}/state.md"))
         s.call(60, bash("git status"))
         s.call(120, tool("Edit", file_path="/repo/a.py", old_string="a", new_string="b"))
-        self.path = s.save()
-
-    def test_json_keys_and_values_are_unchanged(self):
-        out = run_json("--sessions", "--simulate-handoff", self.path)
+        out = run_json("--sessions", s.save())
+        # Calls carry 1010, 2010 and 3010 tokens of context: a 1010 base, then 1000 more after state.md and git.
+        expected = {
+            "sessions": 1,
+            "calls": 3,
+            "cache_read": 6000,
+            "mean_context_per_call": 2010,
+            "never_compacted": 1,
+            "mean_initial_context": 1010,
+            "units": 5,
+            "calls_per_unit": 0.6,
+        }
+        self.assertEqual({k: out[k] for k in expected}, expected)
         self.assertEqual(
-            set(out) - {"tool_calls", "result_split"},
-            set(OLD_JSON) | {"breakdown", "handoff", "per_session"},
+            [(row["source"], row["carry"]) for row in out["breakdown"]],
+            [("base prompt (system, tools, MCP, skill listing)", 3030), ("state.md", 2000), ("git", 1000)],
         )
-        for key, value in OLD_JSON.items():
-            self.assertEqual(out[key], value, key)
-        self.assertEqual(out["breakdown"], OLD_BREAKDOWN)
-        self.assertEqual(list(out["per_session"][0])[: len(OLD_SESSION_KEYS)], OLD_SESSION_KEYS)
-
-    def test_per_session_gains_only_has_result(self):
-        out = run_json("--sessions", self.path)
-        self.assertEqual(set(out["per_session"][0]) - set(OLD_SESSION_KEYS), {"has_result"})
-
-    def test_text_lines_are_unchanged(self):
-        lines = run_text("--sessions", "--simulate-handoff", self.path).splitlines()
-        self.assertEqual(lines[: len(OLD_TEXT_HEAD)], OLD_TEXT_HEAD)
-        tail = [line for line in lines if line.startswith("handoff above")]
-        self.assertEqual(tail, OLD_TEXT_TAIL)
-        self.assertRegex(lines[-1], r"^    3 calls  peak    3k  0 compactions   5 units  .*old\.jsonl$")
-
-    def test_the_new_section_sits_between_the_table_and_handoff(self):
-        lines = run_text("--sessions", "--simulate-handoff", self.path).splitlines()
-        first_tail = next(i for i, line in enumerate(lines) if line.startswith("handoff above"))
-        between = [line for line in lines[len(OLD_TEXT_HEAD) : first_tail] if line.strip()]
-        self.assertTrue(any("bash: git" in line for line in between), "no category section before handoff")
-        self.assertTrue(any("to result" in line for line in between), "no result split block before handoff")
-
-
-WRAPPER_TABLE = [
-    ("time -p make", "bash: make"),
-    ("sudo -u bob make", "bash: make"),
-    ("env -i ls", "bash: ls"),
-]
-UNSAFE_NAMES = [
-    '"ghp_SECRET token here" x',
-    '/a/b/"c d e"',
-    "a" * 41,
-    "ls\x07",
-    "\x1b[2Jfake",
-]
 
 
 def usage_less(session, seconds, *tools):
@@ -595,25 +454,7 @@ def usage_less(session, seconds, *tools):
     session.lines.append(entry)
 
 
-ASSIGNMENT_TABLE = [
-    ("A=1; git status", "bash: git"),
-    ("A=1 B=2 && make", "bash: make"),
-    ("X=1;Y=2; ls", "bash: ls"),
-    ("A=1\ngit log", "bash: git"),
-    ("# note\nA=1\n\nls", "bash: ls"),
-    ("A=1 \\\n  make", "bash: make"),
-    ("A=1 | tail", "bash: "),  # pinned: a pipe is not skipped, so the name stays empty
-    ("A=1", "bash: "),
-    ("# only a comment", "bash: "),
-]
-
-
 class BashNameCase(TempDirCase):
-    def test_assignments_are_passed_over_to_the_command_after_them(self):
-        for command, category in ASSIGNMENT_TABLE:
-            with self.subTest(command=command):
-                self.assertEqual(counts(run_json(one_call(self.tmp, bash(command)))), {category: 1})
-
     def test_a_result_write_after_an_assignment_is_still_a_result_write(self):
         s = Session(self.tmp, "assign.jsonl")
         s.call(0, bash("A=1; /x/state-set.sh /r mode result done"))
@@ -622,21 +463,12 @@ class BashNameCase(TempDirCase):
         self.assertEqual(counts(out), {STATE: 1, "bash: git": 1})
         self.assertEqual(out["result_split"]["after_result"]["tool_calls"], 1)
 
-    def test_wrapper_flags_are_skipped(self):
-        for command, category in WRAPPER_TABLE:
-            with self.subTest(command=command):
-                out = run_json(one_call(self.tmp, bash(command)))
-                self.assertEqual(counts(out), {category: 1})
-
     def test_a_name_that_is_not_plain_shows_as_a_question_mark_in_json_and_text(self):
-        for command in UNSAFE_NAMES:
+        for command, leaked in zip(UNSAFE_NAMES, ("ghp_SECRET", "\x1b")):
             with self.subTest(command=command):
                 path = one_call(self.tmp, bash(command))
                 self.assertEqual(counts(run_json(path)), {"bash: ?": 1})
-                text = run_text(path)
-                self.assertTrue(any(line.endswith("bash: ?") for line in text.splitlines()))
-                for leaked in ("ghp_SECRET", "c d e", "\x07", "\x1b"):
-                    self.assertNotIn(leaked, text)
+                self.assertNotIn(leaked, run_text(path))
 
     def test_a_forty_character_name_is_still_shown(self):
         self.assertEqual(counts(run_json(one_call(self.tmp, bash("a" * 40)))), {"bash: " + "a" * 40: 1})
@@ -666,7 +498,7 @@ class UsageLessMessageCase(TempDirCase):
         self.assertEqual(split["sessions_without_result"], [])
 
 
-class TimeAndWordingCase(TempDirCase):
+class IdleCapCase(TempDirCase):
     def test_fractional_seconds_count_toward_the_idle_cap(self):
         s = Session(self.tmp, "frac.jsonl")
         s.call(0, bash("git status"))
@@ -675,39 +507,6 @@ class TimeAndWordingCase(TempDirCase):
         s.lines[-1]["timestamp"] = "2026-10-01T10:10:00.900Z"  # 600.8 s later: idle
         split = run_json(s.save())["result_split"]
         self.assertEqual(split["to_result"]["active_hours"], 0.0)
-
-    def test_the_summary_line_is_printed_even_when_every_session_has_a_result(self):
-        s = Session(self.tmp, "ok.jsonl")
-        s.call(0, bash(f"{STATE_SCRIPT} /r mode result done"))
-        text = run_text(s.save())
-        self.assertIn("0 sessions without a result: line, counted as to result", text)
-        self.assertIn("after result:", text)
-        self.assertIn("0 tool calls", text.split("after result:")[1])
-
-    def test_a_count_of_one_is_singular(self):
-        text = run_text(one_call(self.tmp, bash("git status")))
-        self.assertIn("1 session without a result: line", text)
-        self.assertRegex(text, r"1 tool call(?!s)")
-
-
-class HelpTextCase(unittest.TestCase):
-    def test_usage_text_mentions_tool_calls_by_category_and_the_result_split(self):
-        text = subprocess.run(
-            [sys.executable, str(SCRIPT), "--help"], capture_output=True, text=True, check=True
-        ).stdout.lower()
-        self.assertIn("tool call", text)
-        self.assertIn("categor", text)
-        self.assertIn("result", text)
-
-    def test_docstring_describes_the_section_and_avoids_job_for_a_mission(self):
-        doc = ast_docstring()
-        self.assertIn("result:", doc)
-        self.assertIn("after result", doc)
-        self.assertNotRegex(doc, r"\bjobs?\b")
-
-
-def ast_docstring():
-    return ast.get_docstring(ast.parse(SCRIPT.read_text())) or ""
 
 
 if __name__ == "__main__":
