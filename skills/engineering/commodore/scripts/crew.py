@@ -11,7 +11,8 @@ exit 5 on a bad call. `cast` picks the member for each role and prints the cast 
 warnings go to stderr; exit 4 means a locked harness is unavailable (the table is still printed, nothing is saved).
 The rules are in references/crew-members.md. A member file is never run, sourced or imported (`cast` runs only the
 harness drivers' has-skill and harness-available.sh). `adhoc` writes one ad hoc member outside the repo; only the run
-whose real path is its `ad-hoc-run` resolves it.
+whose real path is its `ad-hoc-run` resolves it. A run directory whose real path has a control character, a quote or a
+backslash is no run id: `resolve --run`, `cast` and `adhoc` print `ERROR bad run id: ...` on stderr, exit 1, no JSON.
 """
 
 import json
@@ -357,12 +358,13 @@ def member_files(directory):
 
 # ------------------------------------------------------------------------------------------------ ad hoc directory
 def real_target(path):
-    """The real path `path` will have: the nearest existing ancestor's real path joined with the missing rest."""
-    head, rest = os.path.abspath(path), []
+    """The real path `path` will have: the nearest existing ancestor's real path joined with the missing rest.
+    The raw path is never normalised as text: a `..` after a symlink must climb out of the link's target."""
+    head, rest = os.path.join(os.getcwd(), path), []
     while not os.path.lexists(head):
-        head, tail = os.path.split(head)
+        head, tail = os.path.split(head.rstrip(os.sep))
         rest.append(tail)
-    return os.path.join(os.path.realpath(head), *reversed(rest))
+    return os.path.normpath(os.path.join(os.path.realpath(head), *reversed(rest)))
 
 
 def inside_path(path, root):
@@ -1342,8 +1344,8 @@ def take_run_id(args, run_id):
     if run_id is not None:
         raise UsageError("--run-id given twice")
     value = next(args, "")
-    if value == "" or any(ord(c) < MIN_PRINTABLE or ord(c) == DEL for c in value):
-        raise UsageError("--run-id needs an id without control characters")
+    if value == "" or value.startswith("--") or any(ord(c) < MIN_PRINTABLE or ord(c) == DEL for c in value):
+        raise UsageError("--run-id needs an id that is not a flag and has no control characters")
     return value
 
 

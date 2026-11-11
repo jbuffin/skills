@@ -505,6 +505,7 @@ class UsageErrors(ResolverCase):
             "--run-id twice": ["resolve", "--layer", ad_hoc, "--run-id", "r1", "--run-id", "r1"],
             "--run-id empty": ["resolve", "--layer", ad_hoc, "--run-id", ""],
             "--run-id without a value": ["resolve", "--layer", ad_hoc, "--run-id"],
+            "--run-id followed by a flag": ["resolve", "--layer", ad_hoc, "--run-id", "--admiral"],
             "--run-id with --run": ["resolve", "--run", run_dir, "--run-id", "r1"],
             "ad-hoc twice": ["resolve", "--layer", ad_hoc, "--layer", ad_hoc, "--run-id", "r1"],
         }

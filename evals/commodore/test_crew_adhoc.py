@@ -122,6 +122,15 @@ class AdHocCase(WorldCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         return {m["name"]: m for m in parsed["members"]}, parsed["warnings"]
 
+    def dotdot_after_a_symlink(self, tail):
+        """A path that climbs out of a symlink into the repo: <root>/outside/link/../<tail>, link -> <repo>/sub."""
+        (self.w.repo / "sub").mkdir(exist_ok=True)
+        (self.w.root / "outside").mkdir(exist_ok=True)
+        link = self.w.root / "outside" / "link"
+        if not link.is_symlink():
+            link.symlink_to(self.w.repo / "sub")
+        return f"{link}/../{tail}"
+
     def adhoc_args(self, **kw):
         """The arguments of a valid call; a keyword replaces a value, None drops the flag, a list repeats it."""
         opts = {
@@ -411,6 +420,11 @@ class ResolveRefusesAnUnsafeAdHocDirectory(AdHocCase):
         in_repo = self.w.repo / "fleet"
         self.put_ad_hoc("helper", directory=in_repo / "ad-hoc")
         self.assert_dir_refused(env=self.w.admiral_env() | {"ADMIRAL_CREW_DIR": str(in_repo)})
+
+    def test_a_dot_dot_after_a_symlink_into_the_repo_is_refused(self):
+        xdg = self.dotdot_after_a_symlink("cfg")
+        self.put_ad_hoc("helper", directory=self.w.repo / "cfg" / "commodore" / "crew" / "ad-hoc")
+        self.assert_dir_refused(env=self.w.env(XDG_CONFIG_HOME=xdg))
 
     def test_inside_admiral_a_symlinked_fleet_directory_is_allowed(self):
         real = self.w.root / "real-fleet"
@@ -787,6 +801,15 @@ class AdhocRefusals(AdHocCase):
             with self.subTest(label):
                 self.assert_refused(label, env=self.w.env(XDG_CONFIG_HOME=str(xdg)))
         self.assertEqual(list(self.w.repo.rglob("ad-hoc")), [])
+
+    def test_a_dot_dot_after_a_symlink_into_the_repo_is_refused_outside_and_inside_admiral(self):
+        xdg = self.dotdot_after_a_symlink("cfg")
+        self.assert_refused("xdg", env=self.w.env(XDG_CONFIG_HOME=xdg))
+        fleet = self.dotdot_after_a_symlink("fleet")
+        (self.w.repo / "fleet").mkdir()
+        self.assert_refused("fleet", env=self.w.admiral_env() | {"ADMIRAL_CREW_DIR": fleet})
+        self.assertEqual(list(self.w.repo.rglob("ad-hoc")), [])
+        self.assertEqual(list(self.w.repo.rglob("cfg")), [])
 
     def test_inside_admiral_a_fleet_directory_in_the_repo_or_a_commodore_directory_is_refused(self):
         for label, fleet in {
