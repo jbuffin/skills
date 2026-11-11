@@ -16,6 +16,8 @@ Each role below has a **contract** and, except the fix checker, a **fallback**. 
 
 The run's crew is the cast table in `profile.md`, which `<team>/crew.py cast --run <run>` builds from the layers (SKILL.md phase 1, step 1). For a role whose member has skills, the brief gives the contract, then "Run `<skill>`" for each skill in the table's order, written as the table shows it, then the member's instructions from the table. A member's instructions never override the contract. For a role with none, the brief gives the fallback in place of the skills. For the fix checker, the brief gives the contract alone. A custom role's brief uses the contract of the role in its `Based on` cell.
 
+For a role other than the fix checker, the brief pastes the output of `<team>/crew.py notes --run <run> --member <member>` after the member's instructions, when it prints anything. The output is the member's own approved notes under a fixed `## Crew notes` heading; paste it as printed. The fix checker's brief gets none.
+
 ## Lifetimes
 
 | Role | Lifetime | Why |

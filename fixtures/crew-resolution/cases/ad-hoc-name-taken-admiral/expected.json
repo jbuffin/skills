@@ -11,6 +11,10 @@
       "layer": "built-in",
       "model": null,
       "name": "implementer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Default implementer.",
       "role": "implementer",
       "skills": []
@@ -25,6 +29,10 @@
       "layer": "fleet",
       "model": null,
       "name": "scribe",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Pick.",
       "role": "scribe",
       "skills": []

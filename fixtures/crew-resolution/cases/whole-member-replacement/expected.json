@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "implementer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Lean override.",
       "role": "implementer",
       "skills": [

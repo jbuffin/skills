@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "implementer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Builder for this repo.",
       "role": "implementer",
       "skills": [
@@ -27,6 +31,10 @@
       "layer": "built-in",
       "model": null,
       "name": "reviewer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Plain default for reviewer.",
       "role": "reviewer",
       "skills": []

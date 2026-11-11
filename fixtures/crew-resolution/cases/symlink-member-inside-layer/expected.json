@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "linked",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Linked.",
       "role": "scribe",
       "skills": []

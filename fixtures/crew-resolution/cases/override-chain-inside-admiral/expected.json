@@ -11,6 +11,10 @@
       "layer": "run",
       "model": null,
       "name": "implementer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Builder pinned for this run.",
       "role": "implementer",
       "skills": [
@@ -27,6 +31,10 @@
       "layer": "built-in",
       "model": null,
       "name": "reviewer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Plain default for reviewer.",
       "role": "reviewer",
       "skills": []

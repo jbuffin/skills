@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "fix-checker",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Fix checker.",
       "role": "fix-checker",
       "skills": []
@@ -25,6 +29,10 @@
       "layer": "repo",
       "model": null,
       "name": "strict-fixer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Strict.",
       "role": "fix-checker",
       "skills": []

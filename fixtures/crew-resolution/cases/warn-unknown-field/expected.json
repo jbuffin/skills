@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "tweaky",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Pick.",
       "role": "scribe",
       "skills": []
