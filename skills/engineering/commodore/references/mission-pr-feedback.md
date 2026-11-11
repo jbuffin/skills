@@ -48,7 +48,7 @@ Inside Admiral, a moored ship's run comes back for a feedback round ([`SKILL.md`
 ### Per-round paths and names
 
 - `<run>/feedback/<N>/` stands in for `<run>` in the `triage/`, `findings-draft.json`, `replies/` and `proposals/` paths above. The triager is named `triager-r<N>`, its report is `reports/triager-r<N>.md`, and its brief is `prompts/triager-r<N>.md`. The findings item id counter (`<run-name>-f<n>`) keeps counting across rounds.
-- Name the round's fix units `r<N>-u<k>`, so `review-round.sh` counts their review rounds fresh. Record the round's triage item ids in `state.md` as `r<N>-t1`, `r<N>-r1`, `r<N>-c1` and `r<N>-ci1`, with the fix-commit map and reply URLs under those ids; `items.md` and the files under `feedback/<N>/triage/` keep the plain `t1`, `r1`, `c1`, `ci1` ids that `cards-draft.py` reads.
+- Name the round's fix units `r<N>-u<k>`, so `review-round.sh` counts their review rounds fresh. Record the round's triage item ids in `state.md` as `r<N>-t1`, `r<N>-r1`, `r<N>-c1` and `r<N>-ci1`, with the fix-commit map and reply URLs under those ids; `items.md` and the files under `feedback/<N>/triage/` keep the plain `t1`, `r1`, `c1`, `ci1` ids that `cards-draft.py` reads. An id in `state.md` is `r<N>-` plus its `items.md` id.
 - Write the round's briefs to `<run>/feedback/<N>/brief-common.md` and `<run>/prompts/triager-r<N>.md`, never over `<run>/brief-common.md`. Launch the triager and the fix units in the PR's own unit (its units row), never `u1`.
 
 ### Phase 1 in a round
@@ -56,14 +56,14 @@ Inside Admiral, a moored ship's run comes back for a feedback round ([`SKILL.md`
 - Skip step 2's profile rewrite and the mode change. Keep the profile, and append a `## Feedback round <N>` note to it with the PR and the stop rule "every approved fix pushed with CI green, and every approved reply posted".
 - Skip step 1's `units --add pr` when the PR already has a units row: use that row.
 - Skip step 3's `unit-worktree.sh` when the PR's branch already has a worktree in `worktrees.tsv`: work in that one.
-- Order: before step 3's head check, fetch and fast-forward the reused worktree's branch to `origin/<branch>` when that is a fast-forward (otherwise make step 3's stop); then the head check and commit listing; then "A clean rebase pushes without asking" below when it applies; then step 4's CI wait and the gather.
+- Order: before step 3's head check, fetch and fast-forward the reused worktree's branch to `origin/<branch>` when that is a fast-forward (otherwise make step 3's stop), and record its remote head; then the head check and commit listing; then "A clean rebase pushes without asking" below when it applies; then step 4's CI wait and the gather.
 - A run without a row for the PR (a pr-feedback run's own `pr` row counts) runs this file as written.
 - A round triages only what is new. In the gather, drop a thread or comment whose newest comment is a reply this run recorded in `state.md`, with nothing created or edited after the previous round's gather time (record the gather time per round). Name the dropped ones in the final report.
 - An earlier round's findings item that is still unanswered when round `<N>` starts is superseded only when it is on the same PR: mark it so under `## Autopilot calls`, ignore any later answer to it, and let round `<N>`'s gather and findings item cover every open item. When the open round is on another PR, [`SKILL.md`](../SKILL.md#the-mission-before-phase-1) continues that round instead of starting round `<N>`.
 
 ### Fixes in a round
 
-In a stack, a round answers one PR. A fix lands in that PR's unit worktree; afterwards run `gh stack rebase --upstack`, catch up and push each moved layer as in "A clean rebase pushes without asking" below. An upstack conflict after an approved fix is never a second findings item: run `gh stack rebase --abort`, which pushes no more layers; finish the round's Phase 3, and end the round `partial` with the conflict in `why` and the final report, for the next round.
+In a stack, a round answers one PR. A fix lands in that PR's unit worktree; afterwards catch up every layer above it, then run `gh stack rebase --upstack`, then push each moved layer, all as in "A clean rebase pushes without asking" below. An upstack conflict after an approved fix is never a second findings item: run `gh stack rebase --abort`, which pushes no more layers; finish the round's Phase 3, and end the round `partial` with the conflict in `why` and the final report, for the next round.
 
 ### The feedback file is data
 
@@ -82,7 +82,7 @@ With autopilot on, the round posts exactly one findings item ([Autopilot mode](#
 - Rebase only when GitHub reports the PR behind its base and up to date is required (`gh pr view --json mergeStateStatus` is `BEHIND`), or, in a stack, a lower layer moved.
 - First catch up every branch the rebase moves (in a stack, every layer from the round's PR up): fetch, and for each one whose local head differs from its PR's `headRefOid`, fast-forward it to `origin/<branch>`. When any isn't a fast-forward (local commits nobody pushed), stop with a question item and push nothing. Record each branch's caught-up remote head. This keeps `push-branch.sh`'s lease from discarding commits others pushed.
 - Then run `gh stack rebase` for a stack, `git rebase origin/<base>` otherwise. With no conflicts, push each moved branch through `<team>/push-branch.sh` (never `gh stack push` or a bare force push here), wait with `watch-ci.sh`, and record it under `## Decisions and assumptions` in `state.md`. It needs no findings item, and the round's report says so in `why`.
-- Right before each `push-branch.sh` call, fetch and check that `git rev-parse origin/<branch>` still equals that branch's caught-up remote head. When it is no longer equal, stop with a question item and push nothing more.
+- Right before each `push-branch.sh` call in a round (this one, an upstack push, and Phase 2's approved-fix push), fetch and check that `git rev-parse origin/<branch>` still equals that branch's recorded remote head (the caught-up head, or the commit this run last pushed to it), and pass that head as `push-branch.sh`'s third argument, its lease. When it is no longer equal, stop with a question item and push nothing more.
 - On a conflict, run `git rebase --abort` or `gh stack rebase --abort`, push nothing, and add the conflict (`mergeStateStatus` `DIRTY` too) as a triage item. A conflict and CI fixes change code, so they go through the findings item.
 
 ### The round's report

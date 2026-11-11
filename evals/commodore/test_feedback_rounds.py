@@ -466,6 +466,26 @@ class PushSafety(unittest.TestCase):
         self.assertIn("git rev-parse origin/<branch>", text)
         self.assertRegex(text, r"(?i)(not|no longer) equal[^\n]*question item[^\n]*push nothing more")
 
+    def test_the_recheck_covers_the_approved_fix_push_and_is_the_lease(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)right before each[^\n]*Phase 2's approved-fix push")
+        self.assertRegex(text, r"(?i)pass that head as `push-branch\.sh`'s third argument, its lease")
+        self.assertRegex(text, r"(?i)fast-forward the reused worktree's branch[^\n]*record its remote head")
+
+    def test_upstack_layers_are_caught_up_before_the_rebase(self):
+        text = round_section()
+        self.assertRegex(text, r"(?i)catch up every layer above it, then run `gh stack rebase --upstack`, then push")
+
+    def test_state_ids_map_to_items_ids(self):
+        self.assertIn("An id in `state.md` is `r<N>-` plus its `items.md` id.", round_section())
+
+    def test_run_name_is_checked_before_the_run_directory_is_resolved(self):
+        self.assertRegex(
+            SKILL.read_text(encoding="utf-8"),
+            r"Check before acting\. `<run-name>` must fit the run-name rule"
+            r"[^\n]*before you resolve `<teams>/<run-name>`",
+        )
+
     def test_upstack_conflict_after_a_fix_is_not_a_second_findings_item(self):
         text = round_section()
         self.assertRegex(text, r"(?i)upstack[^\n]*conflict[^\n]*(not|never)[^\n]*second findings item")
@@ -526,3 +546,46 @@ class StateSetAcceptsFeedbackKeys(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PushBranchLease(unittest.TestCase):
+    """push-branch.sh with an expected sha pushes only while the remote branch is still at that sha."""
+
+    PUSH = COMMODORE / "scripts" / "push-branch.sh"
+
+    def git(self, *args, cwd):
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        self.remote, self.work, self.run = root / "remote.git", root / "work", root / "run"
+        self.git("init", "-q", "--bare", str(self.remote), cwd=root)
+        self.git("init", "-q", "-b", "b", str(self.work), cwd=root)
+        for k, v in (("user.email", "t@example.com"), ("user.name", "t")):
+            self.git("config", k, v, cwd=self.work)
+        self.git("remote", "add", "origin", str(self.remote), cwd=self.work)
+        self.git("commit", "-q", "--allow-empty", "-m", "one", cwd=self.work)
+        self.git("push", "-q", "origin", "b", cwd=self.work)
+        self.pushed = self.git("rev-parse", "HEAD", cwd=self.work)
+        self.git("commit", "-q", "--amend", "--allow-empty", "-m", "one, rewritten", cwd=self.work)
+        self.run.mkdir()
+        (self.run / "team.env").write_text("")
+        (self.run / "worktrees.tsv").write_text(f"u1\tb\t{self.work}\n")
+
+    def push(self, *extra):
+        return subprocess.run(
+            [str(self.PUSH), str(self.run), "b", *extra], capture_output=True, text=True, check=False
+        ).returncode
+
+    def test_a_stale_expected_sha_refuses_the_push(self):
+        self.assertNotEqual(self.push("0" * 40), 0)
+        self.assertEqual(self.git("rev-parse", "b", cwd=self.remote), self.pushed)
+
+    def test_the_recorded_head_lets_the_push_through(self):
+        self.assertEqual(self.push(self.pushed), 0)
+        self.assertEqual(self.git("rev-parse", "b", cwd=self.remote), self.git("rev-parse", "HEAD", cwd=self.work))
+
+    def test_a_malformed_sha_is_refused(self):
+        self.assertEqual(self.push("HEAD"), 5)
