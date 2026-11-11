@@ -44,6 +44,13 @@ jobs:
       - run: pipx run ruff==0.16.10 check .
       - run: pipx run ruff==0.16.10 format --check .
 
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y -qq zsh >/dev/null
+      - run: for d in evals/*/; do python3 -m unittest discover -s "$d" -t "$d" -p 'test_*.py' || exit 1; done
+
   workflows:
     runs-on: ubuntu-latest
     steps:

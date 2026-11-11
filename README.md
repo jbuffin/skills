@@ -150,6 +150,7 @@ request cancels the run in progress.
 | shell | `shellcheck` on bash scripts, `zsh -n` on zsh scripts |
 | markdown | `markdownlint-cli2` (line length off, see `.markdownlint-cli2.jsonc`) |
 | python | `ruff check` and `ruff format --check` (see `ruff.toml`) |
+| evals | the script tests in `evals/` (see [`docs/agents/testing.md`](docs/agents/testing.md)) |
 | workflows | `actionlint` |
 | plugin | `claude plugin validate .` |
 
