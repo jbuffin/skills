@@ -179,14 +179,14 @@ Teammates put questions in their reports, with options and a recommendation, and
 - If the profile, the source of truth or a ground rule answers it, it's yours. Decide, record it in `state.md`, and tell the teammate. Fresh teammates read `brief-common.md` and their own brief, not `state.md`. So if the decision binds later units or roles, also add it to `<run>/brief-common.md` or the affected briefs, saying where it came from.
 - If it's cheap to reverse, take the recommended default and record it as an assumption. List it in the next [unit summary](references/mission-build.md#unit-summary-to-the-engineer) so the engineer can overturn it.
 - Product behaviour, design choices that depart from the source, scope, and anything external or irreversible outside the run's own branches and PRs (defined in the ground rules, step 5.2) belong to the engineer. Batch them, then ask by where the run is:
-  - Outside Admiral (`ADMIRAL_SHIP` unset): if the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
-  - In an Admiral ship (`ADMIRAL_SHIP` set) with autopilot off: never ask in prose alone, with or without a `needs input:` line, and don't ask whether the engineer is around. While independent work remains, put the batch in one question item and keep the team on that work (see [Question items in a ship](#question-items-in-a-ship)). When nothing independent is left, use AskUserQuestion (on Codex and Copilot, the harness's own ask) with your recommendation first.
+  - Outside Admiral (`ADMIRAL_SHIP` empty or unset): if the engineer is around, use AskUserQuestion with your recommendation first. If not, end your update with a `needs input:` line saying exactly what you need, and keep the team on work that doesn't depend on the answer.
+  - In an Admiral ship (`ADMIRAL_SHIP` non-empty) with autopilot off: never ask in prose alone, with or without a `needs input:` line, and don't ask whether the engineer is around. While independent work remains, put the batch in one question item and keep the team on that work (see [Question items in a ship](#question-items-in-a-ship)). When nothing independent is left, use AskUserQuestion (on Codex and Copilot, the harness's own ask) with your recommendation first.
 
 In autopilot mode, an engineer question goes through [Autopilot mode](#autopilot-mode) in place of AskUserQuestion and the `needs input:` line.
 
 ### Question items in a ship
 
-These rules apply with `ADMIRAL_SHIP` set and autopilot off.
+These rules apply with `ADMIRAL_SHIP` non-empty and autopilot off.
 
 Publish the batch with `<team>/admiral-io.sh item <draft>`, in the format of [A high-stakes stop](#autopilot-mode) steps 1–2, which apply here: `kind` `question`, id `<run-name>-q<n>`. `<n>` is the same counter autopilot's items use, and a later batch gets the next `n`. If `ADMIRAL_INBOX` is unset, `admiral-io.sh item` prints a note and writes nothing: use AskUserQuestion, never a question item.
 
@@ -265,7 +265,7 @@ This section applies only in autopilot mode. With it off, every gate reads as wr
 5. Close every teammate, stop the watchdog and end the run cleanly.
 
 - A stop at mission confirmation comes before any mission is recorded. Run `<team>/team-init.sh <run-name> <repo>` first, write no `mission:` line, keep the draft in that run directory, and record the item and the original launch text under `## Autopilot calls`. The `resume` is `/commodore resume <run-name>`.
-- With `ADMIRAL_INBOX` unset (a hand launch with `--autopilot`), never wait: stop `partial` with the questions in `state.md` and the final report. The engineer answers in the session: resume without `--autopilot`, and the open questions under `## Autopilot calls` are asked as normal gates.
+- With `ADMIRAL_INBOX` unset (autopilot outside Admiral: `--autopilot` or `ADMIRAL_AUTOPILOT=1`), never wait: stop `partial` with the questions in `state.md` and the final report. The engineer answers in the session: resume without `--autopilot`, and the open questions under `## Autopilot calls` are asked as normal gates.
 
 **Answered in the session.** This applies with autopilot off too. Admiral keeps an item in its inbox until `<id>.answer.json` exists beside it. When you take an answer in the session (the engineer replies in the terminal, or a resume without `--autopilot` asks the open questions as gates) to a question of a question item you published, and Resume step 1 doesn't find an answer to that item, write its answer file before you act on the answer:
 

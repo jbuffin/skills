@@ -28,9 +28,10 @@ def paragraph(start):
 class RunLayerInsideAdmiral(unittest.TestCase):
     def test_crew_members_item_ignores_launch_text_inside_admiral(self):
         item = paragraph("4. run, inside Admiral")
-        self.assertRegex(item, r"(?i)launch text")
-        self.assertRegex(item, r"(?i)ignor")
-        self.assertRegex(item, r"(?i)writes? no (run )?member|no run member")
+        self.assertRegex(
+            item,
+            r"(?i)Inside Admiral[^.]*writes no run member and ignores any crew member, pin[^.]*launch text",
+        )
         self.assertIn("ADMIRAL_RUN_CREW", item)
 
     def test_crew_members_item_keeps_engineer_members_outside_admiral(self):
@@ -40,9 +41,10 @@ class RunLayerInsideAdmiral(unittest.TestCase):
 
     def test_phase_1_writes_no_run_member_inside_admiral(self):
         step = paragraph("1. Write the profile.")
-        self.assertRegex(step, r"(?i)inside Admiral[^.]*(launch text|ignor)|(launch text|ignor)[^.]*inside Admiral")
-        self.assertRegex(step, r"(?i)ignor")
-        self.assertRegex(step, r"(?i)no run member|writes? no (run )?member|write no (run )?member")
+        self.assertRegex(
+            step,
+            r"(?i)Inside Admiral, write no run member and ignore any crew member or pin named in the launch text",
+        )
 
     def test_phase_1_pick_choices_are_the_coordinators_own(self):
         step = paragraph("1. Write the profile.")
