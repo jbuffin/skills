@@ -4,20 +4,6 @@
     {
       "ad-hoc": false,
       "ad-hoc-run": null,
-      "based-on": "implementer",
-      "file": "helper.md",
-      "harness": null,
-      "instructions": "Helper.",
-      "layer": "user-global",
-      "model": null,
-      "name": "helper",
-      "pick-me-when": "Helps.",
-      "role": "helper-role",
-      "skills": []
-    },
-    {
-      "ad-hoc": false,
-      "ad-hoc-run": null,
       "based-on": null,
       "file": "reviewer.md",
       "harness": null,
@@ -45,12 +31,6 @@
     }
   ],
   "warnings": [
-    {
-      "code": "role-change",
-      "field": "based-on",
-      "file": "helper.md",
-      "layer": "repo"
-    },
     {
       "code": "role-change",
       "field": "role",

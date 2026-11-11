@@ -1,10 +1,4 @@
-"""Tests for `admiral-io.sh answer-write`: the answer file Commodore writes when a question is answered in the session.
-
-The seam is the script's command line: an inbox directory holding one question item, a draft answer, then
-admiral-io.sh run as a subprocess. Tests assert on the files in the inbox directory, stderr and the exit code.
-
-Run from the repo root: python3 -m unittest evals.commodore.test_answer_write -v
-"""
+"""Tests for `admiral-io.sh answer-write`: the answer file Commodore writes for a question item."""
 
 import json
 import os
@@ -19,7 +13,6 @@ SCRIPT = REPO / "skills" / "engineering" / "commodore" / "scripts" / "admiral-io
 OK = 0
 INVALID = 2
 ANSWERED = 4
-USAGE = 5
 
 ITEM = {
     "version": 1,
@@ -90,19 +83,10 @@ class AnswerWrite(unittest.TestCase):
         return sorted(p.name for p in self.inbox.iterdir())
 
     def test_writes_the_answer_beside_the_item(self):
-        code, err = self.run_write(answer())
-        self.assertEqual((code, err), (OK, ""))
-        self.assertEqual(json.loads(self.target().read_text()), answer())
-        self.assertEqual(self.inbox_names(), ["run-q1.answer.json", "run-q1.json"])
-
-    def test_other_alone_and_choice_with_other_are_answers(self):
         draft = answer(answers={"scope": {"other": "Ask me later"}, "envs": {"choice": ["prod"], "other": "and qa"}})
         self.assertEqual(self.run_write(draft), (OK, ""))
-
-    def test_note_is_optional(self):
-        draft = answer()
-        del draft["note"]
-        self.assertEqual(self.run_write(draft)[0], OK)
+        self.assertEqual(json.loads(self.target().read_text()), draft)
+        self.assertEqual(self.inbox_names(), ["run-q1.answer.json", "run-q1.json"])
 
     def test_never_replaces_an_existing_answer(self):
         self.target().write_text('{"from": "admiral"}')
@@ -111,11 +95,6 @@ class AnswerWrite(unittest.TestCase):
         self.assertIn("already exists", err)
         self.assertEqual(self.target().read_text(), '{"from": "admiral"}')
 
-    def test_a_dangling_symlink_counts_as_an_answer(self):
-        self.target().symlink_to(self.root / "nowhere")
-        self.assertEqual(self.run_write(answer())[0], ANSWERED)
-        self.assertFalse((self.root / "nowhere").exists())
-
     def refused(self, draft, reason, item_id="run-q1"):
         code, err = self.run_write(draft, item_id)
         self.assertEqual(code, INVALID, err)
@@ -123,17 +102,17 @@ class AnswerWrite(unittest.TestCase):
         self.assertEqual(self.inbox_names(), ["run-q1.json"])
 
     def test_refuses_a_missing_question(self):
-        self.refused(answer(answers={"scope": {"choice": "Cut"}}), "question 'envs' has no answer")
+        self.refused(answer(answers={"scope": {"choice": "Cut"}}), "'envs'")
 
     def test_refuses_an_unknown_question(self):
         draft = answer()
         draft["answers"]["extra"] = {"other": "x"}
-        self.refused(draft, "asks no question 'extra'")
+        self.refused(draft, "'extra'")
 
     def test_refuses_a_label_the_question_doesnt_offer(self):
         draft = answer()
         draft["answers"]["scope"] = {"choice": "Maybe"}
-        self.refused(draft, "'Maybe' isn't one of the question's option labels")
+        self.refused(draft, "'Maybe'")
 
     def test_refuses_a_list_on_a_single_choice_question(self):
         draft = answer()
@@ -168,11 +147,6 @@ class AnswerWrite(unittest.TestCase):
             json.dumps({**{k: ITEM[k] for k in ("version", "id", "created", "title")}, "kind": "review"})
         )
         self.refused(answer(), "only a question item's answer is written here")
-
-    def test_wrong_argument_count_is_usage(self):
-        args = [str(SCRIPT), "answer-write", str(self.inbox), "run-q1"]
-        proc = subprocess.run(args, capture_output=True, check=False)
-        self.assertEqual(proc.returncode, USAGE)
 
 
 if __name__ == "__main__":

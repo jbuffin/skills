@@ -1,4 +1,4 @@
 {
   "admiral": false,
-  "description": "A custom role without a valid based-on, and a built-in role with one, is refused with a bad-based-on warning; an earlier member of the same name stands."
+  "description": "A custom role without a valid based-on, and a built-in role with one, is refused with a bad-based-on warning."
 }

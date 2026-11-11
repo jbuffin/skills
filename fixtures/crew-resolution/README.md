@@ -19,7 +19,7 @@ Run a case by mapping each `layers/<label>/` directory onto its layer. In Commod
 - `built-in`: the built-in members the resolver ships with.
 - `ad-hoc`: `<ADMIRAL_CREW_DIR>/ad-hoc/` inside Admiral, `${XDG_CONFIG_HOME:-~/.config}/commodore/crew/ad-hoc/` outside it. The run id is the real path of Commodore's run directory. The fixtures write a short literal `run` instead.
 
-Inside Admiral (`admiral: true`) the `user-global` layer is ignored. Outside it (`admiral: false`) the `fleet` layer is ignored. Some cases put a member in the ignored layer on purpose, so a resolver handed an ignored layer's directory must ignore it. Commodore's explicit `--layer` mode rejects an ignored label with exit 5, so its eval leaves those directories out there and covers them through `--run`.
+Inside Admiral (`admiral: true`) the `user-global` layer is ignored. Outside it (`admiral: false`) the `fleet` layer is ignored. Some cases put a member in the ignored layer on purpose, so a resolver handed an ignored layer's directory must ignore it. Commodore's explicit `--layer` mode rejects an ignored label with exit 5, so its eval leaves those directories out, and its `--run` tests cover the ignored layers.
 
 ## The ad hoc directory
 

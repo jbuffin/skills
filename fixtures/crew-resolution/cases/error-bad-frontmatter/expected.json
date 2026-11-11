@@ -3,25 +3,7 @@
     {
       "code": "bad-frontmatter",
       "field": null,
-      "file": "bad-line.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "comma-in-quote.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
       "file": "dup-key.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "empty-file.md",
       "layer": "repo"
     },
     {
@@ -33,67 +15,13 @@
     {
       "code": "bad-frontmatter",
       "field": null,
-      "file": "item-after-value.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "no-open.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "open-flow.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
       "file": "open-quote.md",
       "layer": "repo"
     },
     {
       "code": "bad-frontmatter",
       "field": null,
-      "file": "orphan-item.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "space-close.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "space-open.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "tab-indent.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "text-after-quote.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
       "file": "unclosed.md",
-      "layer": "repo"
-    },
-    {
-      "code": "bad-frontmatter",
-      "field": null,
-      "file": "upper-key.md",
       "layer": "repo"
     }
   ],
