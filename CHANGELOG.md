@@ -1,5 +1,23 @@
 # jasonbuffin-skills
 
+## 3.0.0
+
+### Major Changes
+
+- [#203](https://github.com/jbuffin/skills/pull/203) [`aa8a93c`](https://github.com/jbuffin/skills/commit/aa8a93c2a80cf82ce1dede81781cef35a7f70ec3) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore casts its crew from member files, and `roles.json` is no longer read. `scripts/crew.py cast` replaces `role-skills.sh`: it picks one member per role (a run-layer member is a pin, then `--pick`, then the latest layer's member), drops skills the harness can't load, prints the table for the profile, and with `--save` writes `cast.json` and the `MODEL_<ROLE>` lines in `team.env`. `team-preflight.sh` runs it, `team-init.sh` keeps the Admiral crew layers in `team.env`, and `setup-commodore` now drafts member files with `crew-draft.sh` in place of `roles-draft.sh`. To migrate, run `setup-commodore/scripts/convert-roles.py <roles.json> <crew-dir>` once for each `roles.json` (user-global, repo and run), then delete it. `cast` warns while one is left behind.
+
+### Minor Changes
+
+- [#206](https://github.com/jbuffin/skills/pull/206) [`710257c`](https://github.com/jbuffin/skills/commit/710257c39abe1cf8e231742b517ba057a6348bd5) Thanks [@jbuffin](https://github.com/jbuffin)! - Add ad hoc crew members, written by `crew.py adhoc` outside the repo and resolved only by the run that wrote them. Every mission's final report lists the ad hoc members its run made.
+
+- [#205](https://github.com/jbuffin/skills/pull/205) [`5e45559`](https://github.com/jbuffin/skills/commit/5e455596ace511cf2dd5058cce166cc7cac67efd) Thanks [@jbuffin](https://github.com/jbuffin)! - A crew member's `harness` now locks that role to its harness. `launch-teammate.sh` takes `--harness` and `HARNESS_<ROLE>` from `team.env`, records the teammate's harness as column 6 of `teammates.tsv`, and `retask.sh`, `close-teammate.sh`, `teammate-tail.sh` and `watch-teammates.sh` route by it (drivers read `TEAMMATE_HARNESS`). Drivers may add an `available` operation, called through `harness-available.sh`. `crew.py cast` checks each locked harness, exits 4 when one is unavailable, takes `--unlock <role>` (kept in `cast.json` as `unlocks`), and `--save` writes `HARNESS_<ROLE>` lines. `team-preflight.sh` runs each locked harness's own preflight and skips locked roles' models in the advisor probe.
+
+- [#202](https://github.com/jbuffin/skills/pull/202) [`a4f063b`](https://github.com/jbuffin/skills/commit/a4f063b6d34620ad3a7cc2e486e974fbb9722b6a) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore gains crew members: Markdown member files layered as built-in, fleet, user-global, repo and run. The nine built-in members ship in `crew/`, and `scripts/crew.py resolve` reads the layers as text (python3 stdlib, never running or sourcing a file) and prints the resolved members, errors and warnings as JSON. Shared cases for the resolver live in `fixtures/crew-resolution/`.
+
+### Patch Changes
+
+- [#208](https://github.com/jbuffin/skills/pull/208) [`4463181`](https://github.com/jbuffin/skills/commit/44631813fa05912b68045e70c5aa72bb1922f7a3) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore's build mission has the PR that completes an issue say `Closes #<n>` (the top PR of a stack), so merging it closes the issue; every other PR says `Part of #<n>`.
+
 ## 2.9.1
 
 ### Patch Changes
