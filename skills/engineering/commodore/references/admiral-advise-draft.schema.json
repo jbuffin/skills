@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Admiral advise draft",
+  "description": "The call Commodore sends to `admiral advise` on stdin through scripts/admiral-io.sh advise. Admiral refuses anything else, and also refuses a recommendation that isn't one of the options, which scripts/advise-check.py checks. Validate with scripts/schema-check.py.",
+  "type": "object",
+  "required": ["question", "options", "recommendation"],
+  "additionalProperties": false,
+  "properties": {
+    "question": { "type": "string", "minLength": 1 },
+    "options": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "recommendation": { "type": "string", "minLength": 1 }
+  }
+}

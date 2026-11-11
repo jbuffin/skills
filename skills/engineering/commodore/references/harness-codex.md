@@ -57,7 +57,7 @@ The rest of the skill is written for Claude Code. On Codex, apply these.
 
 ## Autopilot mode
 
-Autopilot mode follows the same rules on Codex ([Autopilot mode](../SKILL.md#autopilot-mode)). Every call is high-stakes here, because there is no advisor to classify it: each one goes into a question item and stops the run. The MCP question under "Caveats to settle before a Codex run" is a high-stakes call in autopilot mode.
+Autopilot mode follows the same rules on Codex ([Autopilot mode](../SKILL.md#autopilot-mode)). `admiral-io.sh advise` classifies each call, as on every harness; the harness has no part in it. The MCP question under "Caveats to settle before a Codex run" is a high-stakes call in autopilot mode.
 
 ## Read-only roles have no network
 
