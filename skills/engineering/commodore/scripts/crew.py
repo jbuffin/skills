@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
 """Resolve crew members: layered Markdown member files, read as text only.
 
-    crew.py resolve [--admiral] [--layer <label>=<dir> ...]
+    crew.py resolve [--admiral] [--layer <label>=<dir> ...] [--run-id <id>]
     crew.py resolve --run <run-dir>
     crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--unlock <role> ...] [--save]
+    crew.py adhoc --run <run-dir> --name <name> --role <role> --pick-me-when <line> --body-file <file> [...]
 
 `resolve` prints one JSON object on stdout. Exit 0 with {"members", "warnings"}, exit 1 with {"errors", "warnings"},
 exit 5 on a bad call. `cast` picks the member for each role and prints the cast table for profile.md; its errors and
 warnings go to stderr; exit 4 means a locked harness is unavailable (the table is still printed, nothing is saved).
 The rules are in references/crew-members.md. A member file is never run, sourced or imported (`cast` runs only the
-harness drivers' has-skill and harness-available.sh).
+harness drivers' has-skill and harness-available.sh). `adhoc` writes one ad hoc member outside the repo; only the run
+whose real path is its `ad-hoc-run` resolves it. A run directory whose real path has a control character, a quote or a
+backslash is no run id: `resolve --run`, `cast` and `adhoc` print `ERROR bad run id: ...` on stderr, exit 1, no JSON.
 """
 
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
-LAYERS = ["built-in", "fleet", "user-global", "repo", "run"]
+LAYERS = ["built-in", "fleet", "user-global", "repo", "run", "ad-hoc"]
 ROLES = [
     "implementer",
     "test-writer",
@@ -35,6 +39,8 @@ HARNESSES = ["claude", "codex", "copilot"]
 KNOWN_FIELDS = {"name", "role", "pick-me-when", "model", "harness", "ad-hoc", "ad-hoc-run", "based-on", "skills"}
 MAX_BYTES = 65536
 MIN_QUOTED = 2
+MIN_PRINTABLE = 32
+DEL = 127
 SLUG = re.compile(r"^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$")
 KEY = re.compile(r"^([a-z][a-z0-9-]*):(.*)$")
 ITEM = re.compile(r"^ +-( .*)?$")
@@ -45,11 +51,20 @@ HARNESS_NAME = re.compile(r"[a-z0-9-]+")
 MODELS_MARK = "# crew models (crew.py cast)"
 USAGE = (
     "usage: crew.py resolve [--admiral] [--layer <label>=<dir> ...]\n"
+    "       crew.py resolve [--admiral] [--layer <label>=<dir> ...] --layer ad-hoc=<dir> --run-id <id>\n"
     "       crew.py resolve --run <run-dir>\n"
     "       crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--unlock <role> ...] [--save]\n"
+    "       crew.py adhoc --run <run-dir> --name <name> --role <role> --pick-me-when <line>\n"
+    "                     [--based-on <role>] [--skill <skill> ...] [--model <model>] [--harness <h>]\n"
+    "                     --body-file <file>\n"
     "labels: " + ", ".join(LAYERS) + "\n"
     "--admiral only selects which labels are allowed: fleet with it, user-global without it.\n"
+    "--layer ad-hoc=<dir> needs --run-id <id> (and the reverse); --run takes both from the run directory.\n"
 )
+
+
+class Refusal(Exception):
+    """A call that is refused with one ERROR line and exit 1."""
 
 
 class Unreadable(Exception):
@@ -246,7 +261,7 @@ def clean_skills(skills, warn):
     return kept
 
 
-def review_fields(fields, body):
+def review_fields(fields, body, layer):
     """Run the warning checks; return (warnings, kept skills, body, refused)."""
     warnings = []
 
@@ -274,7 +289,7 @@ def review_fields(fields, body):
     elif not (isinstance(based_on, str) and based_on in ROLES and based_on != "fix-checker"):
         warn("bad-based-on", "based-on", "a custom role needs based-on naming one of the roles but fix-checker")
         refused = True
-    if fields.get("ad-hoc") is True:
+    if fields.get("ad-hoc") is True and layer != "ad-hoc":
         warn("misplaced-ad-hoc", "ad-hoc", "ad hoc members live only in ad-hoc/, member refused")
         refused = True
     return warnings, kept, body, refused
@@ -295,7 +310,7 @@ def read_member(path, layer_real, layer, stem):
     fields, body = parse_member(raw)
     check_fields(fields, stem)
 
-    warnings, kept, body, refused = review_fields(fields, body)
+    warnings, kept, body, refused = review_fields(fields, body, layer)
     role = fields["role"]
     based_on = fields.get("based-on")
     member = {
@@ -341,10 +356,107 @@ def member_files(directory):
     )
 
 
-def resolve(layers):
-    """layers: list of (label, dir) in layer order. Return (members, errors, warnings)."""
+# ------------------------------------------------------------------------------------------------ ad hoc directory
+def real_target(path):
+    """The real path `path` will have: the nearest existing ancestor's real path joined with the missing rest.
+    The raw path is never normalised as text: a `..` after a symlink must climb out of the link's target."""
+    head, rest = os.path.join(os.getcwd(), path), []
+    while not os.path.lexists(head):
+        head, tail = os.path.split(head.rstrip(os.sep))
+        rest.append(tail)
+    return os.path.normpath(os.path.join(os.path.realpath(head), *reversed(rest)))
+
+
+def inside_path(path, root):
+    return path == root or os.path.commonpath([path, root]) == root
+
+
+def ad_hoc_problem(directory, links, repo):
+    """Why the ad hoc directory can't be used (None when it can): a symlink in `links`, or a real path in the repo
+    or in a .commodore directory. Works on a directory that doesn't exist yet."""
+    for link in links:
+        if os.path.islink(link):
+            return f"{link} is a symlink"
+    real = real_target(directory)
+    if repo and inside_path(real, os.path.realpath(repo)):
+        return f"{directory} is inside the repo"
+    if ".commodore" in real.split(os.sep):
+        return f"{directory} is inside a .commodore directory"
+    return None
+
+
+def ad_hoc_warning(code, filename, message):
+    return {"layer": "ad-hoc", "file": filename, "code": code, "field": None, "message": message}
+
+
+def names_this_run(path, layer_real, run_id):
+    """Whether the file's raw text holds this run's `ad-hoc-run` line. A file that can't be read holds none."""
+    try:
+        if os.path.commonpath([os.path.realpath(path), layer_real]) != layer_real:
+            return False
+        with open(path, "rb") as handle:
+            raw = handle.read(MAX_BYTES + 1)
+    except OSError:
+        return False
+    wanted = {f'ad-hoc-run: "{run_id}"', f"ad-hoc-run: {run_id}"}
+    return any(line.rstrip("\r") in wanted for line in raw.decode("utf-8", errors="replace").split("\n"))
+
+
+def accept_ad_hoc(member, standing):
+    """The warning that refuses an ad hoc member of this run, or None."""
+    earlier = standing.get(member["name"])
+    if earlier:
+        message = f"name {member['name']} is already a {earlier['layer']} member; an ad hoc member never replaces one"
+        return {**ad_hoc_warning("ad-hoc-name-taken", member["file"], message + ", member refused"), "field": "name"}
+    if member["role"] == "fix-checker":
+        message = "an ad hoc member can't be the fix checker, member refused"
+        return {**ad_hoc_warning("ad-hoc-fix-checker", member["file"], message), "field": "role"}
+    return None
+
+
+def read_ad_hoc(directory, run_id, standing, guard):
+    """Add this run's ad hoc members to `standing`; return the warnings. Files of other runs are skipped silently."""
+    if not os.path.lexists(directory):
+        return []
+    problem = guard(directory)
+    if problem:
+        return [ad_hoc_warning("ad-hoc-dir-refused", None, f"ad hoc directory skipped: {problem}")]
+    try:
+        filenames = member_files(directory)
+    except OSError as err:
+        return [ad_hoc_warning("ad-hoc-unreadable", None, f"ad hoc directory can't be listed: {err.strerror or err}")]
+    layer_real, warnings = os.path.realpath(directory), []
+    for filename in filenames:
+        path, stem, reason = os.path.join(directory, filename), filename[: -len(".md")], "ad-hoc: true is missing"
+        try:
+            member, found, refused = read_member(path, layer_real, "ad-hoc", stem)
+        except Unreadable as err:
+            member, reason = None, err.message
+        if member is None or not (member["ad-hoc"] and member["ad-hoc-run"] == run_id):
+            if names_this_run(path, layer_real, run_id):
+                warnings.append(
+                    ad_hoc_warning("ad-hoc-unreadable", filename, f"member of this run is unusable: {reason}")
+                )
+            continue
+        warnings.extend(found)
+        refusal = None if refused else accept_ad_hoc(member, standing)
+        if refusal:
+            warnings.append(refusal)
+        elif not refused:
+            standing[member["name"]] = member
+    return warnings
+
+
+def resolve(layers, run_id=None, guard=None):
+    """layers: list of (label, dir) in layer order. Return (members, errors, warnings).
+
+    The ad-hoc layer needs `run_id` (compared exactly) and `guard`, a function from the directory to the reason it
+    can't be used or None."""
     standing, errors, warnings = {}, [], []
     for label, directory in layers:
+        if label == "ad-hoc":
+            warnings.extend(read_ad_hoc(directory, run_id, standing, guard))
+            continue
         layer_real = os.path.realpath(directory)
         try:
             filenames = member_files(directory)
@@ -432,6 +544,33 @@ def run_settings(run_dir):
     return team, inside, repo, xdg
 
 
+def run_id_of(run_dir):
+    """The run's id: the real path of its directory, never read from team.env or the environment."""
+    run_id = os.path.realpath(run_dir)
+    if any(ord(c) < MIN_PRINTABLE or ord(c) == DEL for c in run_id) or '"' in run_id or "\\" in run_id:
+        raise Refusal(f"bad run id: {run_id!r} has a control character, a quote or a backslash")
+    return run_id
+
+
+def ad_hoc_place(run_dir):
+    """(ad hoc directory or "" when none, directories that may not be symlinks, repo directory or "", inside)."""
+    team, inside, repo, xdg = run_settings(run_dir)
+    if inside:
+        crew = setting("ADMIRAL_CREW_DIR", team)
+        directory = os.path.join(crew, "ad-hoc") if crew else ""
+        return directory, [directory], repo, True
+    crew = os.path.join(xdg, "commodore", "crew")
+    directory = os.path.join(crew, "ad-hoc")
+    return directory, [directory, crew, os.path.dirname(crew)], repo, False
+
+
+def resolve_run(run_dir):
+    """Resolve the run's crew: (members, errors, warnings). Raise Refusal for a bad run id."""
+    run_id = run_id_of(run_dir)
+    _, links, repo, _ = ad_hoc_place(run_dir)
+    return resolve(run_layers(run_dir), run_id, lambda directory: ad_hoc_problem(directory, links, repo))
+
+
 def run_layers(run_dir):
     team, inside, repo, xdg = run_settings(run_dir)
     layers = [("built-in", str(Path(os.path.realpath(__file__)).parent.parent / "crew"))]
@@ -448,6 +587,7 @@ def run_layers(run_dir):
             ("repo", repo_crew),
             ("run", os.path.join(run_dir, "crew")),
         ]
+    layers.append(("ad-hoc", ad_hoc_place(run_dir)[0]))
     return [(label, path) for label, path in layers if path]
 
 
@@ -580,6 +720,10 @@ def role_order(roles):
 
 
 def default_member(candidates):
+    """The latest layer's member (then the first name); an ad hoc member is never a default."""
+    candidates = [m for m in candidates if not m["ad-hoc"]]
+    if not candidates:
+        return None
     return min(candidates, key=lambda m: (-LAYERS.index(m["layer"]), m["name"].encode("utf-8")))
 
 
@@ -601,8 +745,9 @@ def choose(role, candidates, pick, warn):
     if role not in ROLES:
         return None, None
     member = default_member(candidates)
-    if len(candidates) > 1:
-        warn(f"pick: {role}: {len(candidates)} candidates and no pick; took {member['name']} ({member['layer']})")
+    standing = [m for m in candidates if not m["ad-hoc"]]
+    if member and len(standing) > 1:
+        warn(f"pick: {role}: {len(standing)} candidates and no pick; took {member['name']} ({member['layer']})")
     return member, None
 
 
@@ -662,6 +807,8 @@ def build_cast(members, picks, harnesses, unlocks, warn):
             "model": usable_model(member, role, warn, unlocked),
             "harness": member["harness"],
             "layer": member["layer"],
+            "ad-hoc": member["ad-hoc"],
+            "ad-hoc-run": member["ad-hoc-run"],
             "pinned": member["layer"] == "run",
             "_lock": lock,
             "_unlocked": unlocked,
@@ -910,12 +1057,16 @@ def cast_setup(argv):
     return run_dir, explicit, save, asked, harness_name
 
 
-def cast_main(argv):
+def cast_main(argv):  # noqa: PLR0911
     try:
         run_dir, explicit, save, asked, harness_name = cast_setup(argv)
     except UsageError as err:
         return usage_error(str(err))
-    members, errors, warnings = resolve(run_layers(run_dir))
+    try:
+        members, errors, warnings = resolve_run(run_dir)
+    except Refusal as err:
+        say(f"ERROR {err}")
+        return 1
     for path in leftover_roles_json(run_dir):
         say(
             f"WARN  {path} is ignored: crew members replaced roles.json. "
@@ -956,6 +1107,218 @@ def cast_main(argv):
     return 0
 
 
+# ------------------------------------------------------------------------------------------------ adhoc
+ADHOC_FLAGS = {
+    "--run": "run",
+    "--name": "name",
+    "--role": "role",
+    "--pick-me-when": "pick-me-when",
+    "--based-on": "based-on",
+    "--model": "model",
+    "--harness": "harness",
+    "--body-file": "body-file",
+}
+ADHOC_REQUIRED = ("run", "name", "role", "pick-me-when", "body-file")
+
+
+def parse_adhoc_args(argv):
+    """Return ({option: value}, [skills]); raise UsageError for a bad call."""
+    opts, skills = {}, []
+    args = iter(argv)
+    for arg in args:
+        value = next(args, None)
+        if value is None and (arg == "--skill" or arg in ADHOC_FLAGS):
+            raise UsageError(f"{arg} needs a value")
+        if arg == "--skill":
+            skills.append(value)
+        elif arg in ADHOC_FLAGS:
+            if ADHOC_FLAGS[arg] in opts:
+                raise UsageError(f"{arg} given twice")
+            opts[ADHOC_FLAGS[arg]] = value
+        else:
+            raise UsageError(f"unknown argument {arg}")
+    for key in ADHOC_REQUIRED:
+        if key not in opts:
+            raise UsageError(f"adhoc needs --{key}")
+    if opts["run"] == "":
+        raise UsageError("--run needs a run directory")
+    return opts, skills
+
+
+def adhoc_skills(skills):
+    kept = []
+    for skill in skills:
+        cleaned = skill[1:] if skill[:1] in ("/", "$") else skill
+        if not SKILL.fullmatch(cleaned):
+            raise Refusal(f"skill {skill!r} is not a valid skill name")
+        if cleaned not in kept:
+            kept.append(cleaned)
+    return kept
+
+
+def check_adhoc_fields(opts, skills):
+    """Raise Refusal for the first field that fails the member rules; return the cleaned skills."""
+    for key in ("name", "role"):
+        if not is_slug(opts[key]):
+            raise Refusal(f"--{key} must be a lowercase slug of at most 64 characters")
+    role, based_on = opts["role"], opts.get("based-on")
+    if role == "fix-checker":
+        raise Refusal("an ad hoc member can't be the fix checker")
+    if role in ROLES and based_on is not None:
+        raise Refusal("a built-in role takes no --based-on")
+    if role not in ROLES and not (based_on in ROLES and based_on != "fix-checker"):
+        raise Refusal("a custom role needs --based-on naming one of the roles but fix-checker")
+    if opts.get("harness") is not None and opts["harness"] not in HARNESSES:
+        raise Refusal(f"--harness must be one of {', '.join(HARNESSES)}")
+    if opts.get("model") is not None and not MODEL.fullmatch(opts["model"]):
+        raise Refusal(f"--model {opts['model']!r} is not a model name")
+    line = opts["pick-me-when"]
+    if not line.strip(" \t") or "\n" in line or "\r" in line:
+        raise Refusal("--pick-me-when must be one non-empty line")
+    return adhoc_skills(skills)
+
+
+def read_body(path, run_dir):
+    """The body file's text. It must be a regular file whose real path is inside <run-dir>/prompts/."""
+    prompts = os.path.realpath(os.path.join(run_dir, "prompts"))
+    real = os.path.realpath(path)
+    if real == prompts or not inside_path(real, prompts):
+        raise Refusal(f"body file {path} is not inside {run_dir}/prompts/")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise Refusal(f"body file {path} is not a regular file")
+            raw = handle.read(MAX_BYTES + 1)
+    except OSError as err:
+        raise Refusal(f"body file {path} can't be read: {err.strerror or err}") from None
+    if len(raw) > MAX_BYTES:
+        raise Refusal(f"body file {path} is over {MAX_BYTES} bytes")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Refusal(f"body file {path} is not valid UTF-8") from None
+
+
+def quoted(value):
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def member_text(opts, skills, run_id, body):
+    head = [f"name: {quoted(opts['name'])}", f"role: {quoted(opts['role'])}"]
+    if opts.get("based-on"):
+        head.append(f"based-on: {quoted(opts['based-on'])}")
+    head += [f"pick-me-when: {quoted(opts['pick-me-when'])}", f"skills: [{', '.join(skills)}]"]
+    for key in ("model", "harness"):
+        if opts.get(key) is not None:
+            head.append(f"{key}: {quoted(opts[key])}")
+    head += ["ad-hoc: true", f"ad-hoc-run: {quoted(run_id)}"]
+    return "---\n" + "\n".join(head) + "\n---\n" + body
+
+
+def make_directory(directory):
+    """Create the missing directories down to `directory`, each with mode 0700."""
+    missing, path = [], directory
+    while not os.path.lexists(path):
+        missing.append(path)
+        path = os.path.dirname(path)
+    try:
+        for path in reversed(missing):
+            os.mkdir(path, 0o700)
+    except OSError as err:
+        raise Refusal(f"can't create {path}: {err.strerror or err}") from None
+    if not os.path.isdir(directory):
+        raise Refusal(f"{directory} is not a directory")
+
+
+def create_file(directory, name, text):
+    """Write <directory>/<name>.md through a temp file and a link that can't replace anything. Return its path."""
+    target = os.path.join(directory, f"{name}.md")
+    tmp = os.path.join(directory, f".{name}.md.tmp.{os.getpid()}")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except OSError as err:
+        raise Refusal(f"can't write {target}: {err.strerror or err}") from None
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(text.encode("utf-8"))
+        os.link(tmp, target)
+    except OSError as err:
+        raise Refusal(f"can't write {target}: {err.strerror or err}") from None
+    finally:
+        os.unlink(tmp)
+    return target
+
+
+def check_name_free(opts, members, directory):
+    name = opts["name"]
+    held = next((m for m in members if m["name"] == name), None)
+    if held:
+        raise Refusal(f"name {name} is taken by a {held['layer']} member")
+    path = os.path.join(directory, f"{name}.md")
+    if os.path.lexists(path):
+        raise Refusal(f"{path} already exists")
+
+
+def ad_hoc_target(run_dir):
+    """(directory, symlink-checked directories, repo) for a write; raise Refusal when none can be used."""
+    directory, links, repo, inside = ad_hoc_place(run_dir)
+    if not directory:
+        raise Refusal("no ad hoc directory: ADMIRAL_CREW_DIR is empty")
+    if inside and not os.path.isdir(os.path.dirname(directory)):
+        raise Refusal(f"ADMIRAL_CREW_DIR {os.path.dirname(directory)} is not a directory")
+    problem = ad_hoc_problem(directory, links, repo)
+    if problem:
+        raise Refusal(problem)
+    return directory, links, repo
+
+
+def write_ad_hoc(opts, skills):
+    """Write the member and return 0, or return 1 after printing why not. Raise Refusal for a failed check."""
+    skills = check_adhoc_fields(opts, skills)
+    run_dir = opts["run"]
+    run_id = run_id_of(run_dir)
+    text = member_text(opts, skills, run_id, read_body(opts["body-file"], run_dir))
+    if len(text.encode("utf-8")) > MAX_BYTES:
+        raise Refusal(f"the member file would be over {MAX_BYTES} bytes")
+    directory, links, repo = ad_hoc_target(run_dir)
+    members, errors, _ = resolve_run(run_dir)
+    if errors:
+        for item in errors:
+            say(issue_line("ERROR", item))
+        return 1
+    check_name_free(opts, members, directory)
+    make_directory(directory)
+    problem = ad_hoc_problem(directory, links, repo)
+    if problem:
+        raise Refusal(problem)
+    path = create_file(directory, opts["name"], text)
+    members, errors, warnings = resolve_run(run_dir)
+    mine = f"{opts['name']}.md"
+    found = any(m["name"] == opts["name"] and m["layer"] == "ad-hoc" for m in members)
+    for item in warnings:
+        say(issue_line("WARN", item))
+    if errors or not found:
+        os.unlink(path)
+        codes = [i["code"] for i in [*errors, *warnings] if i["file"] == mine]
+        say("ERROR the new member didn't resolve" + (f": {', '.join(codes)}" if codes else ""))
+        return 1
+    sys.stdout.write(f"wrote {path}\n")
+    return 0
+
+
+def adhoc_main(argv):
+    try:
+        opts, skills = parse_adhoc_args(argv)
+    except UsageError as err:
+        return usage_error(str(err))
+    try:
+        return write_ad_hoc(opts, skills)
+    except Refusal as err:
+        say(f"ERROR {err}")
+        return 1
+
+
 # ------------------------------------------------------------------------------------------------ command line
 def usage_error(message):
     sys.stderr.write(f"crew.py: {message}\n{USAGE}")
@@ -977,15 +1340,26 @@ def add_layer(explicit, spec):
     explicit[label] = path
 
 
+def take_run_id(args, run_id):
+    if run_id is not None:
+        raise UsageError("--run-id given twice")
+    value = next(args, "")
+    if value == "" or value.startswith("--") or any(ord(c) < MIN_PRINTABLE or ord(c) == DEL for c in value):
+        raise UsageError("--run-id needs an id that is not a flag and has no control characters")
+    return value
+
+
 def parse_args(argv):
-    """Return (admiral, explicit {label: dir}, run dir or None); raise UsageError for a bad call."""
-    admiral, explicit, run_dir = False, {}, None
+    """Return (admiral, explicit {label: dir}, run dir or None, run id or None); raise UsageError for a bad call."""
+    admiral, explicit, run_dir, run_id = False, {}, None, None
     args = iter(argv)
     for arg in args:
         if arg == "--admiral":
             admiral = True
         elif arg == "--layer":
             add_layer(explicit, next(args, ""))
+        elif arg == "--run-id":
+            run_id = take_run_id(args, run_id)
         elif arg == "--run":
             if run_dir is not None:
                 raise UsageError("--run given twice")
@@ -994,32 +1368,45 @@ def parse_args(argv):
                 raise UsageError("--run needs a run directory")
         else:
             raise UsageError(f"unknown argument {arg}")
-    if run_dir is not None and (explicit or admiral):
-        raise UsageError("--run can't be combined with --layer or --admiral")
+    if run_dir is not None and (explicit or admiral or run_id is not None):
+        raise UsageError("--run can't be combined with --layer, --run-id or --admiral")
+    if ("ad-hoc" in explicit) != (run_id is not None):
+        raise UsageError("--layer ad-hoc=<dir> and --run-id <id> go together")
     if admiral and "user-global" in explicit:
         raise UsageError("user-global is ignored inside Admiral")
     if not admiral and "fleet" in explicit:
         raise UsageError("fleet is only read inside Admiral (--admiral)")
-    return admiral, explicit, run_dir
+    return admiral, explicit, run_dir, run_id
+
+
+def resolve_main(argv):
+    try:
+        _, explicit, run_dir, run_id = parse_args(argv)
+    except UsageError as err:
+        return usage_error(str(err))
+    try:
+        if run_dir is not None:
+            members, errors, warnings = resolve_run(run_dir)
+        else:
+            layers = [(label, explicit[label]) for label in LAYERS if label in explicit]
+            ad_hoc = explicit.get("ad-hoc", "")
+            members, errors, warnings = resolve(layers, run_id, lambda d: ad_hoc_problem(d, [ad_hoc], ""))
+    except Refusal as err:
+        say(f"ERROR {err}")
+        return 1
+    result = {"errors": errors, "warnings": warnings} if errors else {"members": members, "warnings": warnings}
+    sys.stdout.write(json.dumps(result, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
+    return 1 if errors else 0
 
 
 def main(argv):
     if argv and argv[0] == "cast":
         return cast_main(argv[1:])
+    if argv and argv[0] == "adhoc":
+        return adhoc_main(argv[1:])
     if not argv or argv[0] != "resolve":
-        return usage_error("expected the resolve or cast subcommand")
-    try:
-        _, explicit, run_dir = parse_args(argv[1:])
-    except UsageError as err:
-        return usage_error(str(err))
-    if run_dir is not None:
-        layers = run_layers(run_dir)
-    else:
-        layers = [(label, explicit[label]) for label in LAYERS if label in explicit]
-    members, errors, warnings = resolve(layers)
-    result = {"errors": errors, "warnings": warnings} if errors else {"members": members, "warnings": warnings}
-    sys.stdout.write(json.dumps(result, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
-    return 1 if errors else 0
+        return usage_error("expected the resolve, cast or adhoc subcommand")
+    return resolve_main(argv[1:])
 
 
 if __name__ == "__main__":

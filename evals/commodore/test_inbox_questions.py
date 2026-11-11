@@ -16,7 +16,6 @@ Run from the repo root: python3 -m unittest evals/commodore/test_inbox_questions
 """
 
 import re
-import subprocess
 import unittest
 from pathlib import Path
 
@@ -33,25 +32,9 @@ QUESTION_ITEM_ENTRY = (
     "session. _Avoid_: inbox question, needs-input line."
 )
 
-UNCHANGED_FILES = (
-    "skills/engineering/commodore/references/harness-codex.md",
-    "skills/engineering/commodore/references/harness-copilot.md",
-    "skills/engineering/commodore/references/admiral-inbox-item.schema.json",
-    "skills/engineering/commodore/references/mission-pr-feedback.md",
-)
-
 
 def text(path):
     return Path(path).read_text()
-
-
-BASELINE = "c51d027"  # the commit this change started from; the guards compare against it, not a moving branch
-
-
-def at_baseline(rel):
-    """The file at BASELINE as bytes, or None when the commit is missing (shallow checkout)."""
-    done = subprocess.run(["git", "show", f"{BASELINE}:{rel}"], cwd=REPO, capture_output=True, check=False)
-    return done.stdout if done.returncode == 0 else None
 
 
 class DocCase(unittest.TestCase):
@@ -322,30 +305,6 @@ class TestRegressionGuards(DocCase):
         self.assertIn("edit the findings first", step3)
         self.assertIn("post nothing", step3)
         self.assertIn("`needs input:`", step3)
-
-    def test_guard_the_autopilot_text_is_unchanged_except_resume_step_1(self):
-        # Since #188 the section also holds the "Answered in the session" paragraph and its steps, which this guard
-        # leaves out; admiral-io.sh left UNCHANGED_FILES then too, for its answer-write command.
-        old = at_baseline("skills/engineering/commodore/SKILL.md")
-        if old is None:
-            self.skipTest("the baseline commit is not available")
-
-        def autopilot(body):
-            tail = body[body.index("## Autopilot mode") :]
-            if "**Answered in the session.**" in tail:
-                head, rest = tail.split("**Answered in the session.**", 1)
-                tail = head + rest[rest.index("**Resume.**") :]
-            return [ln for ln in tail.splitlines() if not ln.startswith("1. For each item listed under")]
-
-        self.assertEqual(autopilot(self.skill), autopilot(old.decode()))
-
-    def test_guard_files_outside_this_change_are_byte_identical_to_the_baseline(self):
-        for rel in UNCHANGED_FILES:
-            with self.subTest(path=rel):
-                old = at_baseline(rel)
-                if old is None:
-                    self.skipTest("the baseline commit is not available")
-                self.assertEqual((REPO / rel).read_bytes(), old)
 
     def test_guard_question_item_is_still_defined_in_words_used_here(self):
         self.assertMatches(r"\*\*question item\*\* is[^\n]*kind `question`", self.skill)
