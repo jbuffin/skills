@@ -168,8 +168,7 @@ class TestLaunchExitCodes(LaunchCase):
 
 
 class TestLaunchWait(LaunchCase):
-    """A launch reports success only after the boat's first hook (last_activity), as the claude driver fails fast on an
-    untrusted folder."""
+    """A launch succeeds only after the boat's first hook, as the claude driver fails fast on an untrusted folder."""
 
     def closes(self):
         return [a for a in self.w.admiral() if a[:2] == ["crew", "close"]]

@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a legacy roles.json into crew member files.
-
-    convert-roles.py <roles.json> <crew-dir>
-
-Writes <crew-dir>/<role>.md for each role entry, prints `WROTE <path>` per file and then a `NEXT` line. It never
-changes or deletes roles.json. Exit 1 and nothing written when the JSON is unusable, the crew dir is a symlink, or a
-target path exists (a dangling symlink counts); each file is created with O_EXCL and O_NOFOLLOW;
-exit 5 on a bad call. The member format is in commodore/references/crew-members.md.
-"""
+"""Convert a legacy roles.json into crew member files, never changing or deleting roles.json."""
 
 import json
 import os

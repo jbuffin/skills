@@ -1,19 +1,12 @@
 #!/bin/zsh
 # usage: launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>   (see ../CONTRACT.md)
-# Starts the teammate as an Admiral crew boat running the teammate's harness (TH: claude, codex or copilot; TEAMMATE_HARNESS names it, else the run's HARNESS). TEAMMATE_ROLE, when
-# set, becomes --role. A read-only Codex or Copilot teammate is no crew boat: it is handed to that harness's own driver first
-# (headless, so its read-only guarantee holds) and its id goes into <team>/admiral-delegated, for send, stop, status and tail.
-# Admiral exits map to the contract's: 5 and 2 (name in use, usage, not in a ship) to 5, anything else to 1. Never exits 2:
-# there is no background-session fallback inside a ship.
-# Success waits for the boat's first hook (last_activity in `crew list`), up to LAUNCH_WAIT seconds, polling every LAUNCH_POLL. A
-# harness at a startup prompt (folder trust, a hook review) never fires one, so the boat is closed and the launch exits 5; a boat
-# that exits first is closed and the launch exits 1.
 [[ $# -eq 6 ]] || { sed -n 2p $0; exit 5; }
+# A harness at a startup prompt (folder trust, a hook review) never fires the first hook, so the boat is closed and this exits 5.
 D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
 ROLE=$TEAMMATE_ROLE
-# The hand-off comes before every Admiral rule and call: such a teammate is exactly what it is on main, and needs no admiral.
+# a read-only Codex or Copilot teammate runs headless on its own driver, so its read-only guarantee holds and it needs no admiral
 if [[ -n $RO && $TH != claude ]]; then
   [[ -x $HARNESS_DRIVER/launch ]] || { echo "harness $TH has no launch operation ($HARNESS_DRIVER)"; exit 5; }
   OUT=$($HARNESS_DRIVER/launch "$@")

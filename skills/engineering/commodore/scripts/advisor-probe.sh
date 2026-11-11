@@ -1,10 +1,7 @@
 #!/bin/zsh
-# usage: advisor-probe.sh <team-dir> <model>
-# Prints `ADVISOR ON <model>`, `ADVISOR OFF <model>: <reason>` or `ADVISOR SAME-FAMILY <model>` (no session started: <model> is in
-# the same family as ADVISOR, so it has no advisor by design) and exits 0 on all three (5 on bad arguments).
-# Runs the advisor-probe operation of the run's harness driver (HARNESS in team.env, default claude); see the
-# driver's header in agent-teammates/scripts/drivers/<harness>/ for how it probes and what it costs. A driver
-# without the operation prints `ADVISOR n/a (<harness>)`.
+# usage: advisor-probe.sh <team-dir> <model>     runs the advisor-probe of the run's harness driver
+# Prints `ADVISOR ON <model>`, `ADVISOR OFF <model>: <reason>`, `ADVISOR SAME-FAMILY <model>` (same family as ADVISOR:
+# no probe) or `ADVISOR n/a (<harness>)`, and exits 0 (5 on bad arguments).
 [[ -z $1 || -z $2 || -n $3 || ! -d $1 ]] && { sed -n 2,4p $0; exit 5; }
 # HARNESS comes from team.env alone, never from the caller's environment.
 HARNESS=$(unset HARNESS; source ${1:A}/team.env 2>/dev/null; print -r -- ${HARNESS:-claude})

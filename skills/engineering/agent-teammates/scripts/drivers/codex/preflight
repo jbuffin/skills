@@ -92,10 +92,8 @@ for r, needs in broad.items():
 if not fail and not broad: print("OK    codex rules cover what writers need (read-only roles run without rules)")
 sys.exit(fail)
 PY
-# The git add and git commit rules run those commands outside the sandbox, so a writer can run code of its own through them
-# (a nested repo's hooks or core.fsmonitor, a rewritten .git file, a hooks directory it can write; see #66). Codex writers
-# therefore run with the engineer's permissions. This check closes only the route through core.hooksPath, as defence in depth:
-# git runs the hooks that setting names, and a path the writer can write is code it can run.
+# The git add and commit rules run outside the sandbox, so Codex writers run with the engineer's permissions; this
+# closes only the core.hooksPath route, as defence in depth.
 read -r repo wtdir < <(unset REPO WORKTREE WORKTREES_DIR; source $1/team.env; print -r -- "${REPO:-${WORKTREE:--}} ${WORKTREES_DIR:--}")
 if [[ $repo == - ]]; then
   echo "WARN  codex: team.env sets neither REPO nor WORKTREE, so core.hooksPath wasn't checked"

@@ -4,26 +4,20 @@
 #        admiral-io.sh answer <inbox-dir> <id>    print <inbox-dir>/<id>.answer.json to stdout
 #        admiral-io.sh answer-write <inbox-dir> <id> <draft.json>
 #                                                 write the answer to question item <id> as <inbox-dir>/<id>.answer.json
-# Write the draft with a file tool, never on a command line. item, report and answer-write validate the draft, then
-# publish it through a dot-prefixed temp file in the destination directory. With ADMIRAL_INBOX (item) or ADMIRAL_REPORT
-# (report) unset or empty they read nothing, write nothing and exit 0. Exit codes: 0 done or nothing to do; 2 invalid
-# draft or id, item already exists, or (answer-write) no such question item; 3 answer not there yet (missing, or not
-# valid JSON yet); 4 (answer-write) an answer already exists, left as it is; 5 usage.
-# An item is never overwritten (a re-asked question gets a new id); nor is an answer; a report is replaced.
-# Schemas: references/admiral-inbox-item.schema.json (item), references/admiral-report.schema.json (report),
-# references/admiral-answer.schema.json (answer-write, which answer-check.py also checks against the item).
-# Validator: scripts/schema-check.py.
+# Write the draft with a file tool. item, report and answer-write check it against references/admiral-*.schema.json.
+# With ADMIRAL_INBOX (item) or ADMIRAL_REPORT (report) unset they do nothing and exit 0. Items and answers are never
+# overwritten; a report is replaced. Exits 2 on an invalid draft or id, an existing item or (answer-write) no such
+# question; 3 when the answer isn't there yet; 4 when (answer-write) an answer exists; 5 on usage.
 case $1:$# in
   item:2|report:2|answer:3|answer-write:4) ;;
-  *) sed -n 2,13p $0; exit 5 ;;
+  *) sed -n 2,10p $0; exit 5 ;;
 esac
 HERE=${0:A:h}
 CHECK=$HERE/schema-check.py
-# Same rule as the "id" pattern in the item schema; keep the two in step. answer needs it here, item gets it from the schema.
+# The item schema's "id" pattern; keep the two in step.
 ID_RE='^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'
 
-# schema-check.py validates the draft as strict JSON, then writes the parsed value (not the draft's bytes) through a
-# dot-prefixed temp file in the destination directory, so Admiral's directory watch never sees a half-written .json.
+# schema-check.py writes through a dot-prefixed temp file, so Admiral's directory watch never sees a half-written .json.
 case $1 in
   item)
     [[ -n $ADMIRAL_INBOX ]] || { echo "ADMIRAL_INBOX isn't set; no inbox item written" >&2; exit 0; }

@@ -1,12 +1,9 @@
 #!/bin/zsh
 # usage: retask.sh <team-dir> <name> <message-file>
-# Gives a registered teammate its next job through its harness's driver's `send` (the registry's sixth column), on a harness that declares SEND=script, then
-# resets its watchdog clock like retasked.sh. On SEND=tool it sends nothing: use the harness's own tool, then retasked.sh.
-# Exit codes: 0 sent and recorded; 4 the harness declares SEND=tool; 5 refused (usage, unregistered or closed teammate,
-# missing or empty message file, no usable SEND= line in driver.env, or the driver has no send); send's own non-zero
-# code when the driver's send fails (the driver's message is printed, the registry is untouched).
+# Sends a registered teammate its next job through its driver's `send` and resets its watchdog clock (SEND=script harnesses).
+# Exit 0: sent; 4: the harness declares SEND=tool (use its own tool, then retasked.sh); 5: refused; else send's own code.
 D=${1:A}; NAME=$2; MSG=${3:a}
-[[ -z $1 || -z $NAME || -z $3 ]] && { sed -n 2,2p $0; exit 5; }
+[[ -z $1 || -z $NAME || -z $3 ]] && { sed -n 2,4p $0; exit 5; }
 source ${0:A:h}/team-env.zsh
 reg_open $NAME
 [[ -s $MSG ]] || { echo "message file $MSG is missing or empty"; exit 5; }

@@ -1,42 +1,19 @@
 #!/usr/bin/env python3
-"""Break down where a commodore coordinator's context goes, and its tool calls by category and the split at
-the run's result, from its Claude Code session transcripts.
-
-usage: coordinator-tokens.py [--days N] [--min-calls N] [--units N] [--raw] [--sessions] [--simulate-handoff]
-                             [--json] [transcript.jsonl | projects-dir ...]
+"""Break down where a commodore coordinator's context goes, its tool calls by category, and the split at the run's
+result, from its Claude Code session transcripts.
 
 With no paths it scans ~/.claude*/projects/*/ for sessions that invoked commodore (or the older agent-team skills)
-as a slash command in the last --days days. A path may be a transcript or a projects directory.
+in the last --days days. A path may be a transcript or a projects directory.
 
-For each API call the context is input + cache read + cache write. The growth since the previous call is split
-across what was added in between (tool results, tool inputs, attachments, assistant text) in proportion to their
-characters. An item's carry is its tokens times the calls that re-read it before the context next shrinks
-(a compaction). Summed, carry matches the sessions' cache reads, so it shows which sources drive cost.
+Context per API call is input + cache read + cache write. Its growth since the previous call is split across what
+was added in between, by characters. An item's carry is its tokens times the calls that re-read it before the next
+compaction; summed, carry matches the cache reads.
 
-Calls per unit divides the API calls by the run's units. --units N sets the count; otherwise each session's run
-directory is the one whose state.md its tool calls name most, and its units are the rows of the Units table (or the
-`- uN →` bullets of the older format). Sessions of the same run count its units once.
+Units come from --units, or from the Units table of the state.md the session's tool calls name most. Tool calls count
+the coordinator's own tool_use blocks by category; a Bash call is named by its first real command.
 
---simulate-handoff replays each session as if the coordinator restarted fresh whenever its context passed a
-threshold, resetting to the session's first-call context plus RESUME_TOKENS for re-reading state and references.
-
-Tool calls by category counts the coordinator's own tool_use blocks (sub-agent traffic is skipped), once per id, in
-the categories state-set.sh, Edit/Write state.md, Write prompts/, Edit/Write run directory, Edit/Write repo,
-worktree or elsewhere, commodore scripts, `bash: <first command>`, Read, ToolSearch and other. A Bash call is named
-by its first command, looking past blank and comment lines, `cd x &&`, `VAR=1` (and the `;` or `&&` after it), the
-wrappers `env`, `time`, `command` and `sudo` (with their flags) and subshell parentheses; a name that is not plain
-(letters, digits and . _ + -) shows as `bash: ?`. The section lists every non-zero category, largest first, with
-the total last, and per unit with the same unit count as calls per
-unit (counts only when units are unknown). --json adds it as `tool_calls`. --raw does not change it.
-
-The result split cuts each session at its last call that writes the run's `result:` line: a `state-set.sh <run> mode
-result <value>` call (or `mode --set result=<value>`), or an Edit or Write of a state.md that adds a `result:` line.
-Active time is the sum of gaps of ACTIVE_GAP_CAP seconds or less between consecutive API calls, and a gap belongs to
-the side its later call falls on. Active hours and tool calls, in total and per unit, are shown "to result" and
-"after result"; --json adds them as `result_split`, and --sessions adds `has_result` per session. A session with no
-`result:` write counts as "to result" and is flagged "no result". The split is per session: a session that ends before
-its run's result (compaction, restart) is flagged "no result", and a resumed session that only does follow-up work
-after an earlier session wrote the result counts as "to result".
+The result split cuts each session at its last call that writes the run's `result:` line. Active time sums the gaps
+of ACTIVE_GAP_CAP seconds or less between API calls. A session with no `result:` write is flagged "no result".
 """
 
 import argparse
@@ -236,8 +213,7 @@ def section(text, heading):
 
 
 def count_units(state):
-    """Count the units in a state.md: rows of the Units table (or `- uN →` bullets in the older format), plus any
-    uN that owns an acceptance-trace row, since older runs stopped adding bullets."""
+    """Count the units in a state.md's Units table, old-format bullets and acceptance-trace rows."""
     try:
         text = Path(state).read_text(errors="replace")
     except OSError:
@@ -260,9 +236,7 @@ def find_run(state_paths):
 
 
 def parse_bash(command):
-    """Return the first command's basename and its arguments. Looks past comments, blank lines, line continuations,
-    cd x &&, VAR=value, the wrappers env, time, command and sudo (and their flags), subshell parentheses and the ; or
-    && that follows only such tokens. A line that holds nothing else is passed over for the next one."""
+    """Return the first real command's basename and arguments, past cd, VAR=value, wrappers and subshells."""
     lines = [ln.strip() for ln in command.replace("\\\n", " ").split("\n")]
     for line in (ln for ln in lines if ln and not ln.startswith("#")):
         try:
@@ -358,8 +332,7 @@ def split_at_result(times, uses):
 
 
 def read_calls(path):
-    """Return the session's model, API calls in order as (context_tokens, items_added_before_it, usage), run, and
-    the API call times plus its tool calls as (call index, category, writes result)."""
+    """Return the session's model, (context, items added, usage) per API call, run, call times and tool uses."""
     tool_cat, pending, calls, seen = {}, [], [], set()
     times, uses, seen_tools, call_of = [], [], set(), {}
     state_paths = collections.Counter()
@@ -598,7 +571,10 @@ def print_text(out):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    summary, _, details = __doc__.partition("\n\n")
+    ap = argparse.ArgumentParser(
+        description=summary, epilog=details, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("paths", nargs="*", help="transcripts or projects directories (default: ~/.claude*/projects)")
     ap.add_argument("--days", type=int, default=30, help="only transcripts modified in the last N days")
     ap.add_argument("--min-calls", type=int, default=50, help="skip sessions with fewer API calls")

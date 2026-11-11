@@ -1,10 +1,9 @@
 #!/bin/zsh
 # usage: watch-ci.sh <run-dir> <branch> [workflow]     (run in the background)
-# Waits for the CI run of <workflow> (default $CI_WORKFLOW) on <branch>'s current local head SHA,
-# then prints "<conclusion> | <job>: <conclusion> ; ...". Exits 0 when the run succeeded, 1 when it failed or no run
-# appeared within 10 minutes. On a failed run it also saves `gh run view --log-failed` to
-# <run-dir>/ci-<branch>-<sha7>.log and prints that path and up to 20 failing lines from it.
-[[ -z $1 || -z $2 || ! -f $1/team.env ]] && { sed -n 2,7p $0; exit 5; }
+# Waits for the CI run of <workflow> (default $CI_WORKFLOW) on <branch>'s local head, then prints
+# "<conclusion> | <job>: <conclusion> ; ...". Exits 0 on success, 1 on failure or no run within 10 minutes. A failed
+# run's log goes to <run-dir>/ci-<branch>-<sha7>.log; it prints that path and up to 20 failing lines.
+[[ -z $1 || -z $2 || ! -f $1/team.env ]] && { sed -n 2,5p $0; exit 5; }
 RUN=${1:A}; source $RUN/team.env
 B=$2; WF=${3:-$CI_WORKFLOW}; REPO=${REPO:-$WORKTREE}
 SHA=$(git -C $REPO rev-parse --verify -q $B) || { echo "branch $B not found in $REPO"; exit 1; }

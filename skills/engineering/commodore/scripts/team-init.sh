@@ -1,11 +1,6 @@
 #!/bin/zsh
-# usage: team-init.sh <run-name> <repo>
-# Creates ${AGENT_TEAMS_DIR:-${CLAUDE_CONFIG_DIR:-~/.claude}/teams}/<run-name>/ with team.env, state.md, teammates.tsv,
-# prompts/ and reports/, and prints the run directory and the resolved script directories of this skill, agent-teammates and run-preflight.
-# Safe to re-run: never overwrites existing files.
-# Exits 6, before creating anything, if agent-teammates, run-preflight or target-evaluation isn't installed next to this skill.
-# Exits 7, before creating anything, if the harness can't be detected, is ambiguous, or has no driver yet. Detection reads
-# the environment (agent-teammates/scripts/detect-harness.sh); HARNESS preset in the environment names the harness instead.
+# usage: team-init.sh <run-name> <repo>    makes the run dir; prints it and the script dirs of the skills the run uses
+# Never overwrites. Exits 6 if a sibling skill is missing, 7 if the harness can't be detected or has no driver.
 set -e
 NAME=$1; WT=${2:A}
 [[ -z $NAME || -z $WT ]] && { echo "usage: team-init.sh <run-name> <repo>"; exit 5; }
@@ -23,8 +18,7 @@ if (( $#missing )); then
   exit 6
 fi
 RUN=${AGENT_TEAMS_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/teams}/$NAME
-# The harness this run is for. It is written to team.env, and every later script uses that harness's driver. A run that
-# already has a team.env keeps it, so a re-run needs no detection.
+# A run that already has a team.env keeps its harness, so a re-run needs no detection.
 DRIVERS=${SKILL:h}/agent-teammates/scripts/drivers
 SUPPORTED=(); for d in $DRIVERS/*(/N); do [[ -f $d/driver.env ]] && SUPPORTED+=${d:t}; done   # a driver counts only with its driver.env
 if [[ ! -f $RUN/team.env ]]; then
@@ -47,8 +41,7 @@ fi
 mkdir -p $RUN/prompts $RUN/reports
 
 CMUX_BIN=${CMUX_BUNDLED_CLI_PATH:-/Applications/cmux.app/Contents/Resources/bin/cmux}
-# Only for optional cmux viewer panes (VIEWER=cmux). `cmux identify` beats CMUX_WORKSPACE_ID/CMUX_SURFACE_ID, which
-# go stale in restored or background sessions: prefer the calling pane, else the focused one.
+# `cmux identify` beats CMUX_WORKSPACE_ID/CMUX_SURFACE_ID, which go stale in restored or background sessions.
 WS=; SF=
 if [[ -x $CMUX_BIN ]]; then
   read -r WS SF < <($CMUX_BIN identify 2>/dev/null | python3 -c 'import json,sys
@@ -149,8 +142,7 @@ EOF
 ) ;;
 esac
 
-# Inside Admiral (ADMIRAL_SHIP set) a resumed run must read the same crew layers, so team.env keeps the three variables
-# crew.py reads. A value with a quote or a line break can't be written as KEY='value': leave it out and say so.
+# A resumed run inside Admiral must read the same crew layers, so team.env keeps the variables crew.py reads.
 ADMIRAL_LINES=
 if [[ -n ${ADMIRAL_SHIP-} ]]; then
   for v in ADMIRAL_SHIP ADMIRAL_CREW_DIR ADMIRAL_RUN_CREW; do

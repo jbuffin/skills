@@ -1,12 +1,10 @@
 #!/bin/zsh
 # usage: pr-ready.sh <run-dir> <unit>
-# Decides what to run to leave <unit>'s PR ready for review. Reads the PR once with `gh pr view` and makes no gh
-# write. Nothing is merged: it prints no merge command.
-# Exit 0, the PR is open: prints `run: gh pr ready <url>` while it is draft, otherwise `ready: <url>`. Run the `run:`
-# line as its own tool call, so Admiral's guard sees it.
-# Exit 1, can't be marked ready: prints `not ready: <url>: <reason>` (gh pr view failed, or the PR isn't OPEN).
-# Exit 5: bad usage or a precondition fails, with one line on stderr.
-usage() { sed -n 2,8p ${ZSH_ARGZERO:-$0} >&2; exit 5; }
+# Reads <unit>'s PR once with `gh pr view` (no gh write, no merge) and decides what leaves it ready for review.
+# Exit 0, PR open: prints `run: gh pr ready <url>` while it is draft, else `ready: <url>`. Run the `run:` line as its
+#   own tool call, so Admiral's guard sees it.
+# Exit 1: prints `not ready: <url>: <reason>`. Exit 5: bad usage or a failed precondition, one line on stderr.
+usage() { sed -n 2,6p ${ZSH_ARGZERO:-$0} >&2; exit 5; }
 refuse() { print -ru2 -r -- "pr-ready.sh: $1"; exit 5; }
 [[ -z $1 || -z $2 || $# -gt 2 || ! -f $1/state.md ]] && usage
 command -v jq >/dev/null || refuse "needs jq on PATH"

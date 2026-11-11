@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve crew members: layered Markdown member files, read as text only.
-
-    crew.py resolve [--admiral] [--layer <label>=<dir> ...] [--run-id <id>]
-    crew.py resolve --run <run-dir>
-    crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--unlock <role> ...] [--save]
-    crew.py adhoc --run <run-dir> --name <name> --role <role> --pick-me-when <line> --body-file <file> [...]
-
-`resolve` prints one JSON object on stdout. Exit 0 with {"members", "warnings"}, exit 1 with {"errors", "warnings"},
-exit 5 on a bad call. `cast` picks the member for each role and prints the cast table for profile.md; its errors and
-warnings go to stderr; exit 4 means a locked harness is unavailable (the table is still printed, nothing is saved).
-The rules are in references/crew-members.md. A member file is never run, sourced or imported (`cast` runs only the
-harness drivers' has-skill and harness-available.sh). `adhoc` writes one ad hoc member outside the repo; only the run
-whose real path is its `ad-hoc-run` resolves it. A run directory whose real path has a control character, a quote or a
-backslash is no run id: `resolve --run`, `cast` and `adhoc` print `ERROR bad run id: ...` on stderr, exit 1, no JSON.
-"""
+"""Resolve and cast crew members from layered Markdown member files, read as text only (references/crew-members.md)."""
 
 import json
 import os
@@ -81,7 +67,6 @@ def bad(message):
     return Unreadable("bad-frontmatter", None, message)
 
 
-# ------------------------------------------------------------------------------------------------ frontmatter
 def parse_quoted(text):
     """Parse a leading quoted scalar; return (string, rest after the closing quote)."""
     quote = text[0]
@@ -200,7 +185,6 @@ def parse_member(raw):
     return fields, "\n".join(body)
 
 
-# ------------------------------------------------------------------------------------------------ one member file
 def is_slug(value):
     return isinstance(value, str) and SLUG.match(value) is not None
 
@@ -332,7 +316,6 @@ def read_member(path, layer_real, layer, stem):
     return member, warnings, refused
 
 
-# ------------------------------------------------------------------------------------------------ resolution
 def usable_name(name):
     """A member file name: lowercase .md, not a dotfile, valid UTF-8."""
     if not name.endswith(".md") or name.startswith("."):
@@ -356,10 +339,8 @@ def member_files(directory):
     )
 
 
-# ------------------------------------------------------------------------------------------------ ad hoc directory
 def real_target(path):
-    """The real path `path` will have: the nearest existing ancestor's real path joined with the missing rest.
-    The raw path is never normalised as text: a `..` after a symlink must climb out of the link's target."""
+    """The real path `path` will have; not normalised as text: a `..` after a symlink leaves its target."""
     head, rest = os.path.join(os.getcwd(), path), []
     while not os.path.lexists(head):
         head, tail = os.path.split(head.rstrip(os.sep))
@@ -372,8 +353,7 @@ def inside_path(path, root):
 
 
 def ad_hoc_problem(directory, links, repo):
-    """Why the ad hoc directory can't be used (None when it can): a symlink in `links`, or a real path in the repo
-    or in a .commodore directory. Works on a directory that doesn't exist yet."""
+    """Why the ad hoc directory can't be used: a symlink in `links`, or a real path in the repo or .commodore."""
     for link in links:
         if os.path.islink(link):
             return f"{link} is a symlink"
@@ -448,10 +428,7 @@ def read_ad_hoc(directory, run_id, standing, guard):
 
 
 def resolve(layers, run_id=None, guard=None):
-    """layers: list of (label, dir) in layer order. Return (members, errors, warnings).
-
-    The ad-hoc layer needs `run_id` (compared exactly) and `guard`, a function from the directory to the reason it
-    can't be used or None."""
+    """(members, errors, warnings) from (label, dir) layers; the ad-hoc layer needs `run_id` and the `guard` check."""
     standing, errors, warnings = {}, [], []
     for label, directory in layers:
         if label == "ad-hoc":
@@ -510,7 +487,6 @@ def resolve(layers, run_id=None, guard=None):
     return members, sorted(errors, key=order), sorted(warnings, key=order)
 
 
-# ------------------------------------------------------------------------------------------------ run mode
 def read_team_env(run_dir):
     values = {}
     try:
@@ -591,7 +567,6 @@ def run_layers(run_dir):
     return [(label, path) for label, path in layers if path]
 
 
-# ------------------------------------------------------------------------------------------------ cast
 def say(line):
     sys.stderr.write(line + "\n")
 
@@ -760,11 +735,7 @@ def model_advice(role, lock):
 
 
 def build_cast(members, picks, harnesses, unlocks, warn):
-    """Return (cast entries, errors). An entry is a dict with the cast.json keys plus `_`-prefixed working keys.
-
-    `_lock` is the harness the member is locked to (None when the run's own), `_unlocked` the harness the role was
-    unlocked from, `_on` the harness the role runs on.
-    """
+    """Return (cast entries, errors): dicts of the cast.json keys plus working keys `_lock`, `_unlocked` and `_on`."""
     run_name = harnesses.run_name
     roles = role_order({m["role"] for m in members} | set(ROLES))
     entries, errors, unchecked = [], [], set()
@@ -1107,7 +1078,6 @@ def cast_main(argv):  # noqa: PLR0911
     return 0
 
 
-# ------------------------------------------------------------------------------------------------ adhoc
 ADHOC_FLAGS = {
     "--run": "run",
     "--name": "name",
@@ -1319,7 +1289,6 @@ def adhoc_main(argv):
         return 1
 
 
-# ------------------------------------------------------------------------------------------------ command line
 def usage_error(message):
     sys.stderr.write(f"crew.py: {message}\n{USAGE}")
     return 5

@@ -42,7 +42,8 @@ test of its wording. Test each behavior once, at the lowest layer that sees it, 
 Match the comment density of the code around it; most functions need none. A comment says why, in one line: a
 hidden constraint, an invariant, a workaround with its link, or behavior that would surprise a reader. Names and
 code say what. A script's header holds exactly the usage lines it prints. Issue numbers, unit ids, spec sections,
-commit hashes and history go in the commit or PR, where they don't rot.
+commit hashes and history go in the commit or PR, where they don't rot. `scripts/check-comments.py` enforces this
+rule through `scripts/validate.sh`.
 
 ## Checks and pull requests
 

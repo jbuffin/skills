@@ -1,7 +1,5 @@
 #!/bin/zsh
 # usage: has-skill <team-dir> <name>   (see ../CONTRACT.md)
-# Exits 0 when Codex can load skill <name> for the run's repo, 1 when it can't. Looks in the repo's .agents/skills,
-# ~/.agents/skills, $CODEX_HOME/skills (its .system skills included) and installed plugins (skills.zsh).
 [[ $# -eq 2 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}
 [[ -f $D/team.env ]] && source $D/team.env   # REPO and the harness's config dirs; read only, so the run dir is untouched

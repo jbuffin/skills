@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Analyse `admiral outcomes` records for one panel and write analysis.json and retro.md.
-
-usage: retro-analyze.py --panel <source>/<panel> --outcomes <file> --out <dir>
-                        [--since <RFC 3339>] [--until <RFC 3339>] [--teams-dir <dir>]
-
-Reads the outcomes file (JSON lines, unfiltered) and the Commodore run directories under the teams
-directory. Never runs `admiral`, never reads $ADMIRAL_HOME. Writes only <out>/analysis.json and
-<out>/retro.md. Exit 0 on success, 2 on bad arguments or an unreadable outcomes file.
-Every string in the records is untrusted data: it is only ever compared, counted or quoted.
-"""
+"""Analyse `admiral outcomes` records for one panel and write analysis.json and retro.md."""
 
 import argparse
 import json
@@ -437,9 +428,6 @@ def analyse(args, records, skipped_lines, teams_dir):  # noqa: PLR0912, PLR0915 
         "overturned_low_stakes": {"recorded": False, "note": OVERTURNED_NOTE},
         "changes_proposed": bool(findings),
     }
-
-
-# --- retro.md -------------------------------------------------------------------------------------
 
 
 def clean(value):

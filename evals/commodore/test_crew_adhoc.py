@@ -66,8 +66,7 @@ class AdHocCase(WorldCase):
         return path
 
     def snapshot(self):
-        """Every path under the world (but the copied skills) with its kind and content: what a refusal must keep.
-        Skips Python's bytecode caches: macOS python writes them under home/Library when crew.py first runs."""
+        """Every path under the world but the skills and bytecode caches, with its kind and content."""
         out = {}
         for top, dirs, files in os.walk(self.w.root):
             if Path(top) == self.w.root:
@@ -134,8 +133,7 @@ class AdHocCase(WorldCase):
         return [ln for ln in done.stderr.splitlines() if ln.startswith("ERROR")]
 
     def assert_refused(self, label, env=None, code=1, **kw):
-        """The call exits `code`, says one ERROR line (a usage error says its usage), prints nothing to stdout and
-        leaves the world exactly as it was."""
+        """The call exits `code` with one ERROR line, no stdout, and the world unchanged."""
         before = self.snapshot()
         done = self.adhoc(env=env, **kw)
         self.assertEqual(done.returncode, code, f"{label}: {done.stderr}")

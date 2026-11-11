@@ -1,11 +1,7 @@
 #!/bin/zsh
 # usage: available <team-dir>   (see ../CONTRACT.md)
-# Whether the ship can start a teammate on the teammate's harness (TEAMMATE_HARNESS, else HARNESS). Exit 0 when it can, 1 with one
-# line of reason on stdout when it can't. Cheap checks only: `admiral` is on PATH, and for codex the ship's fleet has a dock for it
-# (`admiral ships` gives the fleet, fleets.<fleet>.codex in ~/.admiral/config.json the dock). For copilot there is no source for a
-# dock key, and when the fleet or the config can't be read the answer is a WARN line and exit 0: the launch would fail loudly with
-# Admiral's `fleet <f> has no <harness> dock`.
 [[ $# -eq 1 && -d $1 ]] || { sed -n 2p $0; exit 5; }
+# a copilot dock has no key to check, and an unreadable fleet is only a WARN: the launch would fail loudly
 D=${1:A}
 source ${0:A:h:h:h}/team-env.zsh
 command -v admiral >/dev/null || { echo "admiral is not on PATH"; exit 1; }

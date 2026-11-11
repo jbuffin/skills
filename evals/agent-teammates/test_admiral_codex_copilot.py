@@ -178,8 +178,7 @@ class TestCopilotWriterLaunch(LaunchCase):
 
 
 class ReadOnlyDelegation:
-    """A read-only teammate on Codex or Copilot runs headless under its harness driver; `launch` records its id in
-    <team>/admiral-delegated, and send, stop, status and tail route by that id."""
+    """A read-only Codex or Copilot teammate runs headless; send, stop, status and tail route by its delegated id."""
 
     harness = None
 

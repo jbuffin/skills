@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# Block names that must never appear in this repo (employers, internal systems, private repos).
-#
-# usage: check-denylist.sh            scan every tracked file
-#        check-denylist.sh --staged   scan only what's staged (the pre-commit hook uses this)
-#
-# Patterns come from .denylist at the repo root: one case-insensitive extended regex per line,
-# with # comments. The file is gitignored on purpose, since committing it would publish the names
-# it exists to keep out. Without it, the check does nothing and says so.
+# usage: check-denylist.sh [--staged]  block names listed in the repo's .denylist (one regex per line)
+# .denylist is gitignored: committing it would publish the names it keeps out.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
