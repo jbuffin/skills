@@ -55,8 +55,8 @@ COORD = re.compile(r"command-name>/[^<]*\b(commodore|agent-team[\w-]*)</command-
 NOT_COORD = re.compile(r"setup-commodore|commodore-launcher")
 SCRIPTS = re.compile(
     r"(verify-report|watch-teammates|watch-ci|teammate-tail|team-preflight|advisor-probe|launch-teammate|"
-    r"close-teammate|retasked|retask|team-init|role-skills|push-branch|unit-worktree|evidence|team-env|state-set|"
-    r"review-round|admiral-io)\.(sh|zsh)"
+    r"close-teammate|retasked|retask|team-init|push-branch|unit-worktree|evidence|team-env|state-set|"
+    r"review-round|admiral-io)\.(sh|zsh)|crew\.py"
 )
 COMPACTION_DROP = 2000
 RESUME_TOKENS = 35_000
@@ -92,7 +92,7 @@ GROUPS = [
     (r"team-preflight|advisor-probe", "team-preflight / advisor probe"),
     (r"launch-teammate|close-teammate|retask", "launch / retask / close"),
     (r"review-round", "review-round.sh"),
-    (r"team-init|role-skills|team-env|unit-worktree|push-branch|admiral-io", "other commodore scripts"),
+    (r"team-init|crew|team-env|unit-worktree|push-branch|admiral-io", "other commodore scripts"),
     (r"state\.md|read-state|state-set", "state.md"),
     (r"prompt/brief|profile/brief-common|read-brief", "briefs, job files, profile"),
     (r"read-diff", "diffs read by the coordinator"),

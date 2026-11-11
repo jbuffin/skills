@@ -6,7 +6,7 @@ Copy this to `<run>/profile.md`. Fill in every field, or write `n/a`. The profil
 
 - What's being done (feature, fix, refactor, migration, investigation, docs), the issue or epic link, and the work item if the project uses a tracker.
 - Mode: single unit (one PR), stack (multi-phase, or related issues in order), independent units (one PR each), or existing PR (its number and what to do on it). Why this mode. The base branch.
-- Role skills: the table `<team>/role-skills.sh <run>` prints, pasted as is (role, skills, instructions, source), and any warnings it gave. SKILL.md phase 1, step 1 says how to resolve it.
+- Crew: the cast table `<team>/crew.py cast --run <run>` prints, pasted as is (role, member, based on, skills, instructions, model, harness, source), and any warnings it gave. SKILL.md phase 1, step 1 says how to cast it.
 - The model for each role the run uses (`MODEL_<ROLE>` in `team.env`), written even when it's the default. Role names and the capability rule are in roles.md; the defaults are in the harness reference (`references/harness-<HARNESS>.md`).
 - Security review settings:
   - Security-sensitive paths: focus hints for the security reviewer, such as auth, payments, parsing of untrusted input, CI and deploy config.

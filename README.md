@@ -19,7 +19,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 | `agent-teammates` | Launches, watches, re-tasks and closes teammates as background agent sessions on the harness the run starts in (Claude Code, Codex and Copilot CLI are supported), with a report-and-marker contract, a watchdog and proof checks. |
 | `run-preflight` | Before an unattended run, settles secrets (Keychain), allow rules, environments and decisions, then proves them with a probe. |
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
-| `setup-commodore` | Picks installed skills for each Commodore role with you, drafts how they combine, and saves the role-override file for just you or for the whole repo. |
+| `setup-commodore` | Picks installed skills for each Commodore role with you, drafts how they combine, and saves them as crew member files for just you or for the whole repo. |
 | `retro` | Reviews one Admiral panel's autopilot Commodore runs, finds stops and engineer edits that repeat, and proposes one change per finding, with a draft PR only for a skill edit. |
 
 ## Layout
@@ -97,11 +97,15 @@ and approve every reply before you leave, and the fixes and replies land on the 
 - **`gh-stack` 0.2.0 or later** for stack mode: `gh extension install github/gh-stack`. Also installable
   as a skill (`npx skills add github/gh-stack`), which the stack mode reads if it's there.
 - **Optional:** `cmux` or `tmux` for viewer panes on each teammate (`VIEWER` in `team.env`, Claude-only).
-- **Role skills.** Commodore names no skills for its roles: each role runs a minimal fallback, and the
-  security reviewer runs only with a skill. Set skills per role in `~/.config/commodore/roles.json` (just you)
-  or `.commodore/roles.json` (everyone on the repo), for example
-  `{"scribe": {"skills": ["pr", "unslop"], "instructions": "Draft with pr, then run unslop."}}`. The format and
-  the layers are in `commodore/SKILL.md` (Role skills) and `docs/adr/0004-role-skills-resolve-from-layered-json.md`.
+- **Crew members.** Each role is filled by a crew member: a Markdown file with the role, its skills, an optional
+  model and the instructions for combining them. Commodore ships a built-in member per role with no skills, so
+  each role runs a minimal fallback and the security reviewer runs only with a skill. Put your own members in
+  `~/.config/commodore/crew/` (just you) or `.commodore/crew/` (everyone on the repo), for example
+  `.commodore/crew/scribe.md` with `skills: [pr, unslop]` and a body of "Draft with pr, then run unslop." A
+  `roles.json` from an earlier version is no longer read: convert it once with
+  `setup-commodore/scripts/convert-roles.py <roles.json> <crew-dir>`. `/setup-commodore` writes members with you.
+  The format is in `commodore/references/crew-members.md`, the layers in `commodore/SKILL.md` (Crew members) and
+  `docs/adr/0007-crew-members-are-layered-markdown-files.md`.
 
 `commodore/scripts/team-preflight.sh` checks most of this at the start of a run.
 

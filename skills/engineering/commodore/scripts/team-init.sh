@@ -147,6 +147,16 @@ EOF
 ) ;;
 esac
 
+# Inside Admiral (ADMIRAL_SHIP set) a resumed run must read the same crew layers, so team.env keeps the three variables
+# crew.py reads. A value with a quote or a line break can't be written as KEY='value': leave it out and say so.
+ADMIRAL_LINES=
+if [[ -n ${ADMIRAL_SHIP-} ]]; then
+  for v in ADMIRAL_SHIP ADMIRAL_CREW_DIR ADMIRAL_RUN_CREW; do
+    [[ -n ${(P)v-} ]] || continue
+    if [[ ${(P)v} == *[\'$'\n']* ]]; then print -u2 "warning: $v has a quote or a line break, so it is not written to team.env"
+    else ADMIRAL_LINES+="$v='${(P)v}'"$'\n'; fi
+  done
+fi
 if [[ ! -f $RUN/team.env ]]; then
   cat > $RUN/team.env <<EOF
 # Read by every script in $SKILL/scripts. Edit freely.
@@ -172,6 +182,8 @@ WORKTREE_SETUP_SKIP=".DS_Store .vscode .idea coverage"
 # parse JSON from server and CLI calls.
 REQUIRED_TOOLS="git gh python3 jq security curl"
 $HARNESS_SETTINGS
+# Crew layers inside Admiral (crew.py reads these as text; the environment wins when it sets them)
+${ADMIRAL_LINES%$'\n'}
 MODE=            # single | stack | independent | pr
 BASE_BRANCH=
 BRANCH_PREFIX=

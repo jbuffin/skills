@@ -10,7 +10,6 @@ tells the coordinator to record fix-check notes as `open`.
 Run from the repo root: python3 -m unittest discover -s evals/commodore -v
 """
 
-import json
 import re
 import subprocess
 import sys
@@ -22,15 +21,14 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "evals" / "agent-teammates"))
 
+import crew_world as cw  # noqa: E402
 from admiral_world import SCRIPTS as AT_SCRIPTS  # noqa: E402
 from admiral_world import WorldCase  # noqa: E402
 
 COMMODORE = REPO / "skills" / "engineering" / "commodore"
 CO_SCRIPTS = COMMODORE / "scripts"
 REVIEW_ROUND = CO_SCRIPTS / "review-round.sh"
-ROLE_SKILLS = CO_SCRIPTS / "role-skills.sh"
 TEAM_INIT = CO_SCRIPTS / "team-init.sh"
-ROLES_DRAFT = REPO / "skills" / "engineering" / "setup-commodore" / "scripts" / "roles-draft.sh"
 LAUNCH = AT_SCRIPTS / "launch-teammate.sh"
 GLOSSARY = REPO / "GLOSSARY.md"
 HARNESSES = ("claude", "codex", "copilot")
@@ -143,108 +141,89 @@ class TestReviewRound(TmpCase):
         self.assertTrue(done.stdout.startswith("CAP u1: 2 review rounds done"), done.stdout)
 
 
-class TestRoleSkills(TmpCase):
-    def setUp(self):
-        super().setUp()
-        self.run_dir = self.root / "run"
-        self.run_dir.mkdir()
-        (self.run_dir / "team.env").write_text(f"HARNESS=claude\nREPO={self.checkout}\n")
+class TestFixCheckerCast(cw.WorldCase):
+    """The fix-checker row of `crew.py cast`, ported from the deleted role-skills.sh: the role never has skills or
+    instructions, and a member that names it is dropped with a warning."""
 
-    def resolve(self):
-        return run([ROLE_SKILLS, self.run_dir], sh_env(self.home))
+    LAYERS = ("user", "repo", "run")
 
-    def row(self, out, role):
-        rows = [ln for ln in out.splitlines() if ln.startswith(f"| {role} |")]
-        return rows[0] if rows else None
+    def row(self, done, role="fix-checker"):
+        _, _, rows, _ = cw.parse_table(done.stdout)
+        return rows.get(role)
 
-    def layers(self):
-        """Each layer file that can hold an override, as (name, path)."""
-        return [
-            ("user", self.home / "xdg" / "commodore" / "roles.json"),
-            ("repo", self.checkout / ".commodore" / "roles.json"),
-            ("run", self.run_dir / "roles.json"),
-        ]
-
-    def write_layer(self, path, data):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data))
-
-    def test_fix_checker_has_no_skills_even_with_a_reviewer_override(self):
-        for name, path in self.layers():
-            with self.subTest(layer=name):
-                self.write_layer(path, {"reviewer": {"skills": ["code-review"]}})
-                done = self.resolve()
+    def test_fix_checker_has_no_skills_even_with_a_reviewer_member(self):
+        self.w.install("code-review")
+        for layer in self.LAYERS:
+            with self.subTest(layer=layer):
+                path = self.w.write_member(layer, "reviewer", skills=["code-review"])
+                done = self.w.cast()
                 self.assertEqual(done.returncode, 0, done.stderr)
-                row = self.row(done.stdout, "fix-checker")
-                self.assertIsNotNone(row, f"no fix-checker row:\n{done.stdout}")
-                cells = [c.strip() for c in row.strip("|").split("|")]
-                self.assertTrue(cells[1].startswith("none"), row)
-                self.assertNotIn("fallback", row)
-                self.assertEqual(cells[3], "built-in", row)
+                cells = self.row(done)
+                self.assertIsNotNone(cells, f"no fix-checker row:\n{done.stdout}")
+                self.assertEqual(cells[3], "none")
+                self.assertEqual(cells[4], "-")
+                self.assertNotIn("fallback", "|".join(cells))
+                self.assertEqual(cells[7], "built-in")
                 path.unlink()
 
-    def test_override_naming_fix_checker_is_dropped_with_a_warning(self):
-        for name, path in self.layers():
-            with self.subTest(layer=name):
-                self.write_layer(path, {"fix-checker": {"skills": ["code-review"], "instructions": "be thorough"}})
-                done = self.resolve()
+    def test_member_for_fix_checker_is_dropped_with_a_warning(self):
+        self.w.install("code-review")
+        for layer, source in (("user", "user-global"), ("repo", "repo"), ("run", "run (pinned)")):
+            with self.subTest(layer=layer):
+                path = self.w.write_member(layer, "fix-checker", skills=["code-review"], body="be thorough")
+                done = self.w.cast()
                 self.assertEqual(done.returncode, 0, done.stderr)
-                row = self.row(done.stdout, "fix-checker")
-                self.assertIsNotNone(row, f"no fix-checker row:\n{done.stdout}")
-                self.assertNotIn("code-review", row)
-                self.assertNotIn("be thorough", row)
-                self.assertNotIn("fallback", row)
-                self.assertIn("built-in", row)
-                warns = [ln for ln in done.stderr.splitlines() if ln.startswith("WARN") and "fix-checker" in ln]
-                self.assertTrue(warns, done.stderr)
+                cells = self.row(done)
+                self.assertIsNotNone(cells, f"no fix-checker row:\n{done.stdout}")
+                self.assertEqual(cells[3:5], ["none", "-"])
+                self.assertNotIn("code-review", "|".join(cells))
+                self.assertNotIn("be thorough", "|".join(cells))
+                self.assertNotIn("fallback", "|".join(cells))
+                self.assertEqual(cells[7], source)  # the layer that held the dropped entry, not "built-in"
+                self.assertTrue([w for w in self.warns(done) if "fix-checker" in w], done.stderr)
                 path.unlink()
 
 
-class TestRolesDraft(TmpCase):
+class TestFixCheckerDraft(cw.WorldCase):
+    """The fix-checker cases of the deleted roles-draft.sh, on crew-draft.sh."""
+
     def setUp(self):
         super().setUp()
-        subprocess.run(["git", "-C", self.checkout, "init", "-q"], check=True)
-        self.env = sh_env(self.home, TMPDIR=str(self.root))
+        self.git_init(self.w.repo)
+        self.draft_sh = self.w.skills / "setup-commodore" / "scripts" / "crew-draft.sh"
+
+    def draft(self, *args):
+        return self.w.sh([self.draft_sh, *args], cwd=self.w.repo)
 
     def init(self):
-        done = run([ROLES_DRAFT, "init", "user", "claude"], self.env, cwd=self.checkout)
+        done = self.draft("init", "user", "claude")
         self.assertEqual(done.returncode, 0, done.stderr)
         return Path(done.stdout.splitlines()[0])
 
-    def check(self, run_dir):
-        done = run([ROLES_DRAFT, "check", run_dir], self.env, cwd=self.checkout)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        return done.stdout
-
-    def resolved_table(self, run_dir):
-        done = run([ROLE_SKILLS, run_dir], self.env)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        return done.stdout
-
     def test_empty_draft_has_no_unset_line_for_fix_checker(self):
         run_dir = self.init()
-        # the role exists in the resolved table: it is excluded from UNSET, not absent
-        self.assertIn("| fix-checker |", self.resolved_table(run_dir))
-        out = self.check(run_dir)
+        done = self.draft("check", run_dir)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        # the role exists in the cast table: it is excluded from UNSET, not absent
+        self.assertIn("| fix-checker |", done.stdout)
+        out = done.stdout + done.stderr
         self.assertNotIn("UNSET fix-checker", out)
         self.assertIn("UNSET reviewer:", out)  # the other roles are still reported
 
     def test_draft_naming_fix_checker_does_not_read_as_clean(self):
         run_dir = self.init()
-        (run_dir / "draft.json").write_text(json.dumps({"fix-checker": {"skills": ["code-review"]}}))
-        # the role is known, so the warning is the drop rule's, not "unknown role"
-        self.assertIn("| fix-checker |", self.resolved_table(run_dir))
-        out = self.check(run_dir)
-        warns = [ln for ln in out.splitlines() if ln.startswith("WARN  draft: ") and "fix-checker" in ln]
-        self.assertTrue(warns, out)
-        self.assertRegex(warns[0], r"ignored|dropped|skipped")
-        self.assertNotIn("unknown role", warns[0])
-        self.assertIn("NOT CLEAN", out)
-        self.assertNotIn("\nCLEAN", "\n" + out)
+        (run_dir / "draft" / "fix-checker.md").write_text(
+            cw.member_text("fix-checker", "fix-checker", skills=["code-review"])
+        )
+        done = self.draft("check", run_dir)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        warns = [ln for ln in done.stderr.splitlines() if ln.startswith("WARN") and "fix-checker" in ln]
+        self.assertTrue(warns, done.stderr)
+        self.assertNotIn("CLEAN", done.stdout.splitlines())
 
     def test_fix_checker_is_not_offered_as_a_role_to_configure(self):
         run_dir = self.init()
-        self.assertIn("| fix-checker |", self.resolved_table(run_dir))
+        self.assertIn("| fix-checker |", self.draft("check", run_dir).stdout)
         skill = text(REPO / "skills" / "engineering" / "setup-commodore" / "SKILL.md")
         self.assertNotIn("fix-checker", skill)
 

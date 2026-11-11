@@ -8,7 +8,7 @@ Each harness driver's `driver.env` sets three values and holds nothing else the 
 
 - `LIVE_MESSAGING`: `1` when a live teammate can be sent new work, so the coordinator keeps its session open between rounds. `0` when a teammate works one turn at a time. The admiral driver declares `1`, which holds for its crew boats; inside a ship the variant is per teammate, and a delegated teammate works one turn at a time, as `LIVE_MESSAGING=0`.
 - `SEND`: `tool` when sending is a harness tool call (the driver has no `send` executable), `script` when `retask.sh` calls the driver's `send`.
-- `SKILL_PREFIX`: what goes before a skill's name to invoke it: `/` (Claude Code, Copilot CLI) or `$` (Codex). commodore's `role-skills.sh` reads this line from `drivers/<HARNESS>`. A host driver omits it and defers to the run harness's.
+- `SKILL_PREFIX`: what goes before a skill's name to invoke it: `/` (Claude Code, Copilot CLI) or `$` (Codex). commodore's `crew.py cast` reads this line from `drivers/<HARNESS>`. A host driver omits it and defers to the run harness's.
 
 ## Operations
 
@@ -68,7 +68,7 @@ Prints `ADVISOR ON <model>`, `ADVISOR OFF <model>: <reason>` or `ADVISOR SAME-FA
 
 `has-skill <team-dir> <name>` (optional)
 
-Exits 0 when the harness can load the skill `<name>` (a bare name, no prefix) for the run's repo (`REPO` in `team.env`), and 1 when it can't. It looks wherever the harness finds skills: the repo, the user's own skills, installed plugins and the skills built into the CLI. It reads `team.env` and writes nothing. commodore's `role-skills.sh` drops a skill this rejects. A driver without `has-skill` makes every named skill count as available, with a warning.
+Exits 0 when the harness can load the skill `<name>` (a bare name, no prefix) for the run's repo (`REPO` in `team.env`), and 1 when it can't. It looks wherever the harness finds skills: the repo, the user's own skills, installed plugins and the skills built into the CLI. It reads `team.env` and writes nothing. commodore's `crew.py cast` drops a skill this rejects. A driver without `has-skill` makes every named skill count as available, with a warning.
 
 ### list-skills
 

@@ -3,14 +3,18 @@
 
     crew.py resolve [--admiral] [--layer <label>=<dir> ...]
     crew.py resolve --run <run-dir>
+    crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--save]
 
-Prints one JSON object on stdout. Exit 0 with {"members", "warnings"}, exit 1 with {"errors", "warnings"},
-exit 5 on a bad call. The rules are in references/crew-members.md. A member file is never run, sourced or imported.
+`resolve` prints one JSON object on stdout. Exit 0 with {"members", "warnings"}, exit 1 with {"errors", "warnings"},
+exit 5 on a bad call. `cast` picks the member for each role and prints the cast table for profile.md; its errors and
+warnings go to stderr. The rules are in references/crew-members.md. A member file is never run, sourced or imported
+(`cast` runs only the harness driver's has-skill).
 """
 
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,9 +39,13 @@ KEY = re.compile(r"^([a-z][a-z0-9-]*):(.*)$")
 ITEM = re.compile(r"^ +-( .*)?$")
 SKILL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@\[\]-]{0,127}")
+HARNESS_NAME = re.compile(r"[a-z0-9-]+")
+MODELS_MARK = "# crew models (crew.py cast)"
 USAGE = (
     "usage: crew.py resolve [--admiral] [--layer <label>=<dir> ...]\n"
     "       crew.py resolve --run <run-dir>\n"
+    "       crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--save]\n"
     "labels: " + ", ".join(LAYERS) + "\n"
     "--admiral only selects which labels are allowed: fleet with it, user-global without it.\n"
 )
@@ -414,11 +422,18 @@ def setting(name, team):
     return os.environ[name] if name in os.environ else team.get(name, "")
 
 
-def run_layers(run_dir):
+def run_settings(run_dir):
+    """(team.env values, inside Admiral, repo directory or "", user-global config directory)."""
     team = read_team_env(run_dir)
     inside = bool(setting("ADMIRAL_SHIP", team))
-    layers = [("built-in", str(Path(os.path.realpath(__file__)).parent.parent / "crew"))]
     repo = team.get("REPO") or team.get("WORKTREE") or ""
+    xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return team, inside, repo, xdg
+
+
+def run_layers(run_dir):
+    team, inside, repo, xdg = run_settings(run_dir)
+    layers = [("built-in", str(Path(os.path.realpath(__file__)).parent.parent / "crew"))]
     repo_crew = os.path.join(repo, ".commodore", "crew") if repo else ""
     if inside:
         layers += [
@@ -427,13 +442,357 @@ def run_layers(run_dir):
             ("run", setting("ADMIRAL_RUN_CREW", team)),
         ]
     else:
-        xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
         layers += [
             ("user-global", os.path.join(xdg, "commodore", "crew")),
             ("repo", repo_crew),
             ("run", os.path.join(run_dir, "crew")),
         ]
     return [(label, path) for label, path in layers if path]
+
+
+# ------------------------------------------------------------------------------------------------ cast
+def say(line):
+    sys.stderr.write(line + "\n")
+
+
+def issue_line(kind, item):
+    pad = " " if kind == "WARN" else ""
+    return f"{kind} {pad}{item['layer']} {item['file'] or '-'}: {item['code']} {item['message']}"
+
+
+class Harness:
+    """The run's harness driver: the skill prefix and has-skill. The one place a member's own harness would swap in."""
+
+    def __init__(self, name, run_dir):
+        self.name, self.run_dir = name, run_dir
+        skills = Path(os.path.realpath(__file__)).parent.parent.parent
+        self.driver = skills / "agent-teammates" / "scripts" / "drivers" / name
+        self.prefix = self.read_prefix()
+        self.checker = self.driver / "has-skill"
+        self.can_check = os.access(self.checker, os.X_OK)
+        self.answers = {}
+
+    def read_prefix(self):
+        prefix = "/"
+        try:
+            lines = (self.driver / "driver.env").read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return prefix
+        for line in lines:
+            if line.startswith("SKILL_PREFIX="):
+                prefix = line[len("SKILL_PREFIX=") :].strip() or "/"
+        return prefix
+
+    def has_skill(self, name):
+        if name not in self.answers:
+            try:
+                done = subprocess.run(
+                    [str(self.checker), self.run_dir, name],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                self.answers[name] = done.returncode == 0
+            except OSError:
+                self.answers[name] = False
+        return self.answers[name]
+
+
+def usable_skills(member, harness, warn):
+    """The member's skills the harness can load. Returns (kept names, whether a skill went unchecked)."""
+    if not harness.can_check:
+        return list(member["skills"]), bool(member["skills"])
+    kept = []
+    for skill in member["skills"]:
+        if harness.has_skill(skill):
+            kept.append(skill)
+        else:
+            warn(f"{member['role']}: skill {harness.prefix}{skill} is not available on {harness.name}; dropped")
+    return kept, False
+
+
+def usable_model(member, role, warn):
+    model = member["model"]
+    if not model:
+        return None
+    if role == "fix-checker":
+        warn(
+            f"fix-checker: the fix checker runs on the implementer's model; "
+            f"model {json.dumps(model)} of {member['name']} ignored"
+        )
+        return None
+    if not MODEL.fullmatch(model):
+        warn(f"{role}: model {json.dumps(model)} of {member['name']} is not a model name; the role keeps its default")
+        return None
+    return model
+
+
+def read_saved_picks(run_dir, warn):
+    try:
+        data = json.loads(Path(run_dir, "cast.json").read_text(encoding="utf-8"))
+        picks = data["picks"]
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError, KeyError, TypeError):
+        warn("pick: cast.json can't be read; saved picks dropped")
+        return {}
+    if not isinstance(picks, dict):
+        return {}
+    return {k: v for k, v in picks.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def role_order(roles):
+    return [*ROLES, *sorted(r for r in roles if r not in ROLES)]
+
+
+def default_member(candidates):
+    return min(candidates, key=lambda m: (-LAYERS.index(m["layer"]), m["name"].encode("utf-8")))
+
+
+def choose(role, candidates, pick, warn):
+    """Return (member or None, error or None) for one role: a pin, else the pick, else the default."""
+    pins = [m for m in candidates if m["layer"] == "run"]
+    by_name = {m["name"]: m for m in candidates}
+    if len(pins) > 1:
+        if pick in [m["name"] for m in pins]:
+            return by_name[pick], None
+        names = ", ".join(m["name"] for m in pins)
+        return None, f"ERROR pin: {role} has run-layer members {names}: pick one"
+    if pins:
+        if pick and pick != pins[0]["name"]:
+            warn(f"pin: {role}: run-layer member {pins[0]['name']} wins over the pick {pick}")
+        return pins[0], None
+    if pick:
+        return by_name[pick], None
+    if role not in ROLES:
+        return None, None
+    member = default_member(candidates)
+    if len(candidates) > 1:
+        warn(f"pick: {role}: {len(candidates)} candidates and no pick; took {member['name']} ({member['layer']})")
+    return member, None
+
+
+def build_cast(members, picks, harness, warn):
+    """Return (cast entries, errors). An entry is a dict with the cast.json keys plus the table's `unchecked`."""
+    roles = role_order({m["role"] for m in members} | set(ROLES))
+    entries, errors, unchecked = [], [], False
+    for role in roles:
+        candidates = [m for m in members if m["role"] == role]
+        if not candidates:
+            continue
+        member, error = choose(role, candidates, picks.get(role), warn)
+        if error:
+            errors.append(error)
+        if member is None:
+            continue
+        skills, missed = usable_skills(member, harness, warn)
+        unchecked = unchecked or missed
+        entries.append(
+            {
+                "role": role,
+                "member": member["name"],
+                "based-on": member["based-on"],
+                "skills": skills,
+                "instructions": member["instructions"],
+                "model": usable_model(member, role, warn),
+                "harness": member["harness"],
+                "layer": member["layer"],
+                "pinned": member["layer"] == "run",
+            }
+        )
+    if unchecked:
+        warn(
+            f"can't check which skills are installed on {harness.name} "
+            "(its driver has no has-skill); kept every named skill"
+        )
+    return entries, errors
+
+
+def cell(text):
+    if not text:
+        return "-"
+    return text.replace("\r\n", "\n").replace("\n", "<br>").replace("\t", " ").replace("|", "\\|")
+
+
+def skills_cell(entry, harness, warn):
+    if entry["skills"]:
+        return ", ".join(f"`{harness.prefix}{name}`" for name in entry["skills"])
+    if entry["role"] == "security-reviewer":
+        warn("security-reviewer has no role skill: no security review this run")
+        return "none: not launched"
+    return "none" if entry["role"] == "fix-checker" else "none (fallback procedure)"
+
+
+def cast_table(entries, harness, warn):
+    rows = [
+        "| Role | Member | Based on | Skills | Instructions | Model | Harness | Source |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for e in entries:
+        source = e["layer"] + (" (pinned)" if e["pinned"] else "")
+        cells = [
+            e["role"],
+            e["member"],
+            e["based-on"] or "-",
+            skills_cell(e, harness, warn),
+            cell(e["instructions"]),
+            e["model"] or "-",
+            e["harness"] or "-",
+            source,
+        ]
+        rows.append("| " + " | ".join(cells) + " |")
+    return "\n".join(rows) + "\n"
+
+
+def models_block(entries):
+    """The MODEL_<ROLE> lines for the nine roles; the fix checker always follows the implementer."""
+    models = {
+        e["role"]: e["model"] for e in entries if e["role"] in ROLES and e["role"] != "fix-checker" and e["model"]
+    }
+    if "implementer" in models:
+        models["fix-checker"] = models["implementer"]
+    names = [r for r in ROLES if r in models]
+    return [f"MODEL_{r.upper().replace('-', '_').replace('.', '_')}='{models[r]}'" for r in names]
+
+
+def without_models_block(text):
+    lines = text.split("\n")
+    if MODELS_MARK not in lines:
+        return text
+    start = lines.index(MODELS_MARK)
+    end = start + 1
+    while end < len(lines) and lines[end].startswith("MODEL_"):
+        end += 1
+    return "\n".join(lines[:start] + lines[end:])
+
+
+def write_atomic(path, text):
+    tmp = f"{path}.tmp.{os.getpid()}"
+    Path(tmp).write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def save_cast(run_dir, picks, entries):
+    data = {"picks": picks, "cast": entries}
+    write_atomic(
+        os.path.join(run_dir, "cast.json"), json.dumps(data, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+    )
+    env_path = os.path.join(run_dir, "team.env")
+    text = without_models_block(Path(env_path).read_text(encoding="utf-8"))
+    lines = models_block(entries)
+    if lines:
+        text = text.rstrip("\n") + "\n" + MODELS_MARK + "\n" + "\n".join(lines) + "\n"
+    elif text and not text.endswith("\n"):
+        text += "\n"
+    write_atomic(env_path, text)
+
+
+def leftover_roles_json(run_dir):
+    _, inside, repo, xdg = run_settings(run_dir)
+    paths = [] if inside else [os.path.join(xdg, "commodore", "roles.json")]
+    if repo:
+        paths.append(os.path.join(repo, ".commodore", "roles.json"))
+    paths.append(os.path.join(run_dir, "roles.json"))
+    return [p for p in paths if os.path.exists(p)]
+
+
+def parse_cast_args(argv):
+    """Return (run dir, {role: member}, save); raise UsageError for a bad call."""
+    run_dir, picks, save = None, {}, False
+    args = iter(argv)
+    for arg in args:
+        if arg == "--run":
+            if run_dir is not None:
+                raise UsageError("--run given twice")
+            run_dir = next(args, "")
+            if run_dir == "":
+                raise UsageError("--run needs a run directory")
+        elif arg == "--pick":
+            role, equals, member = next(args, "").partition("=")
+            if not (equals and role and member):
+                raise UsageError("--pick needs <role>=<member>")
+            if role in picks:
+                raise UsageError(f"two picks for the role {role}")
+            picks[role] = member
+        elif arg == "--save":
+            save = True
+        else:
+            raise UsageError(f"unknown argument {arg}")
+    if run_dir is None:
+        raise UsageError("cast needs --run <run-dir>")
+    return run_dir, picks, save
+
+
+def check_picks(members, picks):
+    """Raise UsageError when a pick names no member or a member of another role."""
+    for role, name in picks.items():
+        candidates = sorted(m["name"] for m in members if m["role"] == role)
+        found = next((m for m in members if m["name"] == name), None)
+        if found is None or found["role"] != role:
+            raise UsageError(
+                f"{name} is not a member for the role {role}; candidates: {', '.join(candidates) or 'none'}"
+            )
+
+
+def effective_picks(members, explicit, run_dir, warn):
+    check_picks(members, explicit)
+    picks = {}
+    for role, name in read_saved_picks(run_dir, warn).items():
+        if role in explicit:
+            continue
+        found = next((m for m in members if m["name"] == name), None)
+        if found is None or found["role"] != role:
+            warn(f"pick: {role}: saved pick {name} is gone; dropped")
+        else:
+            picks[role] = name
+    return {**picks, **explicit}
+
+
+def cast_main(argv):
+    try:
+        run_dir, explicit, save = parse_cast_args(argv)
+        if not os.path.isfile(os.path.join(run_dir, "team.env")):
+            raise UsageError(f"{run_dir}/team.env not found")
+        harness_name = read_team_env(run_dir).get("HARNESS") or "claude"
+        if not HARNESS_NAME.fullmatch(harness_name):
+            raise UsageError(f"HARNESS {harness_name!r} in team.env is not a harness name")
+    except UsageError as err:
+        return usage_error(str(err))
+    members, errors, warnings = resolve(run_layers(run_dir))
+    for path in leftover_roles_json(run_dir):
+        say(
+            f"WARN  {path} is ignored: crew members replaced roles.json. "
+            "Convert it with setup-commodore's convert-roles.py"
+        )
+    for item in warnings:
+        say(issue_line("WARN", item))
+    if errors:
+        for item in errors:
+            say(issue_line("ERROR", item))
+        return 1
+    notes = []
+
+    def warn(text):
+        notes.append(f"WARN  {text}")
+
+    try:
+        picks = effective_picks(members, explicit, run_dir, warn)
+    except UsageError as err:
+        return usage_error(str(err))
+    harness = Harness(harness_name, run_dir)
+    entries, problems = build_cast(members, picks, harness, warn)
+    table = "" if problems else cast_table(entries, harness, warn)
+    for line in notes:
+        say(line)
+    if problems:
+        for line in problems:
+            say(line)
+        return 1
+    if save:
+        save_cast(run_dir, picks, entries)
+    sys.stdout.write(table)
+    return 0
 
 
 # ------------------------------------------------------------------------------------------------ command line
@@ -484,8 +843,10 @@ def parse_args(argv):
 
 
 def main(argv):
+    if argv and argv[0] == "cast":
+        return cast_main(argv[1:])
     if not argv or argv[0] != "resolve":
-        return usage_error("expected the resolve subcommand")
+        return usage_error("expected the resolve or cast subcommand")
     try:
         _, explicit, run_dir = parse_args(argv[1:])
     except UsageError as err:
