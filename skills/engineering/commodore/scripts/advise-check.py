@@ -10,11 +10,17 @@ schema_check = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(schema_check)
 
 
+MAX_BYTES = 1024 * 1024
+
+
 def main(argv):
     if len(argv) != 2:  # noqa: PLR2004
         print("usage: advise-check.py <draft.json>", file=sys.stderr)
         return 2
     try:
+        if Path(argv[1]).stat().st_size > MAX_BYTES:
+            print("the draft is over 1 MiB, which admiral advise refuses", file=sys.stderr)
+            return 1
         draft = schema_check.load(argv[1])
     except (OSError, ValueError) as e:
         print(f"can't check: {e}", file=sys.stderr)

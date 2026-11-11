@@ -126,13 +126,15 @@ class TestAnswers(AdviseCase):
         self.assertEqual(r.returncode, OK, r.stderr)
         out = json.loads(r.stdout)
         self.assertEqual(set(out), KEYS)
+        self.assertEqual(out["stakes"], "high")
         self.assertTrue(out["cost"] is None or isinstance(out["cost"], (int, float)))
 
 
 class TestFallsBackToHigh(AdviseCase):
     def test_a_non_zero_exit_from_admiral_is_high(self):
-        self.set_stub(json.dumps({"stakes": "low", "reason": "r", "cost": None}), 1)
+        self.set_stub(json.dumps({"stakes": "low", "reason": "r", "cost": None}) + "\nLEAKED-MARKER", 1)
         out = self.assertHigh(self.advise())
+        self.assertNotIn("LEAKED-MARKER", out["reason"])
         self.assertEqual(set(out), KEYS)
         self.assertIsNone(out["cost"])
 
@@ -151,6 +153,10 @@ class TestFallsBackToHigh(AdviseCase):
         self.stub_answers()
         self.assertHigh(self.advise(env=self.env(ship="")))
         self.assertFalse(self.stub_called())
+
+    def test_an_answer_over_several_lines_is_high(self):
+        self.set_stub(json.dumps({"stakes": "low", "reason": "Cheap to undo.", "cost": 0.04}, indent=1), 0)
+        self.assertHigh(self.advise())
 
     def test_unparseable_output_is_high(self):
         self.set_stub("not json at all\n", 0)
@@ -186,6 +192,9 @@ class TestInvalidDrafts(AdviseCase):
 
     def test_a_missing_field_is_refused(self):
         self.assertRefused(without("question"))
+
+    def test_a_draft_over_one_mebibyte_is_refused(self):
+        self.assertRefused(with_(question="x" * (1024 * 1024)))
 
     def test_a_draft_that_is_not_json_is_refused(self):
         self.assertRefused("{not json")
