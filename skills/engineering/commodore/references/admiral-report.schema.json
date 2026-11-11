@@ -1,14 +1,42 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Admiral report",
-  "description": "The end-of-run JSON Commodore writes to $ADMIRAL_REPORT, from jbuffin/admiral#112 'Interfaces between Admiral and the skills'. Required fields are Commodore's reading of that contract. Extra top-level properties are allowed, so a later version-1 field breaks nothing. Validate with scripts/schema-check.py.",
+  "description": "The end-of-run JSON Commodore writes to $ADMIRAL_REPORT, from jbuffin/admiral#112 'Interfaces between Admiral and the skills', at version 2: `prs` lists objects and `cast` lists the crew. Required fields are Commodore's reading of that contract. Extra top-level properties are allowed, so a later version-2 field breaks nothing. Validate with scripts/schema-check.py.",
   "type": "object",
   "required": ["version", "result", "why"],
   "properties": {
-    "version": { "const": 1 },
+    "version": { "const": 2 },
     "result": { "enum": ["done", "partial", "failed"] },
     "why": { "type": "string", "description": "One line." },
-    "prs": { "type": "array", "items": { "type": "string" }, "description": "PR URLs." },
+"prs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url", "closes"],
+        "properties": {
+          "url": { "type": "string", "description": "The PR's URL." },
+          "closes": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+$" },
+            "description": "Issues the PR closes, as <owner>/<repo>#<n>. Empty for a PR that closes nothing."
+          }
+        }
+      },
+      "description": "Every PR the run opened, plus the PR a pr-feedback run pushed to."
+    },
+    "cast": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["member", "role", "ad_hoc"],
+        "properties": {
+          "member": { "type": "string" },
+          "role": { "type": "string" },
+          "ad_hoc": { "type": "boolean" }
+        }
+      },
+      "description": "The crew members the run used."
+    },
     "assumptions": { "type": "array", "items": { "type": "string" }, "description": "Every default taken without asking." },
     "inbox": { "type": "array", "items": { "type": "string" }, "description": "Ids of the inbox items written." },
     "resume": { "type": "string", "description": "Text to launch with once every inbox item is answered." }

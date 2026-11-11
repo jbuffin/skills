@@ -16,7 +16,7 @@ Phase 1 still runs, just smaller. The manifest might be five lines and the team 
 
 ## Stack
 
-Several phases, passes or layers, or several related issues worked in order where each builds on the last. Each phase or issue is one unit with its own worktree, and the whole thing ships as a gh stack of PRs that end ready. Read the gh-stack skill first if it's installed, or `gh stack --help`.
+Several phases, passes or layers, or several related issues worked in order where each builds on the last. Inside Admiral, a slice (a launch that names two or more issues) is always a stack, even when the issues don't build on each other; the units are yours to cut. Each phase or issue is one unit with its own worktree, and the whole thing ships as a gh stack of PRs that end ready. Read the gh-stack skill first if it's installed, or `gh stack --help`.
 
 ```bash
 <team>/unit-worktree.sh <run> stack <base> u1=<branch> u2=<branch> u3=<branch>   # all planned units
