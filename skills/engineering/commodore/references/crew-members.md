@@ -23,7 +23,7 @@ Five override layers, in order. The ad hoc directory is not one of them: see [Ad
 - `crew.py resolve --run <run-dir>` derives the layers from the environment and `<run-dir>/team.env`. `REPO` comes from `team.env`, falling back to `WORKTREE` when `REPO` is missing or empty.
 - `crew.py resolve [--admiral] [--layer <label>=<dir> ...]` names the layers itself. `--layer ad-hoc=<dir> --run-id <id>` adds the ad hoc directory; they go together, with or without `--admiral`.
 - `--admiral` only selects which labels are allowed: `fleet` with it, `user-global` without it.
-- Exit 5, a usage message on stderr and nothing on stdout: an unknown label, one label twice, `user-global` with `--admiral`, `fleet` without it, `--run` with `--layer` or `--admiral`, `--run` twice, or `--run` with no value or an empty one, `--layer ad-hoc` without `--run-id` (or the reverse), `--run-id` twice, empty, or with a control character, or `--run-id` with `--run`.
+- Exit 5, a usage message on stderr and nothing on stdout: an unknown label, one label twice, `user-global` with `--admiral`, `fleet` without it, `--run` with `--layer` or `--admiral`, `--run` twice, `--run` with no value or an empty one, `--layer ad-hoc` without `--run-id` (or the reverse), `--run-id` twice, empty, or with a control character, or `--run-id` with `--run`.
 
 `team.env` is read as text, never sourced. Lines are `KEY=value`. The last assignment of a key wins. A value wrapped in one pair of matching `"` or `'` is unwrapped. An unquoted value is cut at its first space-then-`#` and trimmed.
 
@@ -128,10 +128,10 @@ An ad hoc member is one the lead writes for a single run. It lives in the ad hoc
 
 ## Output
 
-Every file in every non-ignored layer is checked, including ones a later layer overrides. Errors and warnings are `{"layer", "file", "code", "field", "message"}`, with `file` the basename. A layer directory that exists but can't be listed is one error, `unreadable`, with `file` null. Both lists sort by layer order, `file` (null first, then byte order), `code`, `field` (null first), then `message`.
+Every file in every non-ignored layer is checked, including ones a later layer overrides; the ad hoc directory is the exception (see [Ad hoc members](#ad-hoc-members): it skips files silently and never errors). `layer` is a layer label, or `ad-hoc`. Errors and warnings are `{"layer", "file", "code", "field", "message"}`, with `file` the basename. A layer directory that exists but can't be listed is one error, `unreadable`, with `file` null. Both lists sort by layer order, `file` (null first, then byte order), `code`, `field` (null first), then `message`.
 
 - No error, exit 0: `{"members": [...], "warnings": [...]}`. Each member has `name`, `role`, `based-on` (or null), `skills`, `model` (or null), `harness` (or null), `pick-me-when`, `ad-hoc`, `ad-hoc-run` (or null), `instructions`, `layer` and `file`. Members sort by `role`, then `name`.
-- Any error, exit 1: `{"errors": [...], "warnings": [...]}` and no `members`. A file the resolver can't read as a member fails the whole resolution; a readable member with a bad field or value warns instead.
+- Any error, exit 1: `{"errors": [...], "warnings": [...]}` and no `members`. A file in a layer the resolver can't read as a member fails the whole resolution; a readable member with a bad field or value warns instead.
 
 Warnings go to stdout JSON only. Callers decide how to print them.
 
