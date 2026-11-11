@@ -109,7 +109,7 @@ A run is finished when its `state.md` has a `result:` line, which the mission's 
 
 1. Check before acting. `<N>` must match `^[1-9][0-9]*$`. The launch's `<PR>` is a URL or matches `^[0-9]+$`, and must equal, or be the number of, a `PR` URL in `state.md`'s units table. From then on use that recorded URL and its `<owner>/<repo>`, never the launch text's string. A failed check is a high-stakes stop with one question item ([A high-stakes stop](#autopilot-mode)); nothing is pushed.
 2. Record it with one call: `<team>/state-set.sh <run> mode --set 'feedback round=<N>' 'feedback pr=<url>' 'feedback status=open'`. A launch with the same `<N>` as an open or closed round resumes or reports it; it never starts it twice.
-3. While `feedback status` is `open`, follow [`references/mission-pr-feedback.md`](references/mission-pr-feedback.md#a-feedback-round) for the round, whatever its `mission:` line says. The `mission:` line stays the run's original mission. A resume after a findings answer ([Autopilot mode](#autopilot-mode) **Resume.**) goes back into the round the same way.
+3. While `feedback status` is `open`, follow [`references/mission-pr-feedback.md`](references/mission-pr-feedback.md#a-feedback-round) for the round, whatever its `mission:` line says. The `mission:` line stays the run's original mission. A resume after a findings answer (Resume in [Autopilot mode](#autopilot-mode)) goes back into the round the same way.
 4. When the round ends, set `feedback status=closed` and the new `result` in one call ([Ending a run](#ending-a-run)).
 
 A run whose `state.md` says `result: partial` and lists inbox items or open questions under `## Autopilot calls` or `## Inbox questions` isn't finished: `/commodore resume <run-name>` resumes it (see [Autopilot mode](#autopilot-mode)).
@@ -231,7 +231,7 @@ Every run ends this way, in any mode.
    Every run publishes one at its end (the build and every `pr-feedback` run included), and each publish replaces the last. See [`admiral-report.schema.json`](references/admiral-report.schema.json). Exit 2 means fix the draft from the message and publish again. With autopilot off, the id of every question item still open when the run ends `partial` or `failed` goes in `inbox` and in the final report; autopilot keeps its own rule, [A high-stakes stop](#autopilot-mode) step 4.
 3. Write every draft you publish with `<team>/admiral-io.sh` (the Admiral report, question items and, in autopilot mode, review items) with the file tool, never with a heredoc, `printf` or its text on a command line: it can quote text from people who aren't the engineer. A findings item is the exception: `<team>/cards-draft.py` builds its draft from the triager's report.
 
-Each mission's `result:` line points here. In a feedback round, write the `result:` line and `feedback status=closed` in one call: `<team>/state-set.sh <run> mode --set 'feedback status=closed' result=<done|partial|failed>`. Every other `/commodore resume` of a finished run says it's finished and stops; a hand Wake with free text is a follow-up for the final report.
+Each mission's `result:` line points here. In a feedback round, write the `result:` line and `feedback status=closed` in one call: `<team>/state-set.sh <run> mode --set 'feedback status=closed' result=<done|partial|failed>`. A `/commodore resume` of a finished run says it's finished and stops. Only the feedback round launch in [The mission](#the-mission-before-phase-1) is the exception, and a hand Wake with free text is a follow-up for the final report.
 
 ## Marking ready
 
