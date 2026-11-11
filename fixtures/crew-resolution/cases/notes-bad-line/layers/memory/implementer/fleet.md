@@ -14,3 +14,6 @@
 - 2026-11-05 (run-b): Good second note.
 - 0000-01-01 (run-a): The year starts at 0001.
 - 2026-11-06 (run-c):  A fact may start with a non-breaking space.
+- 2026-11-07 (run-d): A tag character hides text.󠁁
+- 2026-11-07 (run-d): A bidi override flips the text.‮
+- 2026-11-07 (run-d): A zero-width space​ hides in a word.
