@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 3.2.0
+
+### Minor Changes
+
+- [#227](https://github.com/jbuffin/skills/pull/227) [`1f17f39`](https://github.com/jbuffin/skills/commit/1f17f3973e16702c2613215eec09fa1a197cf42a) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore's autopilot mode classifies each call with `admiral-io.sh advise`, which asks Admiral's judge through `admiral advise`, instead of the harness advisor. It works on Claude, Codex and Copilot, only `low` takes the recommended default, and `## Autopilot calls` records each call's reason and cost. Outside Admiral every classified call is high-stakes.
+
 ## 3.1.0
 
 ### Minor Changes
