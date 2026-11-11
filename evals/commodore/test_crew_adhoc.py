@@ -39,6 +39,7 @@ class AdHocCase(WorldCase):
         self.user_ad_hoc = self.user_crew / "ad-hoc"
         self.fleet = self.w.layer_dirs["fleet"]
         self.fleet_ad_hoc = self.fleet / "ad-hoc"
+        self.default_body = self.body_file()
 
     def builtin_names(self):
         """The nine members under skills/engineering/commodore/crew/ (the built-in layer)."""
@@ -85,11 +86,15 @@ class AdHocCase(WorldCase):
         return path
 
     def snapshot(self):
-        """Every path under the world (but the copied skills) with its kind and content: what a refusal must keep."""
+        """Every path under the world (but the copied skills) with its kind and content: what a refusal must keep.
+        Skips Python's bytecode caches: macOS python writes them under home/Library when crew.py first runs."""
         out = {}
         for top, dirs, files in os.walk(self.w.root):
             if Path(top) == self.w.root:
                 dirs[:] = [d for d in dirs if d != "skills"]
+            if Path(top) == self.w.home:
+                dirs[:] = [d for d in dirs if d != "Library"]
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
             for name in dirs + files:
                 path = Path(top, name)
                 rel = str(path.relative_to(self.w.root))
@@ -100,6 +105,12 @@ class AdHocCase(WorldCase):
                 else:
                     out[rel] = ("file", path.read_bytes(), path.stat().st_mode & 0o777)
         return out
+
+    def assert_world_is(self, before, label="the call"):
+        """Compare with an earlier snapshot, naming only the paths that differ (a whole-dict diff is megabytes)."""
+        after = self.snapshot()
+        changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
+        self.assertEqual(changed, [], f"{label}: the world changed")
 
     # ------------------------------------------------------------------------------------------ running
     def resolve(self, run=None, env=None):
@@ -118,7 +129,7 @@ class AdHocCase(WorldCase):
             "name": "notes-writer",
             "role": "scribe",
             "pick-me-when": "Use for the release notes.",
-            "body-file": self.body_file(),
+            "body-file": self.default_body,  # made in setUp: building the args must not change the world
         }
         opts.update({k.replace("_", "-"): v for k, v in kw.items()})
         args = []
@@ -145,7 +156,7 @@ class AdHocCase(WorldCase):
             self.assertEqual(len(self.errors(done)), 1, f"{label}: {done.stderr}")
         else:
             self.assertTrue(done.stderr.strip(), f"{label}: no usage message")
-        self.assertEqual(self.snapshot(), before, f"{label}: the world changed")
+        self.assert_world_is(before, label)
         return done
 
     def read_member_file(self, path):
@@ -790,11 +801,11 @@ class AdhocRefusals(AdHocCase):
         done = self.adhoc(env=env)
         self.assertEqual(done.returncode, 1, done.stderr)
         self.assertEqual(done.stderr.splitlines(), ["ERROR no ad hoc directory: ADMIRAL_CREW_DIR is empty"])
-        self.assertEqual(self.snapshot(), before)
+        self.assert_world_is(before)
         done = self.adhoc(env=self.w.admiral_env())  # set, but the directory does not exist
         self.assertEqual(done.returncode, 1, done.stderr)
         self.assertEqual(len(self.errors(done)), 1)
-        self.assertEqual(self.snapshot(), before)
+        self.assert_world_is(before)
 
     def test_an_unset_fleet_directory_inside_admiral_is_empty_too(self):
         env = self.w.env(ADMIRAL_SHIP="ship-1")
@@ -836,7 +847,7 @@ class AdhocRefusals(AdHocCase):
                 done = self.adhoc(run=run, body_file=body)
                 self.assertEqual(done.returncode, 1, done.stderr)
                 self.assertTrue(any(ln.startswith("ERROR bad run id") for ln in done.stderr.splitlines()), done.stderr)
-                self.assertEqual(self.snapshot(), before)
+                self.assert_world_is(before)
 
     def test_resolve_errors_stop_the_write_and_are_printed_as_error_lines(self):
         self.w.layer_dirs["repo"].mkdir(parents=True)
@@ -873,7 +884,7 @@ class AdhocRefusals(AdHocCase):
                 args += ["--name"] if label == "--name without a value" else extra
                 done = self.w.sh([self.w.crew_py, "adhoc", *args])
                 self.assertEqual((done.returncode, done.stdout), (5, ""), done.stderr)
-                self.assertEqual(self.snapshot(), before)
+                self.assert_world_is(before)
         self.assertEqual(self.adhoc(name="x-member").returncode, 0)  # control: the same call without the flaw works
 
     def test_skill_may_repeat(self):
@@ -932,11 +943,13 @@ class SkillText(unittest.TestCase):
             self.assertIn(needle, done.stderr)
 
     def test_the_final_report_wording_says_drop_not_delete(self):
-        for rel in ("SKILL.md", "references/mission-build.md"):
-            lines = [ln for ln in self.read(rel).splitlines() if re.search(r"ad[- ]hoc", ln, re.IGNORECASE)]
-            joined = "\n".join(lines).lower()
-            self.assertNotIn("delete", joined, rel)
-        self.assertIn("drop", self.read("references/mission-build.md").lower())
+        # ruling 3: the engineer can "keep, edit or drop" an ad hoc member; the build mission's report says so
+        rel = "references/mission-build.md"
+        lines = [ln.lower() for ln in self.read(rel).splitlines() if re.search(r"ad[- ]hoc", ln, re.IGNORECASE)]
+        keep_lines = [ln for ln in lines if "keep" in ln]
+        self.assertTrue(keep_lines, f"{rel}: no line tells the engineer they can keep an ad hoc member")
+        self.assertEqual([ln for ln in keep_lines if "delete" in ln], [], rel)
+        self.assertTrue(any("drop" in ln for ln in lines), f"{rel}: the ad hoc lines should say drop")
 
 
 if __name__ == "__main__":
