@@ -79,6 +79,11 @@ while IFS= read -r script; do
   [[ -x "$root/$script" ]] || fail "$script" "has a shebang but isn't executable"
 done < <(git -C "$root" grep -l -I '^#!' -- skills incubator scripts 2>/dev/null || true)
 
+# Commodore leaves merging to the engineer.
+while IFS= read -r hit; do
+  fail "${hit%%:*}" "merges a PR; Commodore leaves merging to the engineer"
+done < <(git -C "$root" grep -n -i -E 'gh pr merge|merge --auto|auto[-_]merge' -- skills/engineering/commodore/scripts 2>/dev/null || true)
+
 python3 "$root/scripts/check-links.py" "$root" >/dev/null || {
   python3 "$root/scripts/check-links.py" "$root" | sed 's/^/  ✗ /' >&2 || true
   fail "links" "broken relative links (see above)"
