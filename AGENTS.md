@@ -30,6 +30,20 @@ This repo publishes agent skills. Each skill is a folder with a `SKILL.md` (YAML
 - Scripts that ship in a skill keep LF line endings, are executable, and pass the CI linters
   (`shellcheck` or `zsh -n`, `ruff`).
 
+## Tests
+
+A test checks a behavior a caller can see: what a skill's script prints, writes or exits with. Refactoring the
+script leaves it green. Markdown gets structure checks from `scripts/validate.sh` and review by a person, never a
+test of its wording. Test each behavior once, at the lowest layer that sees it, and read
+[`docs/agents/testing.md`](docs/agents/testing.md) before adding or changing a test.
+
+## Comments
+
+Match the comment density of the code around it; most functions need none. A comment says why, in one line: a
+hidden constraint, an invariant, a workaround with its link, or behavior that would surprise a reader. Names and
+code say what. A script's header holds exactly the usage lines it prints. Issue numbers, unit ids, spec sections,
+commit hashes and history go in the commit or PR, where they don't rot.
+
 ## Checks and pull requests
 
 - Run `scripts/validate.sh` before committing. CI runs it plus shell, Markdown, Python, workflow,
