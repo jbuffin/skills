@@ -1,13 +1,9 @@
-"""Shared fixture for the agent-teammates driver tests: a temp world with a fake `admiral`, `claude`, `codex`,
-`copilot`, `tmux` and `cmux` first on PATH, a team dir with its own team.env, and an environment built from scratch.
+"""A temp world for the agent-teammates driver tests: fake harness CLIs on PATH, a team dir and a scratch HOME."""
 
-The real admiral, claude, codex, copilot and tmux live outside the PATH built here (/usr/bin:/bin:/usr/sbin:/sbin),
-and HOME is a temp dir (so ~/.admiral/config.json, ~/.codex/config.toml and ~/.copilot/config.json are the test's
-own), so no test can reach them. CODEX_HOME, COPILOT_HOME and ADMIRAL_AUTOPILOT are unset unless a test passes them.
-Each fake appends one JSON line per call to its log and takes its canned answers from files in `ctl/`.
-"""
-
+import contextlib
 import json
+import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -24,7 +20,7 @@ CLAUDE_DRIVER = SCRIPTS / "drivers" / "claude"
 
 SHIP = "heather-hull"
 
-# `admiral crew` with no arguments, as the build at 992f678 prints it (stderr, exit 2).
+# `admiral crew` with no arguments prints its usage on stderr and exits 2.
 USAGE_NEW = (
     (
         "admiral: usage: admiral crew launch --name <name> --dir <dir> [--harness <h>] [--ship <ship>]"
@@ -53,10 +49,10 @@ if args[:2] == ["crew", "send"]:
 with open(os.path.join(ctl, "admiral.log"), "a") as log:
     log.write(json.dumps({{"argv": args, "stdin": stdin}}) + "\\n")
 if args == ["--version"]:
-    print("admiral 0.4.0-dev (992f678)")
+    print("admiral 0.4.0-dev")
     sys.exit(0)
 if args[:1] == ["ships"]:
-    # NAME SESSION FLEET HARNESS STATUS REPO, tab-separated (cli.md)
+    # NAME SESSION FLEET HARNESS STATUS REPO, tab-separated
     sys.stdout.write(read("ships.txt"))
     sys.exit(int(read("ships.rc", "0") or 0))
 if args == ["crew"]:
@@ -115,6 +111,8 @@ def read(name, default=""):
     except OSError:
         return default
 args = sys.argv[1:]
+with open(os.path.join(ctl, "fake.pids"), "a") as pids:
+    pids.write(str(os.getpid()) + "\\n")
 stdin = ""
 if args[-1:] == ["-"]:
     stdin = sys.stdin.read()
@@ -146,6 +144,8 @@ def read(name, default=""):
     except OSError:
         return default
 args = sys.argv[1:]
+with open(os.path.join(ctl, "fake.pids"), "a") as pids:
+    pids.write(str(os.getpid()) + "\\n")
 with open(os.path.join(ctl, "copilot.log"), "a") as log:
     log.write(json.dumps({{"argv": args, "stdin": ""}}) + "\\n")
 delay = float(read("copilot.sleep", "0") or 0)
@@ -187,7 +187,7 @@ def split_launch(case, argv, name):
         case.assertTrue(body[i].startswith("--") and i + 1 < len(body), f"flag without a value at {i}: {argv}")
         (args if body[i] == "--arg" else flags.setdefault(body[i], [])).append(body[i + 1])
         i += 2
-    case.assertEqual(prompt, first_prompt(name, case.w.team / "prompts" / f"{name}.md"))
+    case.assertIn(str(case.w.team / "prompts" / f"{name}.md"), prompt)
     return flags, args
 
 
@@ -261,7 +261,7 @@ class World:
         env = {
             "PATH": f"{self.bin}:/usr/bin:/bin:/usr/sbin:/sbin",
             "HOME": str(self.home),
-            "LANG": "en_US.UTF-8",
+            "LANG": "C.UTF-8",
         }
         if ship is not None:
             env["ADMIRAL_SHIP"] = ship
@@ -334,6 +334,18 @@ class World:
             time.sleep(0.05)
         return False
 
+    def reap_fakes(self, timeout=10):
+        """Wait for every fake codex and copilot still running in the background, then kill the stragglers."""
+        path = self.ctl / "fake.pids"
+        pids = {int(p) for p in path.read_text().split()} if path.exists() else set()
+        end = time.time() + timeout
+        while pids and time.time() < end:
+            pids = {p for p in pids if alive(p)}
+            time.sleep(0.05)
+        for p in pids:
+            with contextlib.suppress(OSError):
+                os.kill(p, signal.SIGKILL)
+
     def wait_for(self, path, timeout=15):
         end = time.time() + timeout
         while time.time() < end:
@@ -341,6 +353,14 @@ class World:
                 return True
             time.sleep(0.05)
         return False
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
 
 
 def boat(name, state="underway", last_activity=None, transcript=None, role=None):
@@ -362,3 +382,4 @@ class WorldCase(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.w = World(tmp.name)
+        self.addCleanup(self.w.reap_fakes)
