@@ -11,6 +11,10 @@
       "layer": "built-in",
       "model": null,
       "name": "fix-checker",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Plain default for fix-checker.",
       "role": "fix-checker",
       "skills": []
@@ -25,6 +29,10 @@
       "layer": "built-in",
       "model": null,
       "name": "implementer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Plain default for implementer.",
       "role": "implementer",
       "skills": []
@@ -39,6 +47,10 @@
       "layer": "built-in",
       "model": null,
       "name": "reviewer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Plain default for reviewer.",
       "role": "reviewer",
       "skills": []

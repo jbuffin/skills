@@ -6,9 +6,9 @@ Language-neutral cases for the crew member resolver. Commodore's resolver (`skil
 
 Each directory under `cases/` is one case:
 
-- `case.json`: `{"description": "...", "admiral": true|false}`, plus `"run": "<id>"` in a case that has `layers/ad-hoc/`. `admiral` says whether the case runs inside an Admiral ship. `run` is the run id the resolver filters ad hoc members by: an opaque string, compared exactly.
-- `layers/<label>/`: the layer directories that exist for the case, named by layer label: `built-in`, `fleet`, `user-global`, `repo`, `run`, and `ad-hoc` for the ad hoc directory (described below). A label with no directory is an empty layer. The built-in layer is a small made-up set, not a copy of the shipped `crew/` directory.
-- `expected.json`: the resolver's stdout object with every `message` removed, plus `"exit"` (the process exit code). Exit 0 has `members` and `warnings`. Exit 1 has `errors` and `warnings`.
+- `case.json`: `{"description": "...", "admiral": true|false}`, plus `"run": "<id>"` in a case that has `layers/ad-hoc/`, and `"repo": "<owner>/<repo>"` in a case that loads repo notes. `admiral` says whether the case runs inside an Admiral ship. `run` is the run id the resolver filters ad hoc members by: an opaque string, compared exactly. `repo` is the repo the notes belong to.
+- `layers/<label>/`: the layer directories that exist for the case, named by layer label: `built-in`, `fleet`, `user-global`, `repo`, `run`, `ad-hoc` for the ad hoc directory (described below) and `memory` for the crew notes root (see "Crew notes"). A label with no directory is an empty layer. The built-in layer is a small made-up set, not a copy of the shipped `crew/` directory.
+- `expected.json`: the resolver's stdout object with every `message` removed, plus `"exit"` (the process exit code). Exit 0 has `members` and `warnings`. Exit 1 has `errors` and `warnings`. Every member has `"notes": {"fleet": [...], "repo": [...]}`.
 
 Run a case by mapping each `layers/<label>/` directory onto its layer. In Commodore's resolver that is `crew.py resolve [--admiral] --layer <label>=<dir> ...`. In Admiral, the layers map to these inputs:
 
@@ -18,6 +18,7 @@ Run a case by mapping each `layers/<label>/` directory onto its layer. In Commod
 - `repo`: `<repo>/.commodore/crew/`.
 - `built-in`: the built-in members the resolver ships with.
 - `ad-hoc`: `<ADMIRAL_CREW_DIR>/ad-hoc/` inside Admiral, `${XDG_CONFIG_HOME:-~/.config}/commodore/crew/ad-hoc/` outside it. The run id is the real path of Commodore's run directory. The fixtures write a short literal `run` instead.
+- `memory`: the crew notes root: `<ADMIRAL_CREW_DIR>/memory/` inside Admiral, `${XDG_CONFIG_HOME:-~/.config}/commodore/crew/memory/` outside it. In Commodore's explicit mode, `--layer memory=<dir>`. The case's `repo` is `<owner>/<repo>`: Commodore's `--repo`, or the `origin` remote (`https://github.com/<owner>/<repo>.git`) of the repo in `--run` mode.
 
 Inside Admiral (`admiral: true`) the `user-global` layer is ignored. Outside it (`admiral: false`) the `fleet` layer is ignored. Some cases put a member in the ignored layer on purpose, so a resolver handed an ignored layer's directory must ignore it. Commodore's explicit `--layer` mode rejects an ignored label with exit 5, so its eval leaves those directories out, and its `--run` tests cover the ignored layers.
 
@@ -33,6 +34,18 @@ Inside Admiral (`admiral: true`) the `user-global` layer is ignored. Outside it 
 - A directory that is a symlink, or a missing one, is skipped: a symlink with one `ad-hoc-dir-refused` warning (`file` and `field` null), a missing directory silently. A directory that can't be listed is one `ad-hoc-unreadable` warning with `file` null.
 - A case with `layers/ad-hoc/` has a `run`. Write `ad-hoc-run` double-quoted in the case files.
 
+## Crew notes
+
+`layers/memory/` is the crew notes root, laid out `<name>/fleet.md` and `<name>/repos/<owner>/<repo>.md`. The rules are in `crew-members.md`, under "Crew notes". Part of the contract:
+
+- Notes belong to a member's `name`, whatever layer the member came from.
+- A `memory` warning's `file` is the path relative to the memory root (`implementer/fleet.md`), or null for the root or the repo. Every other layer's `file` is a basename. `memory` sorts after `ad-hoc`.
+- Which memory root a run reads (the fleet's inside Admiral, the user-global one outside) is a `--run` rule, so no case covers it. The layer listing skips `memory/`.
+- A case with no `repo` loads no repo notes.
+- A member with role `fix-checker` gets no notes, whatever its name.
+- Memory warnings, `bad-repo` included, come only when the memory root exists and at least one resolved member isn't the fix checker. `notes-bad-repo-no-root` pins this: a bad `repo` and no `layers/memory/` give no warning.
+- A `memory-refused` case holds a committed symlink (see Symlinks). `memory-unreadable` and a symlinked memory root or member directory are generated inputs.
+
 ## Comparing results
 
 Parse both JSON objects, drop every `message` field from your output's `errors` and `warnings`, then compare the structures and the exit code. Don't compare bytes: whitespace, key order and message text are free to differ.
@@ -43,7 +56,7 @@ Some cases hold committed git symlinks (for example `error-outside-layer`). Chec
 
 ## Generated inputs
 
-Inputs that can't be committed safely aren't fixtures: non-UTF-8 content, a byte order mark, CRLF line endings, upper-case extensions, non-UTF-8 file names and files or directories with no read permission (the `unreadable` error). `evals/commodore/test_crew_resolution.py` generates those files at run time. Cover them in your own tests.
+Inputs that can't be committed safely aren't fixtures: non-UTF-8 content (a note file too), a byte order mark, CRLF line endings, upper-case extensions, non-UTF-8 file names and files or directories with no read permission (the `unreadable` error). `evals/commodore/test_crew_resolution.py` generates those files at run time. Cover them in your own tests.
 
 ## Markdown lint
 

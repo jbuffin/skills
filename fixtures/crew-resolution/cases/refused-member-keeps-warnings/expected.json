@@ -11,6 +11,10 @@
       "layer": "built-in",
       "model": null,
       "name": "scribe",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Plain default for scribe.",
       "role": "scribe",
       "skills": []

@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "nbsp",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "\u00a0",
       "role": "scribe",
       "skills": []

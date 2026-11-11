@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "size-limit-ok",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "At the limit.",
       "role": "scribe",
       "skills": []

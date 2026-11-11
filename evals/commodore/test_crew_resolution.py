@@ -70,13 +70,15 @@ class ResolverCase(unittest.TestCase):
             cwd=self.tmp,
         )
 
-    def explicit(self, layers, admiral=False, extra_env=None, run_id=None):
+    def explicit(self, layers, admiral=False, extra_env=None, run_id=None, repo=None):
         """Run explicit mode over {label: dir}; returns (proc, parsed stdout or None)."""
         args = ["resolve"] + (["--admiral"] if admiral else [])
         for label, path in layers.items():
             args += ["--layer", f"{label}={path}"]
         if run_id is not None:
             args += ["--run-id", run_id]
+        if repo is not None:
+            args += ["--repo", repo]
         proc = self.crew(args, base_env(self.tmp / "home", **(extra_env or {})))
         return proc, (json.loads(proc.stdout) if proc.stdout.strip() else None)
 
@@ -159,7 +161,7 @@ class FixtureCases(ResolverCase):
         copy = self.copy_case(name)
         ignored = "user-global" if meta["admiral"] else "fleet"
         layers = {d.name: d for d in sorted((copy / "layers").iterdir()) if d.is_dir() and d.name != ignored}
-        proc, _ = self.explicit(layers, admiral=meta["admiral"], run_id=meta.get("run"))
+        proc, _ = self.explicit(layers, admiral=meta["admiral"], run_id=meta.get("run"), repo=meta.get("repo"))
         self.check(proc, expected)
 
 

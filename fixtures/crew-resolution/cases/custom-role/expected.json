@@ -11,6 +11,10 @@
       "layer": "repo",
       "model": null,
       "name": "notes-writer",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Use for release notes.",
       "role": "release-notes",
       "skills": [
@@ -27,6 +31,10 @@
       "layer": "built-in",
       "model": null,
       "name": "scribe",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
       "pick-me-when": "Plain default for scribe.",
       "role": "scribe",
       "skills": []
