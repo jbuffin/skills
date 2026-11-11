@@ -1,7 +1,7 @@
 """Tests for skills/engineering/commodore/scripts/pr-ready.sh.
 
 The only seam is the script's command line: a run directory and a unit in, exit code and `run:` /
-`ready:` / `no auto-merge:` / `not ready:` lines out. Every test builds a fixture run directory in a temp
+`ready:` / `not ready:` lines out. Every test builds a fixture run directory in a temp
 dir (team.env, state.md, a small git repo whose branch head the PR can match) and puts a stub `gh` first on
 PATH. The stub prints canned `gh pr view` JSON and records its argv, so a test can also prove the script
 never writes. Expected values are literals worked out by hand from the fixtures.
@@ -38,14 +38,6 @@ exit 0
 GREEN = {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"}
 RED = {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FAILURE"}
 PENDING = {"__typename": "CheckRun", "status": "IN_PROGRESS", "conclusion": None}
-
-
-def merge_line(method):
-    return f"run: gh pr merge --auto --{method} {URL}"
-
-
-def no_auto_merge(reason):
-    return f"no auto-merge: {URL}: {reason}"
 
 
 def git(cwd, *args):
@@ -110,8 +102,6 @@ class PrReadyCase(unittest.TestCase):
         findings=(),
         pr_cell=URL,
         units_unit=UNIT,
-        team_env_extra="",
-        state_extra="",
     ):
         """Builds the fixture run, runs the script, and returns a Result.
 
@@ -123,8 +113,8 @@ class PrReadyCase(unittest.TestCase):
         self.log.write_text("")
         run = self.tmp / "run"
         run.mkdir(exist_ok=True)
-        (run / "team.env").write_text(f"REPO={self.repo}\nBASE_BRANCH={BASE}\n{team_env_extra}")
-        mode = "mission: build\nmode: single\n" + ("autopilot: on\n" if state_line else "") + state_extra
+        (run / "team.env").write_text(f"REPO={self.repo}\nBASE_BRANCH={BASE}\n")
+        mode = "mission: build\nmode: single\n" + ("autopilot: on\n" if state_line else "")
         rows = "".join(f"| f{i} | {u} | low | something | {s} |\n" for i, (u, s) in enumerate(findings))
         (run / "state.md").write_text(
             "# Run state (read this first on every start)\n\n"
@@ -170,7 +160,7 @@ class PrReadyCase(unittest.TestCase):
         return Result(proc, calls)
 
 
-class MarkReadyAutopilotOff(PrReadyCase):
+class MarkReady(PrReadyCase):
     def test_clean_draft_prints_ready_command_only(self):
         r = self.go()
         self.assertEqual((r.code, r.out), (0, [READY]))
@@ -199,90 +189,16 @@ class MarkReadyAutopilotOff(PrReadyCase):
         r = self.go(draft=False, checks=(RED,))
         self.assertEqual((r.code, r.out), (0, [f"ready: {URL}"]))
 
-    def test_auto_merge_set_requests_nothing(self):
-        r = self.go(auto_merge="squash")
+    def test_no_merge_line_even_with_autopilot_and_auto_merge_set(self):
+        for draft, expected in ((True, [READY]), (False, [f"ready: {URL}"])):
+            with self.subTest(draft=draft):
+                r = self.go(on=True, auto_merge="squash", draft=draft)
+                self.assertEqual((r.code, r.out), (0, expected))
+                self.assertEqual([line for line in r.out if "merge" in line], [])
+
+    def test_auto_merge_value_is_not_read(self):
+        r = self.go(on=True, auto_merge="yolo")
         self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_autopilot_env_without_state_line_requests_nothing(self):
-        r = self.go(env_autopilot="1", auto_merge="squash")
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_state_line_without_autopilot_env_requests_nothing(self):
-        r = self.go(state_line=True, auto_merge="squash")
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_env_autopilot_must_be_exactly_one(self):
-        r = self.go(env_autopilot="true", state_line=True, auto_merge="squash")
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_team_env_and_state_md_alone_never_request_auto_merge(self):
-        r = self.go(
-            state_line=True,
-            team_env_extra="ADMIRAL_AUTOPILOT=1\nADMIRAL_AUTO_MERGE=squash\n",
-            state_extra="ADMIRAL_AUTO_MERGE: squash\n",
-        )
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_team_env_cannot_supply_auto_merge_method(self):
-        r = self.go(on=True, team_env_extra="ADMIRAL_AUTO_MERGE=squash\n")
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-
-class MarkReadyAutopilotOn(PrReadyCase):
-    def test_clean_with_method_prints_ready_then_merge(self):
-        for method in ("squash", "merge", "rebase"):
-            with self.subTest(method):
-                r = self.go(on=True, auto_merge=method)
-                self.assertEqual((r.code, r.out), (0, [READY, merge_line(method)]))
-
-    def test_clean_without_method_prints_ready_only(self):
-        r = self.go(on=True)
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_clean_already_ready_prints_merge_only(self):
-        r = self.go(on=True, auto_merge="squash", draft=False)
-        self.assertEqual((r.code, r.out), (0, [merge_line("squash")]))
-
-    def test_not_clean_prints_ready_and_reason_without_merge(self):
-        cases = {
-            "human row": (dict(findings=[(UNIT, "human")]), "1 finding(s) left for a human"),
-            "red check": (dict(checks=(GREEN, RED)), "1 check(s) not green"),
-            "pending check": (dict(checks=(PENDING,)), "1 check(s) not green"),
-            "no checks": (dict(checks=()), "no CI checks"),
-            "stale head": (dict(pr_head="0" * 40), f"PR head isn't {BRANCH}'s local head"),
-            "stacked base": (dict(base="u0-branch"), "stacked on u0-branch"),
-        }
-        for name, (kwargs, reason) in cases.items():
-            with self.subTest(name):
-                r = self.go(on=True, auto_merge="squash", **kwargs)
-                self.assertEqual((r.code, r.out), (0, [READY, no_auto_merge(reason)]))
-
-    def test_not_clean_and_already_ready_prints_ready_url_and_reason(self):
-        r = self.go(on=True, auto_merge="squash", draft=False, checks=(RED,))
-        self.assertEqual((r.code, r.out), (0, [f"ready: {URL}", no_auto_merge("1 check(s) not green")]))
-
-    def test_not_clean_without_method_has_no_reason_line(self):
-        r = self.go(on=True, checks=(RED,))
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_other_units_human_row_and_other_statuses_do_not_block_merge(self):
-        r = self.go(on=True, auto_merge="squash", findings=[("u2", "human"), (UNIT, "open"), (UNIT, "fixed")])
-        self.assertEqual((r.code, r.out), (0, [READY, merge_line("squash")]))
-
-    def test_check_kinds_that_count_as_green(self):
-        checks = (
-            GREEN,
-            {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SKIPPED"},
-            {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "NEUTRAL"},
-            {"__typename": "StatusContext", "state": "SUCCESS"},
-        )
-        r = self.go(on=True, auto_merge="squash", checks=checks)
-        self.assertEqual((r.code, r.out), (0, [READY, merge_line("squash")]))
-
-    def test_failed_status_context_is_not_green(self):
-        checks = (GREEN, {"__typename": "StatusContext", "state": "FAILURE"})
-        r = self.go(on=True, auto_merge="squash", checks=checks)
-        self.assertEqual((r.code, r.out), (0, [READY, no_auto_merge("1 check(s) not green")]))
 
 
 class NotReady(PrReadyCase):
@@ -290,7 +206,7 @@ class NotReady(PrReadyCase):
         for autopilot in (False, True):
             for state in ("CLOSED", "MERGED"):
                 with self.subTest(autopilot=autopilot, state=state):
-                    r = self.go(on=autopilot, auto_merge="squash" if autopilot else None, state=state)
+                    r = self.go(on=autopilot, state=state)
                     self.assertEqual((r.code, r.out), (1, [f"not ready: {URL}: PR is {state}, not OPEN"]))
 
     def test_gh_pr_view_failure_exits_1(self):
@@ -331,15 +247,6 @@ class Preconditions(PrReadyCase):
 
     def test_empty_pr_cell_autopilot_off(self):
         self.assertRefused(self.go(pr_cell=""), "no full PR URL")
-
-    def test_bad_auto_merge_value(self):
-        self.assertRefused(self.go(on=True, auto_merge="yolo"), "ADMIRAL_AUTO_MERGE must be")
-
-    def test_bad_auto_merge_value_autopilot_off(self):
-        self.assertRefused(self.go(auto_merge="yolo"), "ADMIRAL_AUTO_MERGE must be")
-
-    def test_bad_auto_merge_value_with_only_the_env_half_on(self):
-        self.assertRefused(self.go(env_autopilot="1", auto_merge="Squash"), "ADMIRAL_AUTO_MERGE must be")
 
     def test_missing_state_md_exits_5_with_stderr(self):
         run = self.tmp / "empty"
