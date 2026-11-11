@@ -933,10 +933,14 @@ class SkillText(unittest.TestCase):
         self.assertIn("## Ad hoc members", text)  # ruling 14: the lead records each `wrote <path>` line in state.md
         self.assertIn("--pick", text)
 
-    def test_the_build_missions_final_report_lists_the_ad_hoc_members(self):
-        text = self.read("references/mission-build.md")
-        report = next(ln for ln in text.splitlines() if ln.startswith("5. Write the final report"))
-        self.assertIn("ad hoc members", report.lower())
+    def test_every_missions_final_report_lists_the_ad_hoc_members(self):
+        # any mission casts a crew in phase 1, so any run can make an ad hoc member the engineer must hear about
+        for mission in ("build", "review", "pr-feedback"):
+            with self.subTest(mission=mission):
+                text = self.read(f"references/mission-{mission}.md")
+                report = [ln for ln in text.splitlines() if re.match(r"\d+\. Write the final report", ln)]
+                self.assertEqual(len(report), 1, f"mission-{mission}.md: one final report step")
+                self.assertIn("ad hoc members", report[0].lower())
 
     def test_crew_members_reference_documents_the_directory_the_filter_and_the_command(self):
         text = self.read("references/crew-members.md")
