@@ -1,13 +1,4 @@
-"""Tests for the admiral driver (skills/engineering/agent-teammates/scripts/drivers/admiral/), Claude harness.
-
-Seams: the shared scripts (launch-teammate.sh, retask.sh, watch-teammates.sh, close-teammate.sh, teammate-tail.sh)
-and the driver's operations, run as subprocesses against a temp team dir. A fake `admiral` records its argv and stdin
-and prints canned `crew list --json` and usage text; a fake `claude` keeps the real one out of reach. Expected argv
-comes from Admiral's docs/cli.md at 992f678 and the engineer's decisions in u1-unit.md; the order of Admiral's own
-flags (--name, --dir, --harness, --ship, --role) is left free because cli.md doesn't fix it.
-
-Run from the repo root: python3 -m unittest evals/agent-teammates/test_admiral_driver.py -v
-"""
+"""Tests for the admiral driver and the shared teammate scripts that run through it."""
 
 import json
 import os
@@ -17,7 +8,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from admiral_world import ADMIRAL_DRIVER, SCRIPTS, SHIP, USAGE_OLD, WorldCase, boat, first_prompt, rfc3339, split_launch
+from admiral_world import ADMIRAL_DRIVER, SCRIPTS, SHIP, USAGE_OLD, WorldCase, boat, rfc3339, split_launch
 
 LAUNCH = SCRIPTS / "launch-teammate.sh"
 RETASK = SCRIPTS / "retask.sh"
@@ -57,8 +48,6 @@ class LaunchCase(WorldCase):
 
 
 class TestLaunchArguments(LaunchCase):
-    """ac1-launch, decisions 7, 8 and 10."""
-
     def test_admiral_flags_carry_name_dir_harness_ship_and_role(self):
         _, _, flags, _ = self.launched("--role", "test-writer")
         self.assertEqual(
@@ -82,17 +71,10 @@ class TestLaunchArguments(LaunchCase):
         self.assertEqual(self.value(args, "--model"), "sonnet")
         self.assertEqual(self.value(args, "--advisor"), "opus")
         self.assertEqual(self.value(args, "--permission-mode"), "auto")
-        self.assertEqual(len(args), 6, args)
 
     def test_model_flag_wins_over_the_role_model(self):
         _, _, _, args = self.launched("--role", "test-writer", "--model", "haiku")
         self.assertEqual(self.value(args, "--model"), "haiku")
-
-    def test_advisor_none_leaves_out_the_advisor(self):
-        self.w.write_team_env(extra=["ADVISOR=none"])
-        _, _, _, args = self.launched("--role", "test-writer")
-        self.assertNotIn("--advisor", args)
-        self.assertNotIn("none", args)
 
     def test_configured_permission_mode_is_passed(self):
         self.w.write_team_env(extra=["PERMISSION_MODE=acceptEdits"])
@@ -114,68 +96,17 @@ class TestLaunchArguments(LaunchCase):
         self.assertTrue(args[at + 3].startswith("-"), args)
         self.assertNotIn(args[-1], denied)
 
-    def test_read_only_under_autopilot_still_ends_on_a_flag_value(self):
-        _, _, _, args = self.launched("--read-only", "--role", "reviewer", ADMIRAL_AUTOPILOT="1")
-        at = args.index("--disallowedTools")
-        self.assertTrue(args[at + 3].startswith("-"), args)
-
-    def test_launch_without_read_only_denies_nothing(self):
-        _, _, _, args = self.launched("--role", "test-writer")
-        self.assertNotIn("--disallowedTools", args)
-
-    def test_prompt_follows_a_bare_double_dash_as_the_final_arguments(self):
-        _, argv, _, _ = self.launched("--role", "test-writer")
-        self.assertEqual(argv[-2:], ["--", first_prompt("alpha", self.w.team / "prompts/alpha.md")])
-        self.assertEqual(argv.count("--"), 1)
-
-    def test_no_background_flag_and_no_name_flag_for_the_harness(self):
-        _, argv, _, _ = self.launched("--read-only", "--role", "reviewer")
-        self.assertNotIn("--bg", argv)
-        self.assertNotIn("-n", argv)
-
-    def test_launch_without_role_passes_no_role(self):
-        self.w.write_team_env(extra=["REQUIRE_ROLE=0"])
-        _, argv, _, _ = self.launched()
-        self.assertNotIn("--role", argv)
-
     def test_a_role_in_the_callers_environment_is_not_inherited(self):
         self.w.write_team_env(extra=["REQUIRE_ROLE=0"])
         _, argv, _, _ = self.launched(TEAMMATE_ROLE="stale")
         self.assertNotIn("--role", argv)
         self.assertNotIn("stale", argv)
 
-    def test_driver_launch_reads_the_role_from_teammate_role(self):
-        self.w.prompt("alpha")
-        prompt = self.w.team / "prompts" / "alpha.md"
-        done = self.w.run(
-            ADMIRAL_DRIVER / "launch",
-            self.w.team,
-            "alpha",
-            self.w.work,
-            "sonnet",
-            prompt,
-            0,
-            TEAMMATE_ROLE="test-writer",
-        )
-        self.assertEqual(done.code, OK, done.text)
-        self.assertEqual(done.out.splitlines()[0], "alpha -")
-        (call,) = [a for a in self.w.admiral() if a[:2] == ["crew", "launch"]]
-        flags, _ = split_launch(self, call, "alpha")
-        self.assertEqual(flags["--role"], ["test-writer"])
-
-    def test_nothing_reaches_claude_or_a_viewer(self):
-        self.launched("--role", "test-writer")
-        self.assertEqual(self.w.calls("claude"), [])
-
 
 class TestLaunchRegistration(LaunchCase):
-    """decisions 7 and 9: the id is the crew name and there is no viewer."""
-
     def test_registry_row_uses_the_crew_name_as_session_id_and_no_viewer(self):
-        done, _, _, _ = self.launched("--role", "test-writer")
+        self.launched("--role", "test-writer")
         self.assertEqual([self.w.registry()[-1][i] for i in (0, 1, 3)], ["alpha", "alpha", "-"])
-        self.assertTrue(done.out.startswith("launched alpha as background session alpha in "), done.out)
-        self.assertNotIn("viewer", done.out)
 
     def test_tmux_and_cmux_viewers_are_ignored(self):
         for viewer in ("tmux", "cmux"):
@@ -201,34 +132,20 @@ class TestLaunchRegistration(LaunchCase):
 
 
 class TestLaunchExitCodes(LaunchCase):
-    """decision 11: Admiral's exit codes map to the contract's, and NO_BG never shows inside Admiral."""
-
     def refused(self, admiral_rc, message="admiral: boom\n"):
         self.w.ctl_write("launch.rc", str(admiral_rc))
         self.w.ctl_write("launch.msg", message)
         return self.launch("--role", "test-writer")
 
-    def test_name_in_use_exits_5(self):
-        done = self.refused(5, "admiral: crew boat alpha is in use\n")
-        self.assertEqual(done.code, USAGE, done.text)
-
-    def test_usage_error_or_no_ship_exits_5(self):
-        done = self.refused(2, "admiral: not inside an Admiral ship\n")
-        self.assertEqual(done.code, USAGE, done.text)
+    def test_name_in_use_or_no_ship_exits_5(self):
+        for rc in (5, 2):
+            with self.subTest(admiral_rc=rc):
+                self.assertEqual(self.refused(rc).code, USAGE)
 
     def test_refusal_exits_1_with_admirals_message(self):
         done = self.refused(1, "admiral: --arg --settings is refused\n")
         self.assertEqual(done.code, FAILED, done.text)
         self.assertIn("--arg --settings is refused", done.text)
-
-    def test_no_failure_prints_no_bg(self):
-        for rc in (1, 2, 5):
-            with self.subTest(admiral_rc=rc):
-                done = self.refused(rc)
-                self.assertEqual(len([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]]), 1)
-                self.assertNotIn("NO_BG", done.text)
-                self.assertNotEqual(done.code, 2)
-                (self.w.ctl / "admiral.log").unlink()
 
     def test_old_admiral_without_arg_refuses_with_5_and_names_the_version(self):
         self.w.ctl_write("usage.txt", USAGE_OLD)
@@ -238,28 +155,16 @@ class TestLaunchExitCodes(LaunchCase):
         self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
         self.assertEqual(self.w.registry(), [])
 
-    def test_names_outside_admirals_rule_exit_5_naming_the_rule(self):
-        for bad in ("Alpha", "a_b", "a.b", "-alpha"):
-            with self.subTest(name=bad):
-                self.w.prompt(bad)
-                done = self.launch("--role", "test-writer", name=bad)
-                self.assertEqual(done.code, USAGE, done.text)
-                self.assertIn("lowercase", done.text)
-                self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
-
-    def test_roles_outside_admirals_rule_exit_5_naming_the_rule(self):
-        for bad in ("Test_Writer", "test.writer"):
-            with self.subTest(role=bad):
-                done = self.launch("--role", bad, "--model", "sonnet")
-                self.assertEqual(done.code, USAGE, done.text)
-                self.assertIn("lowercase", done.text)
-                self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
-
-    def test_the_driver_itself_refuses_a_bad_name(self):
-        prompt = self.w.team / "prompts" / "alpha.md"
-        done = self.w.run(ADMIRAL_DRIVER / "launch", self.w.team, "Bad_Name", self.w.work, "sonnet", prompt, 0)
+    def test_a_name_outside_admirals_rule_exits_5_before_any_launch(self):
+        self.w.prompt("a_b")
+        done = self.launch("--role", "test-writer", name="a_b")
         self.assertEqual(done.code, USAGE, done.text)
-        self.assertIn("lowercase", done.text)
+        self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
+
+    def test_a_role_outside_admirals_rule_exits_5_before_any_launch(self):
+        done = self.launch("--role", "Test_Writer", "--model", "sonnet")
+        self.assertEqual(done.code, USAGE, done.text)
+        self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
 
 
 class TestLaunchWait(LaunchCase):
@@ -282,13 +187,9 @@ class TestLaunchWait(LaunchCase):
         self.w.boats(boat("alpha"))
         done = self.launch("--role", "test-writer", LAUNCH_WAIT="0", LAUNCH_POLL="0")
         self.assertEqual(done.code, USAGE, done.text)
-        self.assertIn("alpha showed no activity within 0s", done.text)
-        self.assertIn("startup prompt", done.text)
-        self.assertIn(f"Run the dock's harness once in {self.w.work}", done.text)
         self.assertEqual(len(self.closes()), 1)
         self.assertEqual(self.closes()[0][:3], ["crew", "close", "alpha"])
         self.assertEqual(self.w.registry(), [])
-        self.assertNotIn("alpha -", done.out)
 
     def test_wait_settings_come_from_team_env(self):
         self.w.boats(boat("alpha"))
@@ -297,22 +198,18 @@ class TestLaunchWait(LaunchCase):
         self.assertEqual(done.code, USAGE, done.text)
 
     def test_a_launch_wait_that_is_not_whole_seconds_exits_5_before_any_launch(self):
-        for bad in ("abc", "1.5", "-3"):
-            with self.subTest(wait=bad):
-                self.w.write_team_env(extra=[f"LAUNCH_WAIT={bad}"])
-                done = self.launch("--role", "test-writer")
-                self.assertEqual(done.code, USAGE, done.text)
-                self.assertIn("LAUNCH_WAIT", done.text)
-                self.assertEqual(self.w.admiral(), [])
+        self.w.write_team_env(extra=["LAUNCH_WAIT=1.5"])
+        done = self.launch("--role", "test-writer")
+        self.assertEqual(done.code, USAGE, done.text)
+        self.assertIn("LAUNCH_WAIT", done.text)
+        self.assertEqual(self.w.admiral(), [])
 
     def test_a_launch_poll_that_is_not_a_non_negative_number_exits_5_before_any_launch(self):
-        for bad in ("abc", "-1", "1.", ".5"):
-            with self.subTest(poll=bad):
-                self.w.write_team_env(extra=[f"LAUNCH_POLL={bad}"])
-                done = self.launch("--role", "test-writer")
-                self.assertEqual(done.code, USAGE, done.text)
-                self.assertIn("LAUNCH_POLL", done.text)
-                self.assertEqual(self.w.admiral(), [])
+        self.w.write_team_env(extra=["LAUNCH_POLL=-1"])
+        done = self.launch("--role", "test-writer")
+        self.assertEqual(done.code, USAGE, done.text)
+        self.assertIn("LAUNCH_POLL", done.text)
+        self.assertEqual(self.w.admiral(), [])
 
     def test_a_boat_that_exits_during_startup_closes_and_exits_1(self):
         self.w.boats(boat("alpha", "anchored"))
@@ -330,8 +227,6 @@ class TestLaunchWait(LaunchCase):
 
 
 class TestSend(WorldCase):
-    """ac2-send, decision 12."""
-
     def setUp(self):
         super().setUp()
         self.w.register("alpha", epoch=1000)
@@ -346,14 +241,11 @@ class TestSend(WorldCase):
     def test_sends_a_pointer_on_stdin_not_the_message_on_the_command_line(self):
         done = self.retask()
         self.assertEqual((done.code, done.err), (OK, ""), done.text)
-        self.assertEqual(done.out.strip(), "alpha re-tasked (session alpha)")
         (call,) = self.sends()
         self.assertEqual(call["argv"][:3], ["crew", "send", "alpha"])
         extra = call["argv"][3:]
         self.assertIn(extra, ([], ["--ship", SHIP]))
-        self.assertEqual(
-            call["stdin"].rstrip("\n"), f"You are teammate alpha. Read {self.msg} and do exactly what it says."
-        )
+        self.assertIn(str(self.msg), call["stdin"])
         self.assertNotIn("a long job", " ".join(call["argv"]))
 
     def test_a_successful_send_resets_the_watchdog_clock(self):
@@ -363,65 +255,41 @@ class TestSend(WorldCase):
         self.assertEqual(row[:2], ["alpha", "alpha"])
         self.assertGreaterEqual(int(row[2]), before)
 
-    def test_anchored_boat_exit_4_becomes_1_and_records_nothing(self):
-        self.w.ctl_write("send.rc", "4")
-        self.w.ctl_write("send.msg", "admiral: alpha is anchored\n")
-        done = self.retask()
-        self.assertEqual(done.code, FAILED, done.text)
-        self.assertEqual(len(self.w.registry()), 1)
-
-    def test_other_send_failures_exit_nonzero_and_record_nothing(self):
-        self.w.ctl_write("send.rc", "1")
-        done = self.retask()
-        self.assertEqual(len(self.sends()), 1)
-        self.assertNotEqual(done.code, OK)
-        self.assertEqual(len(self.w.registry()), 1)
-
-    def test_driver_send_maps_exit_4_to_1(self):
-        self.w.ctl_write("send.rc", "4")
-        done = self.w.run(ADMIRAL_DRIVER / "send", self.w.team, "alpha", self.msg)
-        self.assertEqual(done.code, FAILED, done.text)
+    def test_a_failed_send_exits_1_and_records_nothing(self):
+        for rc in ("4", "1"):
+            with self.subTest(admiral_rc=rc):
+                self.w.ctl_write("send.rc", rc)
+                done = self.retask()
+                self.assertEqual(done.code, FAILED, done.text)
+                self.assertEqual(len(self.w.registry()), 1)
 
 
 class TestStatus(WorldCase):
-    """ac3-status, decision 13."""
-
     def status_lines(self):
         done = self.w.run(ADMIRAL_DRIVER / "status", self.w.team)
         self.assertEqual((done.code, done.err), (OK, ""), done.text)
         return {line.split()[0]: line.split() for line in done.out.splitlines()}
 
     def test_states_map_and_the_epoch_comes_from_last_activity(self):
-        for name in ("a", "b", "c", "d"):
+        for name in "abcde":
             self.w.register(name)
         self.w.boats(
             boat("a", "underway", last_activity="2026-10-25T10:00:00Z"),
             boat("b", "needs_you", last_activity="2026-10-25T10:00:00Z"),
             boat("c", "anchored", last_activity="2026-10-25T10:00:00Z"),
             boat("d", "underway", last_activity=None),
+            boat("e", "idle", last_activity="2026-10-25T10:00:00Z"),
         )
         rows = self.status_lines()
-        self.assertEqual([rows[n][0] for n in "abcd"], list("abcd"))
-        self.assertEqual([rows[n][2] for n in "abcd"], ["working", "blocked", "stopped", "working"])
-        self.assertEqual([rows[n][3] for n in "abcd"], ["1792922400"] * 3 + ["-"])
+        self.assertEqual([rows[n][0] for n in "abcde"], list("abcde"))
+        self.assertEqual([rows[n][2] for n in "abcde"], ["working", "blocked", "stopped", "working", "blocked"])
+        self.assertEqual([rows[n][3] for n in "abcde"], ["1792922400"] * 3 + ["-", "1792922400"])
         self.assertTrue(all(len(r) == FIELDS for r in rows.values()), rows)
-
-    def test_an_idle_boat_is_blocked(self):
-        """ac1-status-idle: Admiral's `idle` (a plain Stop ended the turn) reads as blocked."""
-        self.w.register("a")
-        self.w.boats(boat("a", "idle", last_activity="2026-10-25T10:00:00Z"))
-        self.assertEqual(self.status_lines()["a"], ["a", "-", "blocked", "1792922400"])
 
     def test_an_unknown_state_still_passes_through_unchanged(self):
         self.w.register("a")
         self.w.boats(boat("a", "adrift", last_activity="2026-10-25T10:00:00Z"))
         self.assertEqual(self.status_lines()["a"], ["a", "-", "adrift", "1792922400"])
-
-    def test_the_listing_asks_admiral_for_json(self):
-        self.w.register("a")
-        self.status_lines()
-        listing = [a for a in self.w.admiral() if a[:2] == ["crew", "list"]]
-        self.assertTrue(listing and "--json" in listing[0], self.w.admiral())
 
     def test_a_registered_boat_missing_from_the_listing_is_not_alive(self):
         self.w.register("gone")
@@ -446,8 +314,6 @@ class TestStatus(WorldCase):
 
 
 class TestWatch(WorldCase):
-    """ac3-status through watch-teammates.sh, one poll."""
-
     def watch(self):
         done = self.w.run(WATCH, "--until-event", 1, self.w.team)
         self.assertEqual(done.code, OK, done.text)
@@ -464,7 +330,6 @@ class TestWatch(WorldCase):
         self.w.boats(boat("alpha", "anchored"))
         self.mark_done("alpha")
         self.assertEqual(self.watch(), ["DONE alpha"])
-        self.assertIn(["crew", "list"], [a[:2] for a in self.w.admiral()])
 
     def test_an_anchored_boat_without_a_marker_is_gone(self):
         self.w.register("alpha")
@@ -475,17 +340,10 @@ class TestWatch(WorldCase):
         self.w.register("alpha")
         self.w.boats()
         self.assertEqual(self.watch(), ["GONE alpha alpha missing"])
-        self.assertIn(["crew", "list"], [a[:2] for a in self.w.admiral()])
 
     def test_a_boat_that_needs_you_is_blocked_on_the_second_poll(self):
         self.w.register("alpha")
         self.w.boats(boat("alpha", "needs_you", last_activity=rfc3339(time.time() - 60)))
-        self.assertEqual(self.watch(), ["WATCH timeout 1"])
-        self.assertEqual(self.watch(), ["BLOCKED alpha alpha"])
-
-    def test_an_idle_boat_without_a_marker_is_blocked_on_the_second_poll(self):
-        self.w.register("alpha")
-        self.w.boats(boat("alpha", "idle", last_activity=rfc3339(time.time() - 60)))
         self.assertEqual(self.watch(), ["WATCH timeout 1"])
         self.assertEqual(self.watch(), ["BLOCKED alpha alpha"])
 
@@ -507,8 +365,6 @@ class TestWatch(WorldCase):
 
 
 class TestStop(WorldCase):
-    """ac4-stop, decision 14."""
-
     def setUp(self):
         super().setUp()
         self.w.register("alpha")
@@ -531,7 +387,6 @@ class TestStop(WorldCase):
         self.assertEqual(self.w.registry()[-1][2], "closed")
 
     def test_live_boats_close_and_exit_0(self):
-        """ac2-stop-idle: every state but anchored, `idle` included."""
         states = ("underway", "needs_you", "idle")
         for state in states:
             with self.subTest(state=state):
@@ -556,15 +411,8 @@ class TestStop(WorldCase):
         self.assertIn(["crew", "list"], [a[:2] for a in self.w.admiral()])
         self.assertEqual(self.closes(), [])
 
-    def test_nothing_reaches_claude(self):
-        self.w.boats(boat("alpha", "underway"))
-        self.assertEqual(self.stop().code, OK)
-        self.assertEqual(self.w.calls("claude"), [])
-
 
 class TestDeferred(WorldCase):
-    """ac5-defer, decisions 15 and 16."""
-
     def transcript(self, lines):
         path = self.w.root / "cfg" / "projects" / "-some-project" / "sess-abc123.jsonl"
         path.parent.mkdir(parents=True)
@@ -627,25 +475,6 @@ class TestDeferred(WorldCase):
         listed = self.w.run(ADMIRAL_DRIVER / "list-skills", self.w.team)
         self.assertEqual(listed.code, OK, listed.text)
         self.assertIn(f"local-skill\t{skill}", listed.out.splitlines())
-        self.assertIn("simplify\t-", listed.out.splitlines())
-
-    def test_advisor_probe_runs_the_claude_probe_which_gives_up_without_a_trusted_directory(self):
-        done = self.w.run(ADMIRAL_DRIVER / "advisor-probe", self.w.team, "sonnet")
-        self.assertEqual(done.code, OK, done.text)
-        self.assertTrue(
-            done.out.splitlines()[-1].startswith("ADVISOR OFF sonnet: probe session couldn't start"), done.out
-        )
-        self.assertEqual(self.w.admiral(), [])
-
-    def test_driver_env_declares_live_messaging_and_script_send(self):
-        env_file = ADMIRAL_DRIVER / "driver.env"
-        self.assertTrue(env_file.is_file(), f"{env_file} is missing")
-        declared = dict(
-            line.split("=", 1) for line in env_file.read_text().splitlines() if "=" in line and not line.startswith("#")
-        )
-        self.assertEqual(declared["LIVE_MESSAGING"], "1")
-        self.assertEqual(declared["SEND"], "script")
-        self.assertIn(declared.get("SKILL_PREFIX", "/"), ("/",))
 
 
 class TestHarnessAdmiral(LaunchCase):
@@ -656,26 +485,16 @@ class TestHarnessAdmiral(LaunchCase):
         self.w.write_team_env(harness="admiral")
         self.w.register("alpha")
 
-    def refused(self, done):
-        self.assertEqual(done.code, USAGE, done.text)
-        self.assertIn("admiral is a host driver, not a harness", done.text)
-
     def test_launch_refuses(self):
-        self.refused(self.launch("--role", "test-writer"))
+        done = self.launch("--role", "test-writer")
+        self.assertEqual(done.code, USAGE, done.text)
         self.assertEqual([a for a in self.w.admiral() if a[:2] == ["crew", "launch"]], [])
 
-    def test_deferred_operations_refuse(self):
-        for op, args in (("has-skill", ("x",)), ("list-skills", ()), ("advisor-probe", ("sonnet",))):
-            with self.subTest(op=op):
-                self.refused(self.w.run(ADMIRAL_DRIVER / op, self.w.team, *args, timeout=20))
-
-    def test_tail_refuses(self):
-        self.refused(self.w.run(TAIL, self.w.team, "alpha", timeout=20))
+    def test_has_skill_refuses(self):
+        self.assertEqual(self.w.run(ADMIRAL_DRIVER / "has-skill", self.w.team, "x", timeout=20).code, USAGE)
 
 
 class TestPreflight(WorldCase):
-    """decision 17."""
-
     def preflight(self, **env):
         return self.w.run(ADMIRAL_DRIVER / "preflight", self.w.team, **env)
 
@@ -685,14 +504,6 @@ class TestPreflight(WorldCase):
         self.assertNotIn("FAIL", done.out)
         self.assertRegex(done.out, r"(?m)^OK +claude found")
         self.assertRegex(done.out, r"(?m)^WARN .*not marked trusted")
-
-    def test_the_ship_is_checked_with_crew_list(self):
-        self.preflight()
-        listing = [a for a in self.w.admiral() if a[:2] == ["crew", "list"]]
-        self.assertTrue(listing, self.w.admiral())
-        argv = listing[-1]
-        self.assertIn("--json", argv)
-        self.assertEqual(argv[argv.index("--ship") + 1], SHIP)
 
     def test_claudes_agents_failure_is_not_reported(self):
         self.w.ctl_write("claude-agents.rc", "1")

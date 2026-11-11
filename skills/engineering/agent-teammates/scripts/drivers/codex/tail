@@ -1,5 +1,6 @@
 #!/bin/zsh
 # usage: tail <team-dir> <label> <session-id> <n>   (see ../CONTRACT.md)
+zmodload -F zsh/stat b:zstat
 [[ $# -eq 4 ]] || { sed -n 2p $0; exit 5; }
 D=${1:A}; W=$2; id=$3; N=$4
 DRVDIR=${0:A:h}
@@ -7,7 +8,7 @@ source ${DRVDIR:h:h}/team-env.zsh
 source $DRVDIR/lib.zsh
 state_load $id && [[ -s $EVENTS ]] || { echo "no Codex events for $W ($id) under $D"; exit 3; }
 r=$(rollout_of); [[ -f $r ]] || r=$EVENTS
-echo "transcript: $r  (last write $(( ($(date +%s) - $(stat -f %m $r)) / 60 )) min ago)"
+echo "transcript: $r  (last write $(( ($(date +%s) - $(zstat +mtime -- $r)) / 60 )) min ago)"
 # Every turn's events are in one log. A tool call is logged when it starts and when it completes; only the second counts.
 lines=$(jq -R -r 'fromjson? | select(.type == "item.completed") | .item |
   if .type == "agent_message" then "SAID  \(.text | gsub("[\u0000-\u001f\u007f]";" ") | .[0:240])"

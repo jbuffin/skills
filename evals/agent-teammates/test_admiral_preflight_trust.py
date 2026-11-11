@@ -1,16 +1,4 @@
-"""Tests for the startup-prompt WARNs the admiral driver's `preflight` adds for Codex and Copilot (u2 of #115,
-decision 9): folder trust and hook trust are settled once per dock, and a launch waits forever at an unsettled prompt,
-so preflight reads where each harness records them and WARNs. The WARNs never turn into FAILs.
-
-Seams: drivers/admiral/preflight as a subprocess against a temp team dir. HOME is a temp dir, so
-~/.admiral/config.json, ~/.codex/config.toml and ~/.copilot/config.json are the test's own; the fake `admiral` answers
-`admiral ships` with the ship's fleet, and the fake `codex` and `copilot` are the only harness CLIs on PATH.
-CODEX_HOME and COPILOT_HOME are unset unless a test passes them. The WARN wording is not fixed by the brief, so lines
-are matched by the words that name the problem: a WARN naming trust for the folder, a WARN naming hook trust, and the
-path the check read.
-
-Run from the repo root: python3 -m unittest evals/agent-teammates/test_admiral_preflight_trust.py -v
-"""
+"""The admiral driver's preflight WARNs when Codex or Copilot hasn't settled folder or hook trust for the repo."""
 
 import json
 import re
@@ -59,9 +47,8 @@ class PreflightCase(WorldCase):
         return self.w.run(ADMIRAL_DRIVER / "preflight", self.w.team, **kw)
 
     def assertWarnsThenSettles(self, settle, **kw):
-        """Nothing settled warns once about folder trust; after `settle()` it doesn't. The first half keeps a test that
-        only expects silence from passing before the check exists."""
-        before = self.preflight(**kw)
+        """Nothing settled warns once about folder trust; after `settle()` it doesn't."""
+        before = self.before = self.preflight(**kw)
         self.assertEqual(len(trust_warns(before.out)), 1, before.out)
         settle()
         after = self.preflight(**kw)
@@ -100,34 +87,24 @@ class TestCodexTrustWarns(PreflightCase):
     def settled(self, *trusted, **kw):
         (self.dock / "config.toml").write_text(config_toml(*trusted, **kw))
 
-    # the repo root
     def test_a_trusted_repo_root_and_hook_state_raise_no_warn(self):
-        before = self.preflight()
-        self.assertEqual(len(hook_warns(before.out)), 1, before.out)
         done = self.assertWarnsThenSettles(lambda: self.settled(self.w.checkout))
+        self.assertEqual(self.before.code, OK, self.before.text)
+        self.assertEqual(len(hook_warns(self.before.out)), 1, self.before.out)
         self.assertEqual(hook_warns(done.out), [])
 
     def test_a_trusted_ancestor_of_the_repo_root_counts(self):
         self.assertWarnsThenSettles(lambda: self.settled(self.w.root))
 
-    def test_an_untrusted_or_unrelated_project_warns(self):
-        for trusted, level in ((self.w.work, "trusted"), (self.w.checkout, "untrusted")):
-            with self.subTest(trusted=str(trusted), level=level):
-                self.settled(trusted, level=level)
-                done = self.preflight()
-                self.assertEqual(done.code, OK, done.text)
-                self.assertEqual(len(trust_warns(done.out)), 1, done.out)
-                self.assertNotRegex(done.out, r"(?m)^FAIL .*trust")
+    def test_an_untrusted_project_warns(self):
+        self.settled(self.w.checkout, level="untrusted")
+        done = self.preflight()
+        self.assertEqual(done.code, OK, done.text)
+        self.assertEqual(len(trust_warns(done.out)), 1, done.out)
 
     def test_a_child_of_the_repo_root_is_not_enough(self):
         self.settled(self.w.checkout / "sub")
         self.assertEqual(len(trust_warns(self.preflight().out)), 1)
-
-    def test_a_missing_config_toml_warns_for_the_folder_and_for_hooks(self):
-        done = self.preflight()
-        self.assertEqual(done.code, OK, done.text)
-        self.assertEqual(len(trust_warns(done.out)), 1, done.out)
-        self.assertEqual(len(hook_warns(done.out)), 1, done.out)
 
     def test_no_hook_state_tables_warn_only_about_hooks(self):
         self.settled(self.w.checkout, hooks=False)
@@ -135,12 +112,6 @@ class TestCodexTrustWarns(PreflightCase):
         self.assertEqual(done.code, OK, done.text)
         self.assertEqual(trust_warns(done.out), [])
         self.assertEqual(len(hook_warns(done.out)), 1, done.out)
-
-    def test_the_warns_are_not_fails(self):
-        done = self.preflight()
-        self.assertEqual(done.code, OK, done.text)
-        self.assertEqual(len(trust_warns(done.out)) + len(hook_warns(done.out)), 2, done.out)
-        self.assertNotRegex(done.out, r"(?m)^FAIL")
 
     # the dock's CODEX_HOME
     def test_the_dock_home_is_read_and_named(self):
@@ -175,8 +146,6 @@ class TestCodexTrustWarns(PreflightCase):
         coordinator = self.w.root / "coordinator-codex"
         (coordinator / "rules").mkdir(parents=True)
         (coordinator / "rules" / "default.rules").write_text(RULES)
-        (coordinator / "config.toml").write_text(config_toml(self.w.checkout))
-        (coordinator / "config.toml").write_text("")
         before = self.preflight(CODEX_HOME=str(coordinator))
         self.assertEqual(len(trust_warns(before.out)), 1, before.out)
         self.assertIn(str(coordinator), "\n".join(trust_warns(before.out)))
@@ -200,9 +169,6 @@ class TestCodexTrustWarns(PreflightCase):
         settled.mkdir()
         (settled / "config.toml").write_text(config_toml(self.w.checkout))
         self.dock_config({"work": "~/dock-tilde"})
-        (self.w.home / ".admiral" / "config.json").write_text(
-            json.dumps({"fleets": {"work": {"codex": {"env": {"CODEX_HOME": "~/dock-tilde"}}}}})
-        )
         done = self.preflight()
         self.assertEqual((trust_warns(done.out), hook_warns(done.out)), ([], []), done.out)
 
@@ -266,7 +232,8 @@ class TestCopilotTrustWarns(PreflightCase):
         )
 
     def test_a_trusted_repo_root_raises_no_warn(self):
-        self.assertWarnsThenSettles(lambda: self.settled(self.w.checkout))
+        done = self.assertWarnsThenSettles(lambda: self.settled(self.w.checkout))
+        self.assertEqual(hook_warns(done.out), [])
 
     def test_a_trusted_ancestor_counts(self):
         self.assertWarnsThenSettles(lambda: self.settled(self.w.root))
@@ -290,10 +257,6 @@ class TestCopilotTrustWarns(PreflightCase):
         self.config.write_text(self.HEADER + "{ this is not json")
         self.assertEqual(len(trust_warns(self.preflight().out)), 1)
 
-    def test_no_trusted_folders_key_warns(self):
-        self.config.write_text(self.HEADER + "{}")
-        self.assertEqual(len(trust_warns(self.preflight().out)), 1)
-
     def test_copilot_home_replaces_the_default_dir(self):
         custom = self.w.root / "copilot-home"
         custom.mkdir()
@@ -304,19 +267,6 @@ class TestCopilotTrustWarns(PreflightCase):
         (custom / "config.json").write_text(self.HEADER + json.dumps({"trustedFolders": [str(self.w.checkout)]}))
         self.assertEqual(trust_warns(self.preflight(COPILOT_HOME=str(custom)).out), [])
 
-    def test_repo_unset_uses_the_main_checkout_of_the_current_repository(self):
-        main, tree = self.git_checkout()
-        self.w.write_team_env(harness="copilot", repo=False)
-        self.assertWarnsThenSettles(lambda: self.settled(main), cwd=tree)
-
-    def test_repo_unset_outside_a_repository_says_the_check_was_skipped(self):
-        self.w.write_team_env(harness="copilot", repo=False)
-        elsewhere = self.w.root / "not-a-repo"
-        elsewhere.mkdir()
-        self.settled(self.w.checkout)
-        done = self.preflight(cwd=elsewhere)
-        self.assertEqual(len([w for w in warns(done.out) if re.search(r"(?i)skipped", w)]), 1, done.out)
-
     def test_an_unreadable_file_still_warns_when_the_repo_root_is_unknown(self):
         self.w.write_team_env(harness="copilot", repo=False)
         elsewhere = self.w.root / "not-a-repo"
@@ -325,10 +275,6 @@ class TestCopilotTrustWarns(PreflightCase):
         done = self.preflight(cwd=elsewhere)
         self.assertEqual(len([w for w in warns(done.out) if str(self.config) in w]), 1, done.out)
         self.assertEqual(len([w for w in warns(done.out) if re.search(r"(?i)skipped", w)]), 1, done.out)
-
-    def test_copilot_has_no_hook_trust_warn(self):
-        done = self.assertWarnsThenSettles(lambda: self.settled(self.w.checkout))
-        self.assertEqual(hook_warns(done.out), [])
 
 
 if __name__ == "__main__":

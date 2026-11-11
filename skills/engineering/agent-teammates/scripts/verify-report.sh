@@ -10,13 +10,14 @@
 # The worktree is the teammate's workdir from teammates.tsv, or --workdir for an in-process teammate. A teammate
 # with proofs and no git worktree fails. Prints OK / FAIL / NOTE lines and a last line "verdict: verified" (exit 0)
 # or "verdict: unverified" (exit 1).
+zmodload -F zsh/stat b:zstat
 [[ -z $1 || -z $2 || ! -d $1 ]] && { sed -n 2,12p $0; exit 5; }
 RUN=${1:A}; NAME=$2; shift 2
 WD=; [[ $1 == --workdir ]] && { WD=${2:A}; shift 2; }
 R=$RUN/reports; REP=$R/$NAME.md; E=$R/$NAME-evidence; PROOF=$RUN/prompts/$NAME.proof; BAD=0
 ok()   { echo "OK   $*"; }
 fail() { echo "FAIL $*"; BAD=1; }
-mtime() { stat -f %m $1 2>/dev/null || echo 0; }
+mtime() { zstat +mtime -- $1 2>/dev/null || echo 0; }
 
 # The latest tasking: launch or retasked.sh. Anything older belongs to an earlier round.
 TASKED=$(awk -v n=$NAME '$1==n && $3 ~ /^[0-9]+$/ {v=$3} END {print v+0}' $RUN/teammates.tsv 2>/dev/null)
