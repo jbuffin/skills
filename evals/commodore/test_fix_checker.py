@@ -1,13 +1,4 @@
-"""Tests for the fix checker (issue #169): review round 2 becomes a fix check run by a read-only `fix-checker` role.
-
-Seams are the shipped scripts' command lines and the text of the shipped docs. Expected values come from the
-issue's Agent Brief, not from the code. Some checks held on main already, so each is paired with an assertion that
-fails without the change, except the named regression guards for round 1 and the round cap (no other eval covers
-`review-round.sh`). `pr-ready.sh` needs no code change: it never reads findings, so the test here is that
-mission-build.md tells the coordinator to record fix-check notes as `open`.
-
-Run from the repo root: python3 -m unittest discover -s evals/commodore -v
-"""
+"""Review round 2 is a fix check run by a read-only fix-checker role."""
 
 import re
 import subprocess

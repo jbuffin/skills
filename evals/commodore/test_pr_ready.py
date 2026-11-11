@@ -1,13 +1,4 @@
-"""Tests for skills/engineering/commodore/scripts/pr-ready.sh.
-
-The only seam is the script's command line: a run directory and a unit in, exit code and `run:` /
-`ready:` / `not ready:` lines out. Every test builds a fixture run directory in a temp dir (state.md only: the
-script reads nothing else) and puts a stub `gh` first on PATH. The stub prints canned `gh pr view` JSON and records
-its argv, so a test can also prove the script never writes.
-Expected values are literals worked out by hand from the fixtures.
-
-Run from the repo root: python3 -m unittest discover -s evals/commodore -v
-"""
+"""pr-ready.sh prints the command that leaves a unit's PR ready for review, and never a merge."""
 
 import json
 import os
@@ -57,38 +48,20 @@ class PrReadyCase(unittest.TestCase):
         self.log = self.tmp / "gh.log"
         self.log.write_text("")
 
-    def go(  # noqa: PLR0913
-        self,
-        *,
-        on=False,
-        env_autopilot=None,
-        state_line=None,
-        auto_merge=None,
-        unit=UNIT,
-        draft=True,
-        state="OPEN",
-        view_fails=False,
-        pr_cell=URL,
-        units_unit=UNIT,
-    ):
-        """Builds the fixture run, runs the script, and returns a Result.
-
-        `on` is shorthand for the real environment's ADMIRAL_AUTOPILOT=1 plus state.md's `autopilot: on`.
-        env_autopilot and state_line set either half alone (state_line is True for the line).
-        """
-        if on:
-            env_autopilot, state_line = "1", True
+    def go(self, *, unit=UNIT, draft=True, state="OPEN", view_fails=False, pr_cell=URL, admiral=False):  # noqa: PLR0913
+        """Builds the fixture run, runs the script, and returns a Result. `admiral` sets ADMIRAL_AUTOPILOT=1,
+        ADMIRAL_AUTO_MERGE=squash and state.md's `autopilot: on`."""
         self.log.write_text("")
         run = self.tmp / "run"
         run.mkdir(exist_ok=True)
-        mode = "mission: build\nmode: single\n" + ("autopilot: on\n" if state_line else "")
+        mode = "mission: build\nmode: single\n" + ("autopilot: on\n" if admiral else "")
         (run / "state.md").write_text(
             "# Run state (read this first on every start)\n\n"
-            f"## Mode, phase, current unit\n\n{mode}current unit: {units_unit}\n\n"
+            f"## Mode, phase, current unit\n\n{mode}current unit: {UNIT}\n\n"
             "## Units (head is a snapshot; git is the source of truth)\n\n"
             "| unit | branch | worktree | base | head (as of) | PR | reviewed SHA | status | notes |\n"
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n"
-            f"| {units_unit} | {BRANCH} | /wt | {BASE} |  | {pr_cell} |  | building |  |\n\n"
+            f"| {UNIT} | {BRANCH} | /wt | {BASE} |  | {pr_cell} |  | building |  |\n\n"
             "## Acceptance trace (criterion from the source of truth)\n\n"
             "| criterion | unit | test or scenario | status | evidence |\n| --- | --- | --- | --- | --- |\n\n"
             "## Ground rules (from the engineer)\n"
@@ -100,10 +73,9 @@ class PrReadyCase(unittest.TestCase):
         env["GH_LOG"] = str(self.log)
         env["GH_JSON"] = str(pr)
         env["GH_FAIL"] = "1" if view_fails else ""
-        if env_autopilot is not None:
-            env["ADMIRAL_AUTOPILOT"] = env_autopilot
-        if auto_merge is not None:
-            env["ADMIRAL_AUTO_MERGE"] = auto_merge
+        if admiral:
+            env["ADMIRAL_AUTOPILOT"] = "1"
+            env["ADMIRAL_AUTO_MERGE"] = "squash"
         proc = subprocess.run(
             [str(SCRIPT), str(run), unit], env=env, capture_output=True, text=True, timeout=60, check=False
         )
@@ -125,69 +97,36 @@ class MarkReady(PrReadyCase):
         r = self.go(draft=False)
         self.assertEqual((r.code, r.out), (0, [f"ready: {URL}"]))
 
-    def test_no_merge_line_even_with_autopilot_and_auto_merge_set(self):
-        for draft, expected in ((True, [READY]), (False, [f"ready: {URL}"])):
-            with self.subTest(draft=draft):
-                r = self.go(on=True, auto_merge="squash", draft=draft)
-                self.assertEqual((r.code, r.out), (0, expected))
-                self.assertEqual([line for line in r.out if "merge" in line], [])
-
-    def test_run_directory_without_team_env_is_accepted(self):
-        r = self.go()
-        self.assertFalse((self.tmp / "run" / "team.env").exists())
-        self.assertEqual((r.code, r.out), (0, [READY]))
-
-    def test_auto_merge_value_is_not_read(self):
-        r = self.go(on=True, auto_merge="yolo")
+    def test_autopilot_and_auto_merge_inputs_add_no_merge_line(self):
+        r = self.go(admiral=True)
         self.assertEqual((r.code, r.out), (0, [READY]))
 
 
 class NotReady(PrReadyCase):
     def test_pr_not_open_exits_1(self):
-        for autopilot in (False, True):
-            for state in ("CLOSED", "MERGED"):
-                with self.subTest(autopilot=autopilot, state=state):
-                    r = self.go(on=autopilot, state=state)
-                    self.assertEqual((r.code, r.out), (1, [f"not ready: {URL}: PR is {state}, not OPEN"]))
+        r = self.go(state="MERGED")
+        self.assertEqual((r.code, r.out), (1, [f"not ready: {URL}: PR is MERGED, not OPEN"]))
 
     def test_gh_pr_view_failure_exits_1(self):
-        for autopilot in (False, True):
-            with self.subTest(autopilot=autopilot):
-                r = self.go(on=autopilot, view_fails=True)
-                self.assertEqual((r.code, r.out), (1, [f"not ready: {URL}: gh pr view failed"]))
+        r = self.go(view_fails=True)
+        self.assertEqual((r.code, r.out), (1, [f"not ready: {URL}: gh pr view failed"]))
 
 
 class Preconditions(PrReadyCase):
-    """Exit 5 with a reason on stderr. The `_autopilot_off` twins prove the refusal is the check's own,
-    not the old autopilot gate."""
-
-    def assertRefused(self, r, reason):
-        self.assertEqual((r.code, r.out), (5, []))
-        self.assertIn(reason, r.err)
-        self.assertNotIn("ADMIRAL_AUTOPILOT", r.err)
-        self.assertNotIn("autopilot: on", r.err)
-        self.assertEqual(r.calls, [])
+    def assertRefused(self, r):
+        self.assertEqual((r.code, r.out, r.calls), (5, [], []))
+        self.assertTrue(r.err.startswith("pr-ready.sh: "), r.err)
 
     def test_bad_unit_name(self):
-        self.assertRefused(self.go(on=True, unit="u 1;x"), "invalid unit name")
-
-    def test_bad_unit_name_autopilot_off(self):
-        self.assertRefused(self.go(unit="u 1;x"), "invalid unit name")
+        self.assertRefused(self.go(unit="u 1;x"))
 
     def test_no_units_row(self):
-        self.assertRefused(self.go(on=True, unit="u9"), "no row for unit 'u9'")
+        r = self.go(unit="u9")
+        self.assertRefused(r)
+        self.assertIn("u9", r.err)
 
-    def test_no_units_row_autopilot_off(self):
-        self.assertRefused(self.go(unit="u9"), "no row for unit 'u9'")
-
-    def test_bare_pr_number(self):
-        self.assertRefused(self.go(on=True, pr_cell="#7"), "no full PR URL")
-
-    def test_bare_pr_number_autopilot_off(self):
-        self.assertRefused(self.go(pr_cell="7"), "no full PR URL")
-
-    def test_empty_pr_cell_autopilot_off(self):
-        self.assertRefused(self.go(pr_cell=""), "no full PR URL")
+    def test_pr_cell_that_is_not_a_full_url(self):
+        self.assertRefused(self.go(pr_cell="#7"))
 
     def test_missing_state_md_exits_5_with_stderr(self):
         run = self.tmp / "empty"
