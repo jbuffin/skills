@@ -1,0 +1,6 @@
+#!/bin/zsh
+# usage: available <team-dir>   (see ../CONTRACT.md)
+# Exits 0 when codex is on PATH, 1 with one line of reason on stdout when it isn't. Starts no session and writes nothing.
+[[ $# -eq 1 ]] || { sed -n 2p $0; exit 5; }
+command -v codex >/dev/null || { echo "codex is not on PATH"; exit 1; }
+exit 0

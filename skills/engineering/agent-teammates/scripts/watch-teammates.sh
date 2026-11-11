@@ -47,18 +47,40 @@ while true; do
     m=$(stat -f %m "$f"); [[ "${seen[$f]}" != "$m" ]] && { seen[$f]=$m; print -r -- "$f $m" >> $SEEN; emit "DONE ${${f:t}%.done}"; }
   done
   now=$(date -u +%s)
-  states=$(drv status $D)
-  rc=$?
-  # the driver can't report status at all: say so and stop, rather than skip every poll silently
-  (( rc == 9 )) && { echo "WATCH the $HARNESS driver has no status operation; the watchdog can't run"; exit 5; }
-  # a failed or unreadable listing says nothing about the teammates; skip the session checks this poll
-  if (( rc != 0 )); then
-    [[ -n $BOUND ]] && { save_state; (( EVENTS )) && exit 0; (( ++POLLS >= BOUND )) && { echo "WATCH timeout $BOUND"; exit 0; }; }
-    sleep 60; continue
-  fi
-  # latest registry row per teammate; a "closed" row ends the watch for that name
-  awk '{last[$1]=$0} END {for (n in last) print last[n]}' $REG | while read -r name id started viewer workdir; do
+  # Each open teammate's harness is the registry's sixth column (the run's HARNESS for a five-column row). Teammates are grouped by
+  # the driver select_driver picks for them, and each group is listed once with its own TEAMMATE_HARNESS: inside a ship with autopilot
+  # off that is one admiral call, which routes a delegated teammate by its column.
+  typeset -A gdriver gth gstates gok
+  gdriver=(); gth=(); gstates=(); gok=()
+  groups=()
+  rows=$(awk '{last[$1]=$0} END {for (n in last) print last[n]}' $REG)
+  while read -r name id started viewer workdir h; do
     [[ -z $name || $started == closed ]] && continue
+    if select_driver ${h:-$HARNESS} >/dev/null; then
+      gdriver[$name]=$DRIVER
+      [[ -n ${gth[$DRIVER]} ]] || { gth[$DRIVER]=$TH; groups+=($DRIVER); }
+    fi
+  done <<< $rows
+  (( $#groups )) || { select_driver $HARNESS >/dev/null; gth[$DRIVER]=$TH; groups=($DRIVER); }   # no open teammate: still ask the run's driver
+  for g in $groups; do
+    select_driver ${gth[$g]} >/dev/null
+    export TEAMMATE_HARNESS=$TH
+    out=$(drv status $D)
+    rc=$?
+    # the driver can't report status at all: say so and stop, rather than skip every poll silently
+    (( rc == 9 )) && { echo "WATCH the $TH driver has no status operation; the watchdog can't run"; exit 5; }
+    # a failed or unreadable listing says nothing about that group's teammates; skip their session checks this poll
+    (( rc == 0 )) && { gstates[$g]=$out; gok[$g]=1; }
+  done
+  # latest registry row per teammate; a "closed" row ends the watch for that name
+  print -r -- $rows | while read -r name id started viewer workdir h; do
+    [[ -z $name || $started == closed ]] && continue
+    if [[ -z ${gdriver[$name]} ]]; then
+      (( now - ${lastalert[${name}:BADH]:-0} >= 600 )) && { emit "WATCH $name has a bad harness in the registry; skipped"; lastalert[${name}:BADH]=$now; }
+      continue
+    fi
+    [[ -n ${gok[${gdriver[$name]}]} ]] || continue
+    states=${gstates[${gdriver[$name]}]}
     marker=$R/$name.done
     if [[ -f $marker && $(stat -f %m $marker) -ge $started ]]; then blocked[$name]=0; continue; fi
     line=$(print -r -- "$states" | awk -v i=$id '$1==i {print $3}')

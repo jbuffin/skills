@@ -1,0 +1,36 @@
+#!/bin/zsh
+# usage: available <team-dir>   (see ../CONTRACT.md)
+# Whether the ship can start a teammate on the teammate's harness (TEAMMATE_HARNESS, else HARNESS). Exit 0 when it can, 1 with one
+# line of reason on stdout when it can't. Cheap checks only: `admiral` is on PATH, and for codex the ship's fleet has a dock for it
+# (`admiral ships` gives the fleet, fleets.<fleet>.codex in ~/.admiral/config.json the dock). For copilot there is no source for a
+# dock key, and when the fleet or the config can't be read the answer is a WARN line and exit 0: the launch would fail loudly with
+# Admiral's `fleet <f> has no <harness> dock`.
+[[ $# -eq 1 && -d $1 ]] || { sed -n 2p $0; exit 5; }
+D=${1:A}
+source ${0:A:h:h:h}/team-env.zsh
+command -v admiral >/dev/null || { echo "admiral is not on PATH"; exit 1; }
+case $TH in
+  codex)
+    python3 - $ADMIRAL_SHIP <<'PY'
+import json, os, subprocess, sys
+
+ship = sys.argv[1]
+try:
+    ships = subprocess.run(["admiral", "ships"], capture_output=True, text=True, check=True).stdout
+    # tab-separated NAME SESSION FLEET ...; the ship is matched by its name or its session name
+    fleet = next((c[2] for c in (l.split("\t") for l in ships.splitlines()) if len(c) >= 3 and ship in (c[0], c[1])), None)
+    fleets = json.load(open(os.path.join(os.path.expanduser("~"), ".admiral", "config.json")))["fleets"]
+    if fleet is None:
+        raise ValueError("no fleet")
+    has_dock = "codex" in fleets[fleet]
+except Exception:
+    print("WARN  can't confirm a codex dock for ship " + ship)
+    sys.exit(0)
+if not has_dock:
+    print("fleet %s of ship %s has no codex dock (fleets.%s.codex in ~/.admiral/config.json)" % (fleet, ship, fleet))
+    sys.exit(1)
+PY
+    exit $? ;;
+  copilot) echo "WARN  can't confirm a copilot dock for ship $ADMIRAL_SHIP" ;;
+esac
+exit 0

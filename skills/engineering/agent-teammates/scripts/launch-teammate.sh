@@ -1,24 +1,27 @@
 #!/bin/zsh
-# usage: launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]
-# Starts a teammate as a background session of the run's harness (drivers/<HARNESS>) named <name>, in <workdir>, told to
+# usage: launch-teammate.sh [--read-only] [--model <model>] [--role <role>] [--harness <harness>] <team-dir> <name> <workdir|unit> [prompt-file]
+# Starts a teammate as a background session of its harness (drivers/<harness>) named <name>, in <workdir>, told to
 # read [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
-# in <team-dir>/teammates.tsv. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
+# in <team-dir>/teammates.tsv, plus the teammate's harness as a sixth column. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
 # directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it where the harness has one.
 # Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' and
 # '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
+# Harness: --harness <harness>, else with --role <role> the HARNESS_<ROLE> from team.env (same mangling as MODEL_<ROLE>), else
+# HARNESS (the run's); a name that isn't a harness with a driver exits 5 before any driver call. The driver gets it as TEAMMATE_HARNESS.
 # --read-only keeps the teammate from editing files in <workdir> (a reviewer, a brief checker); how strictly, how it
 # gets its report out, the advisor and what exit 2 (no background session) means depend on the harness: see
 # references/harness-<harness>.md.
 # With --role, EFFORT_<ROLE> from team.env goes to the driver's launch as TEAMMATE_EFFORT (empty otherwise), and the role
 # itself as TEAMMATE_ROLE (empty without --role); the admiral driver names the crew boat's role with it.
 SELF=${0:A}
-usage() { sed -n 2,12p $SELF; exit 5; }
-RO=; MODEL_OPT=; ROLE=
+usage() { sed -n 2,15p $SELF; exit 5; }
+RO=; MODEL_OPT=; ROLE=; HARNESS_OPT=
 while [[ $1 == --* ]]; do
   case $1 in
     --read-only) RO=1; shift ;;
     --model) [[ -n $2 && $2 != -* ]] || usage; MODEL_OPT=$2; shift 2 ;;
     --role) [[ -n $2 && $2 != -* ]] || usage; ROLE=$2; shift 2 ;;
+    --harness) [[ -n $2 && $2 != -* ]] || usage; HARNESS_OPT=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -31,6 +34,7 @@ if [[ -n $ROLE ]]; then
   valid_name $ROLE
   ROLE_VAR=MODEL_${${(U)ROLE}//[-.]/_}
   EFFORT_VAR=EFFORT_${${(U)ROLE}//[-.]/_}
+  HARNESS_VAR=HARNESS_${${(U)ROLE}//[-.]/_}
 fi
 if [[ -n $MODEL_OPT ]]; then
   CHOSEN=$MODEL_OPT
@@ -42,6 +46,10 @@ else
   CHOSEN=$MODEL
 fi
 EFFORT=; [[ -n $ROLE ]] && EFFORT=${(P)EFFORT_VAR}
+# The teammate's harness, checked before any driver call like the model.
+if [[ -n $HARNESS_OPT ]]; then select_driver $HARNESS_OPT "--harness" || exit 5
+elif [[ -n $ROLE && -n ${(P)HARNESS_VAR} ]]; then select_driver ${(P)HARNESS_VAR} $HARNESS_VAR $D/team.env || exit 5
+else select_driver $HARNESS HARNESS $D/team.env || exit 5; fi
 if [[ ! -d $W ]]; then
   W=$(awk -v u=$W '$1==u {print $3}' $D/worktrees.tsv 2>/dev/null | tail -1)
   [[ -z $W ]] && { echo "no directory or registered worktree for '$3'"; exit 5; }
@@ -58,6 +66,6 @@ RC=$?
 (( RC != 0 )) && { print -r -- "$OUT"; exit $RC; }
 read -r ID VREF <<< ${OUT%%$'\n'*}
 [[ $VREF == - ]] && VREF=
-printf '%s %s %s %s %s\n' "$NAME" "$ID" "$(date -u +%s)" "${VREF:--}" "$W" >> $REG
+printf '%s %s %s %s %s %s\n' "$NAME" "$ID" "$(date -u +%s)" "${VREF:--}" "$W" "$TH" >> $REG
 echo "launched $NAME as background session $ID in $W${RO:+ (read-only)}${VREF:+ (viewer $VREF)}"
 if [[ $OUT == *$'\n'* ]]; then print -r -- "${OUT#*$'\n'}"; fi

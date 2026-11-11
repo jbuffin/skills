@@ -1,12 +1,13 @@
 #!/bin/zsh
 # usage: team-preflight.sh <run-dir>
-# The team-specific static checks (runtime, mode, gh-stack, advisor, worktrees, role skills), then the generic ones from the
-# run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
+# The team-specific static checks (runtime, mode, gh-stack, advisor, worktrees, role skills, the harness each locked crew
+# member runs on), then the generic ones from the run-preflight skill. Prints OK / WARN / FAIL; exits 1 if any FAIL. An advisor that is off is a WARN, never a FAIL.
 # Run it in the background or with a long timeout: it starts one real session per distinct teammate model that is not in the
 # same family as ADVISOR (in parallel), about 15-30 s when the advisor is on, up to about 5 min when it's off (two 150 s attempts).
 # A model in the same family as ADVISOR starts no probe: it has no advisor by design, and gets one OK line.
 [[ -z $1 || ! -f $1/team.env ]] && { sed -n 2,4p $0; exit 5; }
-unset HARNESS   # HARNESS comes from team.env alone, never from the caller's environment
+unset HARNESS HARNESS_{IMPLEMENTER,TEST_WRITER,REVIEWER,SECURITY_REVIEWER,BRIEF_CHECKER,TRIAGER,TARGET_STEWARD,SCRIBE,FIX_CHECKER}
+# HARNESS and HARNESS_<ROLE> come from team.env alone, never from the caller's environment
 source $1/team.env
 fail=0
 ok()   { echo "OK    $*"; }
@@ -34,6 +35,31 @@ else
     $DRIVER/preflight $1 || fail=1
   fi
 fi
+# Locked crew members (docs/adr/0008): every distinct locked harness gets its own driver's preflight (never the Admiral
+# host driver's, even inside a ship) and harness-available.sh, output prefixed [<h>]. A failure is a FAIL line the
+# Commodore puts in the decision batch. Roles are in cast order.
+cast_roles=(implementer test-writer reviewer security-reviewer brief-checker triager target-steward scribe fix-checker)
+typeset -A locked_roles; locked=()
+for r in $cast_roles; do
+  lh=${(P)${:-HARNESS_${${(U)r}//-/_}}}
+  [[ -z $lh || $lh == $HARNESS ]] && continue
+  [[ -n ${locked_roles[$lh]+x} ]] || locked+=$lh
+  locked_roles[$lh]+="${locked_roles[$lh]:+, }$r"
+done
+for lh in $locked; do
+  lfail=0
+  if [[ ! $lh =~ '^[a-z0-9-]+$' || $lh == admiral || ! -f ${0:A:h:h:h}/agent-teammates/scripts/drivers/$lh/driver.env ]]; then
+    echo "[$lh] FAIL  no driver for harness '$lh'"; lfail=1
+  else
+    if [[ -x ${0:A:h:h:h}/agent-teammates/scripts/drivers/$lh/preflight ]]; then
+      lout=$(TEAMMATE_HARNESS=$lh ${0:A:h:h:h}/agent-teammates/scripts/drivers/$lh/preflight $1 2>&1) || lfail=1
+      [[ -n $lout ]] && print -rl -- ${${(f)lout}/#/[$lh] }
+    fi
+    lout=$(${0:A:h:h:h}/agent-teammates/scripts/harness-available.sh $1 $lh 2>&1) || lfail=1
+    [[ -n $lout ]] && print -rl -- ${${(f)lout}/#/[$lh] }
+  fi
+  (( lfail )) && bad "locked harness $lh (roles: ${locked_roles[$lh]}) failed preflight: put it in the decision batch"
+done
 case ${VIEWER:-none} in
   cmux) [[ -x $CMUX && -n $CMUX_WORKSPACE ]] && $CMUX list-panes --workspace $CMUX_WORKSPACE >/dev/null 2>&1 \
           && ok "cmux viewer: workspace $CMUX_WORKSPACE found" || warn "VIEWER=cmux but workspace '$CMUX_WORKSPACE' not found (cmux identify); teammates still run, just without panes" ;;
@@ -63,7 +89,12 @@ else
   add_model $MODEL default
   for var in ${(u)${(f)"$(sed -nE 's/^MODEL_([A-Za-z0-9_]+)=.*/\1/p' $1/team.env)"}}; do
     m=${(P)${:-MODEL_$var}}
-    [[ -n $m ]] && add_model $m ${${(L)var}//_/-}
+    role=${${(L)var}//_/-}
+    lh=${(P)${:-HARNESS_$var}}
+    if [[ -n $lh && $lh != $HARNESS ]]; then   # a locked role's model belongs to another harness's advisor, not this run's
+      ok "ADVISOR n/a ($role locked to $lh)"; continue
+    fi
+    [[ -n $m ]] && add_model $m $role
   done
   to_probe=()
   for m in $models; do
@@ -120,8 +151,11 @@ if (( rc )); then
   errs=(${(M)${(f)cast}:#ERROR*})
   for e in $errs; do bad "crew: ${e#ERROR }"; done
   # A bad call prints its reason, then the usage text: report the first line that isn't usage.
-  reasons=(${${(f)cast}:#(WARN|ERROR|usage:|labels:|--admiral|[[:space:]])*})
-  (( $#errs )) || bad "crew: ${reasons[1]:-crew.py cast exited $rc}"
+  reasons=(${${(f)cast}:#(WARN|ERROR|UNAVAILABLE|usage:|labels:|--admiral|[[:space:]])*})
+  # exit 4: a locked harness is unavailable; the first UNAVAILABLE line is the reason
+  unavail=(${(M)${(f)cast}:#UNAVAILABLE*})
+  (( $#unavail )) && bad "crew: ${unavail[1]}"
+  (( $#errs || $#unavail )) || bad "crew: ${reasons[1]:-crew.py cast exited $rc}"
 fi
 ${SKILLS_DIR:-${0:A:h:h:h}}/run-preflight/scripts/preflight.sh $1 || fail=1
 exit $fail

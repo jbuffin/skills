@@ -29,14 +29,20 @@ Five override layers, in order. A member in a later layer replaces the whole mem
 
 ## Casting
 
-`crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--save]` picks one member for each role and prints the cast table for `profile.md` (Role, Member, Based on, Skills, Instructions, Model, Harness, Source). Errors and warnings go to stderr. Exit 1 when the layers hold errors or a role has several run-layer members; exit 5 on a bad call, a missing `<run-dir>/team.env`, or a `HARNESS` that isn't `^[a-z0-9-]+$`.
+`crew.py cast --run <run-dir> [--pick <role>=<member> ...] [--unlock <role> ...] [--save]` picks one member for each role and prints the cast table for `profile.md` (Role, Member, Based on, Skills, Instructions, Model, Harness, Source). Errors and warnings go to stderr. Exit 1 when the layers hold errors or a role has several run-layer members; exit 4 when a locked harness is unavailable; exit 5 on a bad call, a missing `<run-dir>/team.env`, or a `HARNESS` that isn't `^[a-z0-9-]+$`.
 
 - A run-layer member for a role is a **pin** and wins over any pick. Two pins for one role are an error unless `--pick` names one.
 - Otherwise the pick wins. Otherwise the member from the latest layer wins for each of the nine roles, ties broken by name in byte order, with a warning when the role had several candidates.
 - A custom role is in the cast only when pinned or picked. It launches with its `based-on` role's contract.
-- Each skill goes through the run's harness driver (`has-skill`); one the harness can't load is dropped with a warning. A driver without `has-skill` keeps every skill, with one warning.
+- A member with a `harness` other than the run's `HARNESS` is **locked**: it runs on that harness, and `cast` treats every role it fills per member. A `harness` equal to the run's is no lock.
+- Each skill goes through the driver of the harness the member runs on (`has-skill`, and its `SKILL_PREFIX` in the table); one that harness can't load is dropped with a warning. A driver without `has-skill` keeps every skill, with one warning.
 - Each `model` goes through [the `model` launch rule](#fields).
 - `--save` writes `<run>/cast.json` (the explicit picks and the cast) and rewrites the `# crew models (crew.py cast)` block of `MODEL_<ROLE>='<model>'` lines in `team.env`. The next `cast` keeps the saved picks; a saved pick whose member is gone is dropped with a warning.
+- Availability: `cast` runs `harness-available.sh <run> <h>` once per locked harness. It prints the script's `WARN` lines, and for an unavailable one an `UNAVAILABLE <role>: <member> is locked to <h>: <reason>` line on stderr per role, `<h> (unavailable)` in the table's Harness cell, and exits 4 after printing the table. Exit 4 saves nothing. The fix checker follows the implementer, so it has no line of its own.
+- `--unlock <role>` (once per role) runs a locked role on the run's harness for this run. The role must be in the cast with a lock, or `cast` exits 5. The member's `model` is dropped with a warning (it names a model of the locked harness), the Harness cell reads `<run harness> (unlocked from <h>)`, and no availability check runs for it. `--save` records the roles in `cast.json` as `"unlocks"` (sorted); the next `cast` keeps them, and drops one whose role is no longer locked, with a warning.
+- The fix checker runs on the implementer's harness and model: its own member's `harness` is ignored with a warning.
+- A locked member with no `model` gets a warning to set `MODEL_<ROLE>` and `EFFORT_<ROLE>` for its harness (from `agent-teammates/references/harness-<h>.md`); the implementer's warning adds the fix checker's two.
+- `--save` also writes `HARNESS_<ROLE>='<h>'` for each locked role of the nine (and `HARNESS_FIX_CHECKER` when the implementer is locked), after the `MODEL_<ROLE>` lines in the same block, and removes stale ones. `HARNESS` is left alone. A custom role has no line: pass `--harness <h>` when launching it.
 - A leftover `roles.json` (user-global outside Admiral, `<REPO>/.commodore/roles.json`, `<run>/roles.json`) is never read; `cast` warns once per file and points to `setup-commodore`'s `convert-roles.py`.
 
 ## Reading a file
