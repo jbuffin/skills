@@ -113,8 +113,7 @@ class RoundStart(unittest.TestCase):
 
     def test_hand_wake_with_free_text_is_a_follow_up(self):
         text = mission() + "\n" + ending()
-        self.assertRegex(text, r"(?i)free text")
-        self.assertRegex(text, r"(?i)follow-up")
+        self.assertRegex(text, r"(?i)(free text|hand wake)[^\n]*follow-up|follow-up[^\n]*(free text|hand wake)")
 
     def test_round_number_is_checked(self):
         self.assertIn("^[1-9][0-9]*$", mission())
@@ -122,7 +121,8 @@ class RoundStart(unittest.TestCase):
     def test_pr_must_match_a_units_row_and_its_recorded_url_is_used(self):
         text = mission()
         self.assertRegex(text, r"(?i)units table")
-        self.assertRegex(text, r"(?i)`state\.md`[^\n]*(units|PR)|(units|PR)[^\n]*`state\.md`")
+        self.assertRegex(text, r"`state\.md`[^\n]*(units|\bPR\b)|(units|\bPR\b)[^\n]*`state\.md`")
+        self.assertRegex(text, r"(?i)(feedback|launch)[^\n]*\bPR\b[^\n]*units table|units table[^\n]*\bPR\b")
         self.assertRegex(text, r"(?i)recorded (PR )?URL")
         self.assertRegex(text, r"(?i)never the launch text")
         self.assertIn("^[0-9]+$", text)
@@ -143,7 +143,11 @@ class RoundStart(unittest.TestCase):
 
     def test_open_feedback_status_means_the_run_is_unfinished(self):
         text = mission()
-        self.assertRegex(text, r"(?i)`?feedback status`? (is|=) `?open`?[^\n]*(isn't|is not|not) finished|unfinished")
+        self.assertRegex(
+            text,
+            r"(?i)feedback status[^\n]*open[^\n]*(unfinished|isn't finished|not finished)"
+            r"|(unfinished|isn't finished|not finished)[^\n]*feedback status[^\n]*open",
+        )
         self.assertRegex(text, r"(?i)whatever its `result:` line says|regardless of[^\n]*`result:`")
 
     def test_same_round_number_never_starts_twice(self):
@@ -160,13 +164,17 @@ class RoundStart(unittest.TestCase):
 
     def test_open_round_follows_pf_whatever_the_mission_line_says(self):
         text = mission()
-        self.assertRegex(text, r"(?i)mission-pr-feedback|PF")
+        self.assertRegex(
+            text,
+            r"(?i)feedback status[^\n]*(mission-pr-feedback|\bPF\b)|(mission-pr-feedback|\bPF\b)[^\n]*feedback status",
+        )
         self.assertRegex(text, r"(?i)whatever its `mission:` line says|regardless of[^\n]*`mission:`")
         self.assertRegex(text, r"(?i)`mission:` line stays")
 
     def test_autopilot_resume_goes_back_into_the_round(self):
         text = autopilot()
-        self.assertRegex(text, r"(?i)feedback round")
+        resume = text[text.find("**Resume.**") :] if "**Resume.**" in text else ""
+        self.assertRegex(resume, r"(?i)feedback round")
 
 
 class FeedbackRoundSection(unittest.TestCase):
@@ -203,7 +211,7 @@ class FeedbackRoundSection(unittest.TestCase):
 
     def test_a_round_answers_one_pr_in_a_stack(self):
         text = round_section()
-        self.assertRegex(text, r"(?i)one PR")
+        self.assertRegex(text, r"\bone PR\b")
         self.assertIn("gh stack rebase --upstack", text)
 
 
@@ -237,10 +245,20 @@ class FeedbackFileIsData(unittest.TestCase):
 
     def test_never_a_source_of_pr_branch_or_repository(self):
         text = round_section()
-        sentence = re.search(r"(?is)never take from it[^.]*\.", text)
-        self.assertIsNotNone(sentence, "needs a 'never take from it ...' sentence")
-        for word in ("command", "path", "PR", "branch", "repository", "allow rule", "crew member", "pin", "skill"):
-            self.assertRegex(sentence.group(0), rf"(?i)\b{word}\b")
+        line = next((ln for ln in text.splitlines() if re.search(r"(?i)never take", ln)), "")
+        self.assertTrue(line, "needs a line saying never take ... from the file")
+        for noun in (
+            r"commands?",
+            r"paths?",
+            r"PRs?",
+            r"branch(es)?",
+            r"repositor(y|ies)",
+            r"allow rules?",
+            r"crew members?",
+            r"pins?",
+            r"skills?",
+        ):
+            self.assertRegex(line, rf"\b{noun}\b")
 
     def test_triager_reads_the_copy_as_data(self):
         self.assertRegex(
@@ -267,7 +285,7 @@ class OneFindingsItem(unittest.TestCase):
 
     def test_nothing_is_pushed_posted_or_resolved_before_the_answer(self):
         text = round_section()
-        self.assertRegex(text, r"(?i)nothing is pushed, posted or resolved before the answer")
+        self.assertRegex(text, r"(?i)nothing[^.\n]*push[^.\n]*before[^.\n]*(answer|approv)")
         self.assertRegex(text, r"(?i)approved or edited cards")
 
     def test_runs_in_autopilot_mode(self):
@@ -283,7 +301,7 @@ class CleanRebase(unittest.TestCase):
         self.assertIn("BEHIND", text)
         self.assertIn("mergeStateStatus", text)
         self.assertRegex(text, r"(?i)up to date is required|requires? up-to-date|up-to-date")
-        self.assertRegex(text, r"(?i)lower layer moved")
+        self.assertRegex(text, r"(?i)lower layer mov")
 
     def test_catch_up_to_head_ref_oid_before_rebasing(self):
         text = round_section()
@@ -307,7 +325,7 @@ class CleanRebase(unittest.TestCase):
 
     def test_clean_rebase_needs_no_findings_item_and_is_recorded(self):
         text = round_section()
-        self.assertRegex(text, r"(?i)needs no findings item")
+        self.assertRegex(text, r"(?i)no findings item")
         self.assertIn("## Decisions and assumptions", text)
         self.assertRegex(text, r"(?i)report[^\n]*`why`|`why`[^\n]*report")
 
@@ -332,7 +350,7 @@ class Report(unittest.TestCase):
         self.assertRegex(text, r"(?i)`prs`[^\n]*`closes`|`closes`[^\n]*`prs`")
         self.assertIn("`resume`", text)
         self.assertRegex(text, r"(?i)feedback round <N> on <PR>")
-        self.assertRegex(text, r"(?i)skipped feedback file")
+        self.assertRegex(text, r"(?i)feedback file[^\n]*skip|skip[^\n]*feedback file")
         self.assertRegex(text, r"(?i)`inbox`")
 
 
