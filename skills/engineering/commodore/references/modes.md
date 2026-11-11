@@ -25,7 +25,7 @@ Several phases, passes or layers, or several related issues worked in order wher
 
 `stack` creates each branch from the one below it, each in its own worktree, and then `gh stack init` adopts them all without moving any checkout. A branch that already exists is used as it is, fast-forwarded to its pushed copy, and refused if it's checked out in the engineer's own checkout. It records the order in `<run>/stack.txt`. `stack-add` does the same for a new unit on top.
 
-A fix belongs to the unit that owns the change. That unit's implementer makes the fix in that unit's worktree. Running `gh stack rebase --upstack` from there updates every clean worktree above it, and `gh stack push` publishes.
+A fix belongs to the unit that owns the change. That unit's implementer makes the fix in that unit's worktree. Running `gh stack rebase --upstack` from there updates every clean worktree above it, and `gh stack push` publishes. In a feedback round, publish only as [A clean rebase pushes without asking](mission-pr-feedback.md#a-feedback-round) says.
 
 Needs gh-stack 0.2.0 or later, for stack tracking shared across worktrees. Pre-flight checks it.
 
@@ -47,6 +47,6 @@ A PR to finish or get green. The [PR-feedback mission](mission-pr-feedback.md) a
 
 If the branch is checked out in the engineer's own checkout, the script stops and asks them to switch off it, which they do before leaving. If it's checked out in another worktree, the script uses that worktree instead of taking the branch away from it; confirm nobody else is working there. Either way it fast-forwards the branch to the PR's head, and stops if the local branch has diverged, so nobody builds on a stale head. All units work in that one worktree, one implementer at a time.
 
-Push to the PR's branch only through `<team>/push-branch.sh`, which isn't asked about. Phase 1 still drafts the allow rule it needs.
+Push to the PR's branch only through `<team>/push-branch.sh`, which isn't asked about. Phase 1 still drafts the allow rule it needs. In a feedback round, a rebase onto a moved base follows [A feedback round](mission-pr-feedback.md#a-feedback-round).
 
 To get CI green, make each unit a group of failing jobs with the same cause. The test writer reproduces each failure locally first.
