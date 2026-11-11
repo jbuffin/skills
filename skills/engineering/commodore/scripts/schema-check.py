@@ -99,6 +99,28 @@ def kw_items(arg, value, path, _schema):
     return [e for i, item in enumerate(value) for e in check(arg, item, f"{path}/{i}")]
 
 
+def kw_min_items(arg, value, path, _schema):
+    if isinstance(value, list) and len(value) < arg:
+        return [f"{path or '(root)'}: has {len(value)} items, needs at least {arg}"]
+    return []
+
+
+def kw_min_length(arg, value, path, _schema):
+    if isinstance(value, str) and len(value) < arg:
+        return [f"{path or '(root)'}: {short(value)} is shorter than {arg}"]
+    return []
+
+
+def kw_unique_items(arg, value, path, _schema):
+    if not arg or not isinstance(value, list):
+        return []
+    return [
+        f"{path or '(root)'}: {short(item)} is repeated"
+        for i, item in enumerate(value)
+        if any(same(item, earlier) for earlier in value[:i])
+    ]
+
+
 def kw_enum(arg, value, path, _schema):
     if any(same(value, option) for option in arg):
         return []
@@ -134,6 +156,9 @@ KEYWORDS = {
     "properties": kw_properties,
     "additionalProperties": kw_additional,
     "items": kw_items,
+    "minItems": kw_min_items,
+    "minLength": kw_min_length,
+    "uniqueItems": kw_unique_items,
     "enum": kw_enum,
     "const": kw_const,
     "pattern": kw_pattern,
@@ -174,6 +199,9 @@ ARGUMENTS = {
     "type": lambda a: isinstance(a, str) or strings(a),
     "required": strings,
     "properties": lambda a: isinstance(a, dict),
+    "minItems": lambda a: isinstance(a, int) and not isinstance(a, bool) and a >= 0,
+    "minLength": lambda a: isinstance(a, int) and not isinstance(a, bool) and a >= 0,
+    "uniqueItems": lambda a: isinstance(a, bool),
     "enum": lambda a: isinstance(a, list),
     "pattern": lambda a: isinstance(a, str),
     "allOf": lambda a: isinstance(a, list),

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Admiral advise answer",
+  "description": "The line `admiral advise` prints. admiral-io.sh advise passes it on only when it matches; anything else becomes a high answer. Validate with scripts/schema-check.py.",
+  "type": "object",
+  "required": ["stakes", "reason", "cost"],
+  "additionalProperties": false,
+  "properties": {
+    "stakes": { "enum": ["low", "high"] },
+    "reason": { "type": "string" },
+    "cost": { "type": ["number", "null"] }
+  }
+}

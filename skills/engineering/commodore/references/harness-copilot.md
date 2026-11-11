@@ -56,7 +56,7 @@ The rest of the skill is written for Claude Code. On Copilot, apply these.
 
 ## Autopilot mode
 
-Autopilot mode follows the same rules on Copilot ([Autopilot mode](../SKILL.md#autopilot-mode)). Every call is high-stakes here, because there is no advisor to classify it: each one goes into a question item and stops the run.
+Autopilot mode follows the same rules on Copilot ([Autopilot mode](../SKILL.md#autopilot-mode)). `admiral-io.sh advise` classifies each call, as on every harness; the harness has no part in it.
 
 ## Read-only roles
 
