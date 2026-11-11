@@ -158,6 +158,10 @@ class TestInvalidReports(ReportCase):
     def test_a_reference_without_an_owner_is_rejected(self):
         self.assertRejected(with_(prs=[{"url": URL, "closes": ["skills#12"]}]), PATTERN)
 
+    def test_a_dot_dot_owner_or_repo_is_rejected(self):
+        self.assertRejected(with_(prs=[{"url": URL, "closes": ["../..#12"]}]), PATTERN)
+        self.assertAccepted(with_(prs=[{"url": URL, "closes": ["example/.github#12"]}]))
+
     def test_a_reference_with_trailing_text_is_rejected(self):
         self.assertRejected(with_(prs=[{"url": URL, "closes": ["example/fixture#12 and more"]}]), PATTERN)
 
@@ -268,9 +272,10 @@ class TextCase(unittest.TestCase):
 
     @staticmethod
     def step(text, n):
-        steps = [ln for ln in text.splitlines() if re.match(rf"^\s*{n}\. ", ln)]
-        assert steps, f"no step {n}"
-        return steps[0]
+        # A step runs from its "<n>. " line through its indented continuation paragraphs.
+        m = re.search(rf"^\s*{n}\. .*?(?=^\S|\Z)", text, re.M | re.S)
+        assert m, f"no step {n}"
+        return m.group(0)
 
 
 class TestSchemaText(TextCase):

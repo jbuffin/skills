@@ -21,7 +21,7 @@
           },
           "closes": {
             "type": "array",
-            "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+$" },
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.-]*/\\.?[A-Za-z0-9_-][A-Za-z0-9_.-]*#[0-9]+$" },
             "description": "Every issue the PR body names with a closing keyword, as <owner>/<repo>#<n>. Empty when the body only says Part of."
           }
         }

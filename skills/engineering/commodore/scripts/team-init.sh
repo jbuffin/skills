@@ -9,6 +9,8 @@
 set -e
 NAME=$1; WT=${2:A}
 [[ -z $NAME || -z $WT ]] && { echo "usage: team-init.sh <run-name> <repo>"; exit 5; }
+# The name ends up in the report's resume text, whose schema allows only these characters.
+[[ $NAME =~ '^[A-Za-z0-9][A-Za-z0-9._-]*$' && $NAME != *..* ]] || { echo "bad run name: use letters, digits, . _ - (no ..)"; exit 5; }
 SKILL=${0:A:h:h}
 # The skills this one runs alongside sit next to it; without them the paths below point nowhere.
 missing=()

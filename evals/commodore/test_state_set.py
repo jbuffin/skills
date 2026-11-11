@@ -502,3 +502,27 @@ class DocsTest(StateSetCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TeamInitRunName(unittest.TestCase):
+    """A run name must fit the report's resume pattern, so team-init.sh refuses any other."""
+
+    def init(self, name):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "repo").mkdir()
+            proc = subprocess.run(
+                [str(TEAM_INIT), name, str(Path(tmp) / "repo")],
+                env={**ENV, "AGENT_TEAMS_DIR": str(Path(tmp) / "teams")},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            return proc.returncode, (Path(tmp) / "teams").exists()
+
+    def test_names_outside_the_resume_pattern_are_refused_before_anything_is_made(self):
+        for name in ("my run", "-x", "a..b", "a/b", ".hidden"):
+            with self.subTest(name=name):
+                self.assertEqual(self.init(name), (5, False))
+
+    def test_a_plain_name_is_accepted(self):
+        self.assertEqual(self.init("issue-200.v2_a")[0], 0)
