@@ -5,7 +5,7 @@
 # in <team-dir>/teammates.tsv, plus the teammate's harness as a sixth column. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
 # directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it where the harness has one.
 # Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' and
-# '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
+# '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with none of --role, --model and --member exits 5.
 # Harness: --harness <harness>, else with --role <role> the HARNESS_<ROLE> from team.env (same mangling as MODEL_<ROLE>), else
 # HARNESS (the run's); a name that isn't a harness with a driver exits 5 before any driver call. The driver gets it as TEAMMATE_HARNESS.
 # --read-only keeps the teammate from editing files in <workdir> (a reviewer, a brief checker); how strictly, how it
@@ -48,7 +48,7 @@ elif [[ -n $ROLE ]]; then
   CHOSEN=${(P)ROLE_VAR}
   [[ -z $CHOSEN ]] && { echo "$ROLE_VAR is unset or empty in $D/team.env; set it (or pass --model) before launching $NAME with --role $ROLE"; exit 5; }
 else
-  [[ $REQUIRE_ROLE == 1 ]] && { echo "REQUIRE_ROLE=1 in $D/team.env: launch $NAME with --role <role> or --model <model>"; exit 5; }
+  [[ $REQUIRE_ROLE == 1 ]] && { echo "REQUIRE_ROLE=1 in $D/team.env: launch $NAME with --role <role>, --model <model> or --member <member>"; exit 5; }
   CHOSEN=$MODEL
 fi
 EFFORT=; [[ -n $ROLE ]] && EFFORT=${(P)EFFORT_VAR}

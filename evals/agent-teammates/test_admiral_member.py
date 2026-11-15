@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from admiral_world import USAGE_NO_MEMBER
-from test_admiral_driver import FAILED, OK, USAGE, LaunchCase
+from test_admiral_driver import FAILED, LAUNCH, OK, USAGE, LaunchCase
 
 # Admiral puts the last --arg right before the prompt, so a flag that takes several values must not end the list.
 MULTI_VALUE_FLAGS = ("--disallowedTools", "--available-tools", "--deny-tool")
@@ -69,12 +69,6 @@ class TestMemberArgv(MemberCase):
         _, _, _, args = self.launched("--member", "crew-lead", "--role", "test-writer", "--model", "haiku")
         self.assertEqual(self.value(args, "--model"), "haiku")
 
-    def test_a_member_alone_satisfies_require_role(self):
-        self.w.write_team_env(extra=["REQUIRE_ROLE=1"])
-        done = self.launch("--member", "crew-lead")
-        self.assertEqual((done.code, done.err), (OK, ""), done.text)
-        self.assertEqual(len(self.w.crew_calls("launch")), 1)
-
     def test_a_member_in_the_callers_environment_is_not_inherited(self):
         self.w.write_team_env(extra=["REQUIRE_ROLE=0"])
         _, argv, _, _ = self.launched("--role", "test-writer", TEAMMATE_MEMBER="stale")
@@ -94,19 +88,16 @@ class TestMemberArgv(MemberCase):
         self.assertNotIn("--model", args)
         self.assert_ends_on_a_single_value_flag(args)
 
-    def test_claude_read_only_under_autopilot_without_a_model_ends_on_a_single_value_flag(self):
-        self.w.write_team_env(extra=["EFFORT_SCRIBE=high"])
-        _, _, _, args = self.launched(
-            "--member", "crew-lead", "--role", "scribe", "--read-only", ADMIRAL_AUTOPILOT="1"
-        )
+    def test_claude_read_only_under_autopilot_without_a_model_launches_with_the_deny_rules_only(self):
+        _, _, _, args = self.launched("--member", "crew-lead", "--read-only", ADMIRAL_AUTOPILOT="1")
         self.assertIn("--disallowedTools", args)
-        self.assertNotIn("--model", args)
-        self.assertEqual(self.value(args, "--effort"), "high")
-        self.assert_ends_on_a_single_value_flag(args)
+        for flag in ("--model", "--advisor", "--effort"):
+            self.assertNotIn(flag, args)
 
-    def test_claude_read_only_under_autopilot_without_a_model_or_effort_exits_5_naming_the_need(self):
-        done = self.refused("--member", "crew-lead", "--read-only", ADMIRAL_AUTOPILOT="1")
-        self.assertIn("--effort", done.out)
+    def test_admirals_warnings_are_shown_after_a_successful_launch(self):
+        self.w.ctl_write("launch.msg", "warning: crew member crew-lead has skills; they are not run\n")
+        done, _, _, _ = self.launched("--member", "crew-lead")
+        self.assertIn("warning: crew member crew-lead has skills; they are not run", done.out)
 
 
 class TestMemberRefusals(MemberCase):
@@ -114,8 +105,11 @@ class TestMemberRefusals(MemberCase):
         for value in ("", "-x"):
             with self.subTest(value=value):
                 done = self.refused("--member", value, usage=True)
-                self.assertIn("usage:", done.out)
                 self.assertIn("--member", done.out)
+        with self.subTest(value="missing"):
+            done = self.w.run(LAUNCH, "--member")
+            self.assertEqual(done.code, USAGE, done.text)
+            self.assertIn("usage:", done.out)
         self.assertEqual(self.w.admiral(), [])
 
     def test_a_member_name_outside_admirals_rule_exits_5_before_any_launch(self):

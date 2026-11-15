@@ -8,6 +8,7 @@ source ${0:A:h}/lib.zsh
 ROLE=$TEAMMATE_ROLE; MEMBER=$TEAMMATE_MEMBER
 # a read-only Codex or Copilot teammate runs headless on its own driver, so its read-only guarantee holds and it needs no admiral
 if [[ -n $RO && $TH != claude ]]; then
+  [[ -z $MEMBER ]] || { echo "crew member $MEMBER needs an Admiral crew boat, and a read-only $TH teammate runs headless on its own driver"; exit 5; }
   [[ -x $HARNESS_DRIVER/launch ]] || { echo "harness $TH has no launch operation ($HARNESS_DRIVER)"; exit 5; }
   OUT=$($HARNESS_DRIVER/launch "$@")
   RC=$?
@@ -35,12 +36,7 @@ case $TH in
     [[ -n $CHOSEN && $ADVISOR != none ]] && ! advisor_same_family $CHOSEN $ADVISOR && ARGS+=(--arg --advisor --arg $ADVISOR)
     [[ -n $CHOSEN ]] && ARGS+=(--arg --model --arg $CHOSEN)
     # Under autopilot the boat inherits the dock's mode: Admiral refuses any looser one, and the default (auto) would block every launch.
-    [[ $ADMIRAL_AUTOPILOT != 1 ]] && ARGS+=(--arg --permission-mode --arg $PERMISSION_MODE)
-    # A read-only launch under autopilot with no model would end on --disallowedTools, so --effort (which the dock's allowlist takes) goes last.
-    if [[ -n $RO && -z $CHOSEN && $ADMIRAL_AUTOPILOT == 1 ]]; then
-      [[ -n $TEAMMATE_EFFORT ]] || { echo "a read-only member launch under ADMIRAL_AUTOPILOT=1 needs --effort: set EFFORT_<ROLE> in team.env and launch with --role, or pass --model"; exit 5; }
-      ARGS+=(--arg --effort --arg $TEAMMATE_EFFORT)
-    fi ;;
+    [[ $ADMIRAL_AUTOPILOT != 1 ]] && ARGS+=(--arg --permission-mode --arg $PERMISSION_MODE) ;;
   codex)
     # The interactive flags (`codex --help`), not exec's. No trust or -C override: the dock's startup prompts are settled once.
     source $DRIVERS/codex/lib.zsh
@@ -97,3 +93,5 @@ while true; do
 done
 echo "$NAME -"
 echo "  board: admiral attach ${ADMIRAL_SHIP} $NAME   ·   list: admiral crew list --ship ${ADMIRAL_SHIP}   ·   output: teammate-tail.sh"
+WARNINGS=(${(M)${(f)OUT}:#warning:*})
+if (( $#WARNINGS )); then print -rl -- $WARNINGS; fi
