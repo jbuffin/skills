@@ -218,7 +218,7 @@ def layer_dirs(repo_dir):
         xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
         layers.append(("user-global", os.path.join(xdg, "commodore", "missions"), False))
     if repo_dir:
-        layers.append(("repo", os.path.join(repo_dir, ".commodore", "missions"), False))
+        layers.append(("repo", os.path.join(os.path.abspath(repo_dir), ".commodore", "missions"), False))
     return layers
 
 
@@ -241,7 +241,7 @@ def resolve_layers(repo_dir):
             item["layer"] = label
         all_errors += sorted(errors + found, key=order)
         all_warnings += sorted(warnings, key=order)
-    # Each layer's items are already sorted, so a stable sort by layer keeps today's order inside a layer.
+    # Each layer's items are already sorted, so a stable sort by layer keeps the per-layer order.
     rank = {label: index for index, label in enumerate(LAYERS)}
     return (
         sorted(standing.values(), key=lambda m: m["name"]),

@@ -57,13 +57,16 @@ def copy_tracked(dest):
 
 class BuiltinMissionTests(unittest.TestCase):
     def test_list_with_no_dir_finds_exactly_the_built_in_missions(self):
+        tmp = tempfile.mkdtemp(prefix="builtin-missions-")
+        self.addCleanup(shutil.rmtree, tmp, True)
         proc = subprocess.run(
             [str(MISSION_PY), "list"],
-            env={"PATH": BASE_PATH, "HOME": tempfile.gettempdir(), "LANG": "en_US.UTF-8"},
+            env={"PATH": BASE_PATH, "HOME": tmp, "LANG": "en_US.UTF-8", "XDG_CONFIG_HOME": tmp},
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             check=False,
+            cwd=tmp,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         missions = json.loads(proc.stdout)["missions"]

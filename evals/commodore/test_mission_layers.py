@@ -14,9 +14,8 @@ from test_mission_files import ERRORS, MISSION_PY, OK, mission_text
 SCRIPTS = MISSION_PY.parent
 BUILTIN_DIR = SCRIPTS.parent / "missions"
 BUILTIN = {"build", "review", "pr-feedback"}
-LAYER_ORDER = ["built-in", "user-global", "fleet", "repo"]
 BUILTIN_NAME_WARNING = "builtin-name"
-TODAY_KEYS = {
+DIR_KEYS = {
     "name",
     "pick-me-when",
     "source-of-truth",
@@ -101,6 +100,13 @@ class ResolveTests(LayerCase):
             missions["release"]["path"], os.path.join(str(self.repo), ".commodore", "missions", "release.md")
         )
         self.assertEqual(missions["release"]["file"], "release.md")
+
+    def test_a_relative_repo_dir_gives_an_absolute_path(self):
+        self.save(self.repo_dir, "release")
+        out = self.listed("--repo-dir", "../repo")
+        self.assertEqual(
+            self.by_name(out)["release"]["path"], os.path.join(str(self.repo), ".commodore", "missions", "release.md")
+        )
 
     def test_summary_carries_layer_and_path_beside_the_summary_keys(self):
         self.save(self.repo_dir, "release")
@@ -277,7 +283,7 @@ class DirTests(LayerCase):
         out = self.listed("--dir", only)
         self.assertEqual(set(out), {"missions", "warnings"})
         self.assertEqual(len(out["missions"]), 1)
-        self.assertEqual(set(out["missions"][0]), TODAY_KEYS)
+        self.assertEqual(set(out["missions"][0]), DIR_KEYS)
         self.assertEqual(out["missions"][0]["name"], "deploy")
 
 
