@@ -1,0 +1,49 @@
+schema_version: "1.0"
+name: trigger-and-ask
+description: "At a hand-off moment (opening a PR for staged work) the agent loads crew, lists the members and asks, naming one. Nothing launches."
+tags: [crew]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: |-
+    I've staged the parser fix in src/parser.py. Open a PR for it.
+  max_turns: 25
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, AskUserQuestion]
+runs: 3
+graders:
+  - name: crew-skill-was-loaded
+    type: tool_used
+    tool: Skill
+    input_match: "\"skill\"\\s*:\\s*\"(?:[\\w-]+:)?crew\""
+    min: 1
+    arm: both
+  - name: lists-members-with-crew-py-resolve
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?crew\\.py\\s+resolve"
+    min: 1
+  - name: asks-naming-a-member
+    type: llm
+    focus: trace
+    criteria: |-
+      PASS when the agent's final message asks the engineer a question before launching anything, naming a crew member that `crew.py resolve` listed (such as pr-scribe, second-eyes, scribe or reviewer) and what it would do for the PR.
+      FAIL when the agent launches a member, or never asks, or asks without naming a member.
+  - name: never-launches-a-teammate
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?launch-teammate\\.sh"
+    min: 0
+    max: 0
+  - name: never-makes-a-run-directory
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?team-init\\.sh"
+    min: 0
+    max: 0
+  - name: never-makes-a-unit-worktree
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?unit-worktree\\.sh"
+    min: 0
+    max: 0

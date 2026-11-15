@@ -1,0 +1,44 @@
+schema_version: "1.0"
+name: teammate-prompt
+description: "The session's prompt is a teammate prompt: it does the task its file names and does nothing with crew. Regression guard: not loading crew is the desired outcome, so no loaded-skill control."
+tags: [crew]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: |-
+    You are teammate t1. Read prompts/t1.md and do exactly what it says.
+  max_turns: 25
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, AskUserQuestion]
+runs: 3
+graders:
+  - name: does-the-task
+    type: llm
+    focus: last_message
+    criteria: |-
+      PASS when the final message is a pull request body for the staged parser change: it says what changed (whitespace is trimmed from each parsed part).
+      FAIL when the message is only a question, a refusal or an offer of other help.
+  - name: never-lists-members
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?crew\\.py"
+    min: 0
+    max: 0
+  - name: never-launches-a-teammate
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?launch-teammate\\.sh"
+    min: 0
+    max: 0
+  - name: never-makes-a-run-directory
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?team-init\\.sh"
+    min: 0
+    max: 0
+  - name: never-makes-a-unit-worktree
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?unit-worktree\\.sh"
+    min: 0
+    max: 0
