@@ -41,6 +41,16 @@
       },
       "description": "The crew members the run used."
     },
+    "mission": {
+      "type": "object",
+      "required": ["name", "ad_hoc"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "ad_hoc": { "type": "boolean", "description": "True for a mission Commodore designed for this run." }
+      },
+      "description": "The run's mission. At a stop before any mission is confirmed, the proposed mission."
+    },
     "assumptions": { "type": "array", "items": { "type": "string" }, "description": "Every default taken without asking." },
     "inbox": { "type": "array", "items": { "type": "string" }, "description": "Ids of the inbox items written." },
     "resume": {

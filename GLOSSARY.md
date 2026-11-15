@@ -18,6 +18,8 @@
 
 **Mission file**: the Markdown file in `missions/` that registers a mission: frontmatter naming its task force, builder, checker, stop rule and delivery, then the procedure as the body. `mission.py` reads it as text and never runs it. _Avoid_: mission definition, mission config.
 
+**Ad hoc mission**: a mission Commodore designs for one run when no registered mission fits, written in the mission-file format into the run directory and checked with `mission.py validate`. It registers nothing, and only that run uses it. Unlike an **Ad hoc crew member**, it is never kept for later runs. _Avoid_: custom mission, temporary mission.
+
 **Builder**: the role in a mission's task force that makes the mission's work: the implementer in build and PR feedback, the reviewer in review. It is a slot in the mission file, not a role of its own. Unlike the brief checker and the **Fix checker**, which are roles that check a brief or a fix, the builder produces what the checker checks. _Avoid_: implementer, author.
 
 **Checker**: the slot in a mission file for who checks the builder's work: a role in the task force, or the engineer. It is never the builder. It is not a role: unlike the brief checker, which verifies one brief, or a **Fix checker**, which runs only the fix check, it names whoever signs off the mission's work as a whole. _Avoid_: reviewer.
@@ -44,7 +46,7 @@
 
 **Question item**: an item Commodore writes to its Admiral ship's inbox to ask the engineer one or more questions, each with options and a recommendation. The engineer answers it from the inbox, not in the session. _Avoid_: inbox question, needs-input line.
 
-**Admiral report**: the JSON at `$ADMIRAL_REPORT` that Commodore publishes for its Admiral ship at the end of the build and of each PR-feedback run, overwriting the last. In version 2, each of its `prs` has a `url` and `closes`, and an optional `cast` lists each crew member used, its role and whether it is ad hoc. It isn't the final report, the text report to the engineer.
+**Admiral report**: the JSON at `$ADMIRAL_REPORT` that Commodore publishes for its Admiral ship at the end of the build and of each PR-feedback run, overwriting the last. In version 2, each of its `prs` has a `url` and `closes`, an optional `mission` names the run's mission and whether it is ad hoc, and an optional `cast` lists each crew member used, its role and whether it is ad hoc. It isn't the final report, the text report to the engineer.
 
 **Crew member**: a named, reusable definition of a teammate that fills one role: its role skills, instructions, model, optional harness lock, and when to pick it. The role contract applies whatever member fills the role. A role can have several members, and the lead picks one for each role its task force needs. A teammate at work is a crew member running. _Avoid_: agent definition, persona, crew type.
 
