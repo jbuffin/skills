@@ -27,7 +27,7 @@ graders:
     type: llm
     focus: trace
     criteria: |-
-      PASS when the agent asks the engineer before launching anything, in either of two ways: an AskUserQuestion call whose input names a crew member (pr-scribe or second-eyes), or a final message that asks a question naming one of those members and what it would do.
+      PASS when the agent's final message asks the engineer a question before launching anything, naming a crew member that `crew.py resolve` listed (such as pr-scribe, second-eyes, scribe or reviewer) and what it would do for the PR.
       FAIL when the agent launches a member, or never asks, or asks without naming a member.
   - name: never-launches-a-teammate
     type: tool_used

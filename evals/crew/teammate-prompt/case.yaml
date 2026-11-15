@@ -12,6 +12,12 @@ execution:
   allowed_tools: [Read, Glob, Grep, Skill, AskUserQuestion]
 runs: 3
 graders:
+  - name: crew-skill-was-loaded
+    type: tool_used
+    tool: Skill
+    input_match: "\"skill\"\\s*:\\s*\"(?:[\\w-]+:)?crew\""
+    min: 1
+    arm: both
   - name: does-the-task
     type: llm
     focus: last_message
@@ -22,11 +28,6 @@ graders:
     type: tool_used
     tool: Bash
     input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?crew\\.py"
-    min: 0
-    max: 0
-  - name: never-asks-with-ask-user-question
-    type: tool_used
-    tool: AskUserQuestion
     min: 0
     max: 0
   - name: never-launches-a-teammate

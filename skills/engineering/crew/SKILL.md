@@ -5,17 +5,17 @@ description: Offers the engineer's crew members (scribe, reviewer, test writer a
 
 # Crew
 
-Paths below are relative to this skill's directory.
+Run every script by its absolute path: this skill's base directory (shown when the skill loads) plus the relative path below. Run it from the session's own working directory, never after `cd` into the skill directory, and never through a shell variable (`D=…; python3 $D/…`). `<skill>` below stands for the base directory.
 
 ## Steps
 
-1. **Check context first.** Run `scripts/context.sh` before anything else. Do nothing with crew, carry on alone and don't mention crew, when any of these holds:
+1. **Check context first.** Run `zsh <skill>/scripts/context.sh` before anything else. Do nothing with crew, carry on alone and don't mention crew, when any of these holds:
    - `fenced: yes`;
    - `teammate: yes`;
    - your prompt names `.admiral/untrusted/event.md`;
    - your prompt is a teammate prompt ("You are teammate <name>. Read …").
 
-2. **List members.** Run `python3 ../commodore/scripts/crew.py resolve --layer built-in=<this dir>/../commodore/crew` plus:
+2. **List members.** Run `python3 <skill>/../commodore/scripts/crew.py resolve --layer built-in=<skill>/../commodore/crew` plus:
    - `ship: yes`: `--admiral --layer fleet=$ADMIRAL_CREW_DIR --layer repo=<top>/.commodore/crew --layer run=$ADMIRAL_RUN_CREW`;
    - `ship: no`: `--layer user-global=${XDG_CONFIG_HOME:-$HOME/.config}/commodore/crew --layer repo=<top>/.commodore/crew`. An empty `XDG_CONFIG_HOME` counts as unset.
 
@@ -28,7 +28,7 @@ Paths below are relative to this skill's directory.
    - `autopilot: yes`: launch without asking.
    - There is no crew limit.
 
-5. **Launch through agent-teammates.** Follow `../agent-teammates/SKILL.md` for launch, watch, `verify-report.sh` and close; the teammate contract goes in the prompt. Then read each verified report and use it in your own work. Launch rules by case are in [references/launch.md](references/launch.md).
+5. **Launch through agent-teammates.** Follow `<skill>/../agent-teammates/SKILL.md` for launch, watch, `verify-report.sh` and close; the teammate contract goes in the prompt. Then read each verified report and use it in your own work. Launch rules by case are in `<skill>/references/launch.md`.
 
 6. **Offer the Commodore handoff, never start it.** When the engineer says to build what the session has worked out and it's Commodore-sized (several units or PRs, or work that needs review and evaluation on its target), offer and stop. Never invoke `/commodore`, the commodore skill or any Admiral command for it.
    - `ship: yes`: offer **Hand to Commodore** by name. It isn't built yet; say the engineer starts it from Admiral.

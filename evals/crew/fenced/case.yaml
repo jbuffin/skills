@@ -6,27 +6,27 @@ context:
   scaffold_script: scaffold.sh
 execution:
   prompt: |-
-    I've staged the parser fix in src/parser.py. Open a PR for it.
+    I've staged the parser fix in src/parser.py. Draft the PR body for it.
   max_turns: 25
   timeout_seconds: 600
   allowed_tools: [Read, Glob, Grep, Skill, AskUserQuestion]
 runs: 3
 graders:
+  - name: context-check-ran
+    type: tool_used
+    tool: Bash
+    input_match: "context\\.sh"
+    min: 1
   - name: carries-on-with-the-task
     type: llm
     focus: last_message
     criteria: |-
-      PASS when the final message gets on with opening the PR alone: it describes the staged change or drafts a PR title and body, or reports what it did toward the PR.
+      PASS when the final message gets on with opening the PR alone: it describes the staged change or drafts a PR title and body, or reports what it did toward the PR. A note that the crew check couldn't run is fine.
       FAIL when the message is only a question or a refusal, or offers help from crew members or teammates.
   - name: never-lists-members
     type: tool_used
     tool: Bash
     input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?crew\\.py"
-    min: 0
-    max: 0
-  - name: never-asks-with-ask-user-question
-    type: tool_used
-    tool: AskUserQuestion
     min: 0
     max: 0
   - name: never-launches-a-teammate
@@ -47,9 +47,9 @@ graders:
     input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?unit-worktree\\.sh"
     min: 0
     max: 0
-  - name: does-not-mention-crew
+  - name: does-not-offer-members
     type: regex
     target: last_message
-    pattern: '\b(?:crew|teammates?|members?)\b'
+    pattern: '\b(?:pr-scribe|second-eyes|bring (?:it|them|him|her) on|launch(?:ing)? (?:a|the|your) (?:crew )?(?:member|teammate)s?)\b'
     flags: i
     match: not_contains

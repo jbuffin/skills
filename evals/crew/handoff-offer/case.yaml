@@ -12,11 +12,17 @@ execution:
   allowed_tools: [Read, Glob, Grep, Skill, AskUserQuestion]
 runs: 3
 graders:
+  - name: crew-skill-was-loaded
+    type: tool_used
+    tool: Skill
+    input_match: "\"skill\"\\s*:\\s*\"(?:[\\w-]+:)?crew\""
+    min: 1
+    arm: both
   - name: offers-an-issue-or-other
     type: llm
     focus: trace
     criteria: |-
-      PASS when the final message offers to file the design as a GitHub issue, or lets the engineer say what to do instead, and then stops to wait for the answer.
+      PASS when the final message offers to file the design as a GitHub issue together with an Other choice (the engineer says what instead), and then stops to wait for the answer.
       FAIL when the message starts the build, files the issue without asking, or makes no offer.
   - name: never-loads-commodore
     type: tool_used
@@ -52,6 +58,6 @@ graders:
   - name: never-starts-the-handoff-from-admiral
     type: tool_used
     tool: Bash
-    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?\\badmiral\\b"
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?(?:(?<=\")|[;&|]\\s*)admiral\\s"
     min: 0
     max: 0
