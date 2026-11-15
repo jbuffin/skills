@@ -482,6 +482,41 @@ class NoExecutionTests(MissionCase):
         self.assertFalse(marker.exists())
 
 
+class SummaryTests(MissionCase):
+    def test_a_summary_has_only_the_detection_keys_and_no_procedure(self):
+        self.write("build.md", mission_text())
+        out = self.run_json(["list", "--dir", self.dir, "--summary"], OK)
+        self.assertEqual(out["warnings"], [])
+        self.assertEqual(
+            out["missions"],
+            [
+                {
+                    "name": "build",
+                    "pick-me-when": DEFAULTS["pick-me-when"],
+                    "builder": "implementer",
+                    "checker": "reviewer",
+                    "delivery": DEFAULTS["delivery"],
+                    "file": "build.md",
+                }
+            ],
+        )
+
+    def test_a_refused_mission_still_exits_1_with_its_error(self):
+        self.write("build.md", mission_text(checker=None))
+        error = self.one_error(["list", "--dir", self.dir, "--summary"])
+        self.assertEqual((error["file"], error["code"]), ("build.md", "no-checker"))
+
+    def test_warnings_are_kept(self):
+        self.write("build.md", mission_text(extra="colour: red\n"))
+        out = self.run_json(["list", "--summary", "--dir", self.dir], OK)
+        self.assertEqual([w["code"] for w in out["warnings"]], ["unknown-field"])
+
+    def test_the_flag_given_twice_is_a_usage_error(self):
+        proc = self.mission(["list", "--summary", "--summary", "--dir", self.dir])
+        self.assertEqual(proc.returncode, USAGE, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+
+
 class UsageTests(MissionCase):
     def test_a_bad_call_prints_usage_and_exits_5(self):
         calls = [

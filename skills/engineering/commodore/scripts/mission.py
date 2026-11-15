@@ -13,9 +13,10 @@ MAX_BYTES = 65536
 KNOWN_FIELDS = ["name", "pick-me-when", "source-of-truth", "task-force", "builder", "checker", "stop-rule", "delivery"]
 ENGINEER = "engineer"
 USAGE = (
-    "usage: mission.py list [--dir <dir>]\n"
+    "usage: mission.py list [--dir <dir>] [--summary]\n"
     "       mission.py validate <file> [<file> ...]\n"
     "list reads every .md file directly in <dir>, by default the missions directory next to the scripts.\n"
+    "--summary prints only each mission's name, pick-me-when, builder, checker, delivery and file.\n"
 )
 
 
@@ -173,9 +174,17 @@ def emit(missions, errors, warnings):
     return 1 if errors else 0
 
 
+SUMMARY_KEYS = ["name", "pick-me-when", "builder", "checker", "delivery", "file"]
+
+
 def parse_list_args(argv):
-    directory, args = None, iter(argv)
+    directory, summary, args = None, False, iter(argv)
     for arg in args:
+        if arg == "--summary":
+            if summary:
+                raise UsageError("--summary given twice")
+            summary = True
+            continue
         if arg != "--dir":
             raise UsageError(f"unknown argument {arg}")
         if directory is not None:
@@ -183,18 +192,20 @@ def parse_list_args(argv):
         directory = next(args, "")
         if directory == "":
             raise UsageError("--dir needs a directory")
-    return directory
+    return directory, summary
 
 
 def list_main(argv):
     try:
-        directory = parse_list_args(argv)
+        directory, summary = parse_list_args(argv)
     except UsageError as err:
         return usage_error(str(err))
     if directory is None:
         directory = str(Path(os.path.realpath(__file__)).parent.parent / "missions")
     entries, errors = list_entries(directory)
     missions, found, warnings = read_all(entries)
+    if summary:
+        missions = [{key: mission[key] for key in SUMMARY_KEYS} for mission in missions]
     return emit(missions, errors + found, warnings)
 
 

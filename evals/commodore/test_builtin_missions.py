@@ -103,6 +103,7 @@ class ValidateTests(unittest.TestCase):
         subprocess.run(["git", "add", "-A"], cwd=self.copy, check=True)
         proc = self.validate()
         self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("skills/engineering/commodore/missions", proc.stderr)
 
 
 if __name__ == "__main__":
