@@ -21,6 +21,7 @@ Personal collection of agent skills ([Agent Skills spec](https://agentskills.io)
 | `target-evaluation` | Evaluates a change on its real target (device, browser against stage, deployed API, clean install) with light checks and full evaluations. |
 | `setup-commodore` | Picks installed skills for each Commodore role with you, drafts how they combine, and saves them as crew member files for just you or for the whole repo. |
 | `retro` | Reviews one Admiral panel's autopilot Commodore runs, finds stops and engineer edits that repeat, and proposes one change per finding, with a draft PR only for a skill edit. |
+| `crew` | Offers your crew members at hand-off moments (a PR, a review, tests, a doc) and launches them as teammates through agent-teammates, asking first unless autopilot is on. Does nothing on event ships or in teammate sessions. |
 
 ## Layout
 
