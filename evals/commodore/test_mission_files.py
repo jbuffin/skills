@@ -163,10 +163,10 @@ class ListTests(MissionCase):
         self.assertEqual(out["warnings"], [])
 
     def test_a_symlink_to_a_file_inside_the_directory_is_listed(self):
-        self.write("real.md", mission_text("alias"))
-        (self.dir / "alias.md").symlink_to(self.dir / "real.md")
+        self.write("real.txt", mission_text("alias"))
+        (self.dir / "alias.md").symlink_to(self.dir / "real.txt")
         files = [m["file"] for m in self.listed()["missions"]]
-        self.assertEqual(files, ["alias.md", "real.md"])
+        self.assertEqual(files, ["alias.md"])
 
     def test_a_missing_directory_is_one_unreadable_error(self):
         error = self.one_error(["list", "--dir", self.tmp / "absent"])
@@ -341,11 +341,13 @@ class WarningTests(MissionCase):
             [("build.md", "alpha"), ("build.md", "zeta"), ("review.md", "beta")],
         )
 
-    def test_warnings_are_dropped_when_any_file_has_an_error(self):
+    def test_error_output_keeps_the_warnings_of_files_without_errors(self):
         self.write("build.md", mission_text(extra="owner: nobody\n"))
         self.write("review.md", mission_text("review", checker=None))
         out = self.run_json(["list", "--dir", self.dir], ERRORS)
-        self.assertEqual(out["warnings"], [])
+        self.assertEqual(
+            [(w["code"], w["field"], w["file"]) for w in out["warnings"]], [("unknown-field", "owner", "build.md")]
+        )
         self.assertEqual([e["file"] for e in out["errors"]], ["review.md"])
 
     def test_a_file_with_an_error_gets_no_warnings(self):

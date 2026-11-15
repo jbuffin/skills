@@ -36,7 +36,7 @@ Checked in this order. The first failure refuses the file. A role is one of the 
 | `stop-rule` | required string | `missing-field`; `bad-field` for a list or boolean |
 | `delivery` | required string | `missing-field`; `bad-field` for a list or boolean |
 
-- Blank means absent, null or only spaces and tabs; a no-break space is content.
+- Blank means absent, null or only spaces and tabs; a no-break space is content. A blank `name`, a quoted one included, is `missing-field`.
 - `task-force` lists roles only. `engineer` is not a role: it is `bad-field` in `task-force` and as `builder`. It is valid only as the `checker`, the engineer's gate. Casting a member to each role stays with `crew.py cast` at run time.
 - Only the nine roles are accepted: a custom role in `task-force` is `bad-field`. That is a limit of the built-in missions' format.
 - A mission with no `checker`, or whose `checker` equals its `builder`, is refused.
@@ -55,4 +55,4 @@ A file with no error gets the check below. A warning drops what it names and rea
 Both commands print JSON on stdout. Errors and warnings are `{"file", "code", "field", "message"}`, with `file` the basename (null for a directory that can't be listed). Both lists sort by `file` (null first, then byte order), `code`, `field` (null first), then `message`.
 
 - No error, exit 0: `{"missions": [...], "warnings": [...]}`. Each mission has `name`, `pick-me-when`, `source-of-truth`, `task-force`, `builder`, `checker`, `stop-rule`, `delivery`, `file` (the basename) and `procedure` (the body). Missions sort by `name`.
-- Any error, exit 1: `{"errors": [...], "warnings": []}` and no `missions`. One refused file fails the whole call, and warnings from the other files are dropped with it.
+- Any error, exit 1: `{"errors": [...], "warnings": [...]}` and no `missions`. One refused file fails the whole call. The warnings are those of the files without an error; a refused file has none.

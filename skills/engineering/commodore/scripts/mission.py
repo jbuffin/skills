@@ -157,7 +157,7 @@ def list_entries(directory):
 
 
 def emit(missions, errors, warnings):
-    result = {"errors": errors, "warnings": []} if errors else {"missions": missions, "warnings": warnings}
+    result = {"errors": errors, "warnings": warnings} if errors else {"missions": missions, "warnings": warnings}
     sys.stdout.write(json.dumps(result, sort_keys=True, indent=2, ensure_ascii=False) + "\n")
     return 1 if errors else 0
 
