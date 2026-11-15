@@ -129,6 +129,11 @@ def read_mission(path, filename, layer_real=None):
         raw = read_regular(path)
     except OSError as err:
         raise Unreadable("unreadable", None, f"file can't be read: {err.strerror or err}") from None
+    return mission_from_bytes(raw, filename)
+
+
+def mission_from_bytes(raw, filename):
+    """Return (mission, warnings) for a file's bytes; raise Unreadable."""
     fields, body = parse_member(raw)
     check_fields(fields, filename[: -len(".md")])
     if not body:
@@ -314,14 +319,14 @@ def keep_source(run_dir, path):
     real = os.path.realpath(path)
     if real == missions or not inside_path(real, missions):
         raise Refusal(f"{path} is not a file in {missions}")
-    entries = [(path, os.path.basename(path), None)]
-    found, errors, _ = read_all(entries)
-    if errors:
-        raise Refusal(f"{path} is not a valid mission: {errors[0]['message']}")
     try:
-        return read_regular(path).decode("utf-8"), found[0]["name"]
-    except (OSError, Unreadable, UnicodeDecodeError) as err:
+        raw = read_regular(path)
+        mission, _ = mission_from_bytes(raw, os.path.basename(path))
+        return raw.decode("utf-8"), mission["name"]
+    except (OSError, UnicodeDecodeError) as err:
         raise Refusal(f"{path} can't be read as a mission file: {err}") from None
+    except Unreadable as err:
+        raise Refusal(f"{path} is not a valid mission: {err.message}") from None
 
 
 def keep_problem(directory, links, forbidden, inside_only):
@@ -344,10 +349,13 @@ def keep_problem(directory, links, forbidden, inside_only):
 
 def keep_target(team, layer):
     """(directory, symlink-checked paths, directories it may not be in, directory it must be in or None)."""
+    # team.env only: the engineer's checkout is recorded there, and the environment can't redirect a write.
     repo, worktree = team.get("REPO", ""), team.get("WORKTREE", "")
     if layer == "repo":
         if not repo:
             raise Refusal("team.env has no REPO")
+        if not os.path.isdir(repo):
+            raise Refusal(f"REPO {repo} is not a directory")
         top = os.path.join(repo, ".commodore")
         directory = os.path.join(top, "missions")
         return directory, [top, directory], [], repo

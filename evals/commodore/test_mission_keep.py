@@ -225,6 +225,12 @@ class TestKeepTargetPaths(KeepCase):
             self.assertNothingWritten(self.keep(src, "repo"))
             self.assertEqual(list(elsewhere.rglob("*")), [])
 
+    def test_a_repo_that_does_not_exist_is_refused_and_not_created(self):
+        gone = self.tmp / "gone"
+        self.team_env(repo=gone)
+        self.assertNothingWritten(self.keep(self.mission_file(), "repo"))
+        self.assertFalse(gone.exists())
+
     def test_a_symlink_to_a_directory_inside_the_repo_is_still_refused(self):
         inside = self.repo / "real-missions"
         inside.mkdir()
