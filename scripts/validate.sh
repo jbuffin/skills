@@ -84,7 +84,7 @@ done < <(git -C "$root" grep -n -i -E 'gh pr merge|merge --auto|auto[-_]merge' -
 
 # The built-in missions must parse: a refused mission file fails every run that lists missions.
 mission_out="$("$root/skills/engineering/commodore/scripts/mission.py" list 2>&1)" || {
-  sed 's/^/  ✗ /' <<<"$mission_out" >&2
+  printf '  ✗ %s\n' "${mission_out//$'\n'/$'\n'  ✗ }" >&2
   fail "skills/engineering/commodore/missions" "mission.py list refused a built-in mission (see above)"
 }
 
