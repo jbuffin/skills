@@ -13,7 +13,7 @@ Run every script by its absolute path: this skill's base directory (shown when t
    - `fenced: yes`;
    - `teammate: yes`;
    - your prompt names `.admiral/untrusted/event.md`;
-   - your prompt is a teammate prompt ("You are teammate <name>. Read …").
+   - your prompt is a teammate prompt (`You are teammate <name>. Read …`).
 
 2. **List members.** Run `python3 <skill>/../commodore/scripts/crew.py resolve --layer built-in=<skill>/../commodore/crew` plus:
    - `ship: yes`: `--admiral --layer fleet=<fleet-dir> --layer repo=<top>/.commodore/crew --layer run=<run-crew-dir>`, where `<fleet-dir>` is the value of `ADMIRAL_CREW_DIR` and `<run-crew-dir>` the value of `ADMIRAL_RUN_CREW`;
