@@ -28,3 +28,5 @@ Supersedes ADR 0004. Decided in [#193](https://github.com/jbuffin/skills/issues/
 ## Consequences
 
 `roles.json` files need a one-time conversion to member files. Admiral resolves members in Go for `admiral crew launch --member` and for launching a ship as a member, so the layer rules live in two implementations. Shared fixtures in this repo keep the two in step. An unreviewed ad hoc member never reaches another run.
+
+Superseded in part by ADR 0011 ([#232](https://github.com/jbuffin/skills/issues/232)): the "Custom missions" bullet no longer holds, because saved missions resolve from override layers.

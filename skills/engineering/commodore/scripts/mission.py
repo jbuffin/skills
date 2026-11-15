@@ -13,9 +13,10 @@ MAX_BYTES = 65536
 KNOWN_FIELDS = ["name", "pick-me-when", "source-of-truth", "task-force", "builder", "checker", "stop-rule", "delivery"]
 ENGINEER = "engineer"
 USAGE = (
-    "usage: mission.py list [--dir <dir>] [--summary]\n"
+    "usage: mission.py list [--dir <dir> | --repo-dir <dir>] [--summary]\n"
     "       mission.py validate <file> [<file> ...]\n"
-    "list reads every .md file directly in <dir>, by default the missions directory next to the scripts.\n"
+    "list reads every .md file directly in <dir>. Without --dir it resolves the built-in missions over the\n"
+    "user-global (or fleet, inside Admiral) and repo layers; --repo-dir names the repo.\n"
     "--summary prints only each mission's name, pick-me-when, builder, checker, delivery and file.\n"
 )
 
@@ -156,10 +157,11 @@ def read_all(entries):
     return sorted(missions, key=lambda m: m["name"]), sorted(errors, key=order), sorted(warnings, key=order)
 
 
-def list_entries(directory):
-    """(entries, errors) for the .md files directly in `directory`; a directory that can't be listed is one error."""
+def list_entries(directory, required=True):
+    """(entries, errors) for `directory`'s .md files; one that can't be listed (or is missing, if `required`) is an error."""
     try:
-        os.listdir(directory)
+        if required:
+            os.listdir(directory)
         filenames = member_files(directory)
     except OSError as err:
         message = f"mission directory can't be listed: {err.strerror or err}"
@@ -175,38 +177,95 @@ def emit(missions, errors, warnings):
 
 
 SUMMARY_KEYS = ["name", "pick-me-when", "builder", "checker", "delivery", "file"]
+LAYERS = ["built-in", "user-global", "fleet", "repo"]
+BUILTIN_NAME = "builtin-name"
 
 
 def parse_list_args(argv):
-    directory, summary, args = None, False, iter(argv)
+    directory, repo_dir, summary, args = None, None, False, iter(argv)
     for arg in args:
         if arg == "--summary":
             if summary:
                 raise UsageError("--summary given twice")
             summary = True
             continue
-        if arg != "--dir":
+        if arg not in ("--dir", "--repo-dir"):
             raise UsageError(f"unknown argument {arg}")
-        if directory is not None:
-            raise UsageError("--dir given twice")
-        directory = next(args, "")
-        if directory == "":
-            raise UsageError("--dir needs a directory")
-    return directory, summary
+        value = next(args, "")
+        if value == "":
+            raise UsageError(f"{arg} needs a directory")
+        if arg == "--dir":
+            if directory is not None:
+                raise UsageError("--dir given twice")
+            directory = value
+        else:
+            if repo_dir is not None:
+                raise UsageError("--repo-dir given twice")
+            repo_dir = value
+    if directory is not None and repo_dir is not None:
+        raise UsageError("--dir and --repo-dir can't be combined")
+    return directory, repo_dir, summary
+
+
+def layer_dirs(repo_dir):
+    """(label, directory, required) for each layer, in order; only the built-in layer is required."""
+    layers = [("built-in", str(Path(os.path.realpath(__file__)).parent.parent / "missions"), True)]
+    if os.environ.get("ADMIRAL_SHIP"):
+        fleet = os.environ.get("ADMIRAL_MISSIONS_DIR")
+        if fleet:
+            layers.append(("fleet", fleet, False))
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+        layers.append(("user-global", os.path.join(xdg, "commodore", "missions"), False))
+    if repo_dir:
+        layers.append(("repo", os.path.join(repo_dir, ".commodore", "missions"), False))
+    return layers
+
+
+def resolve_layers(repo_dir):
+    """(missions, errors, warnings) over the layers. Saved missions add to the built-in ones and never replace them."""
+    standing, all_errors, all_warnings, builtin_names = {}, [], [], set()
+    for label, directory, required in layer_dirs(repo_dir):
+        entries, errors = list_entries(directory, required)
+        missions, found, warnings = read_all(entries)
+        for mission in missions:
+            mission["layer"], mission["path"] = label, os.path.join(directory, mission["file"])
+            if label == "built-in":
+                builtin_names.add(mission["name"])
+            elif mission["name"] in builtin_names:
+                message = f"name {mission['name']} is a built-in mission, so the saved file is ignored"
+                warnings.append({"file": mission["file"], "code": BUILTIN_NAME, "field": None, "message": message})
+                continue
+            standing[mission["name"]] = mission
+        for item in errors + found + warnings:
+            item["layer"] = label
+        all_errors += sorted(errors + found, key=order)
+        all_warnings += sorted(warnings, key=order)
+    # Each layer's items are already sorted, so a stable sort by layer keeps today's order inside a layer.
+    rank = {label: index for index, label in enumerate(LAYERS)}
+    return (
+        sorted(standing.values(), key=lambda m: m["name"]),
+        sorted(all_errors, key=lambda e: rank[e["layer"]]),
+        sorted(all_warnings, key=lambda w: rank[w["layer"]]),
+    )
 
 
 def list_main(argv):
     try:
-        directory, summary = parse_list_args(argv)
+        directory, repo_dir, summary = parse_list_args(argv)
     except UsageError as err:
         return usage_error(str(err))
+    keys = SUMMARY_KEYS
     if directory is None:
-        directory = str(Path(os.path.realpath(__file__)).parent.parent / "missions")
-    entries, errors = list_entries(directory)
-    missions, found, warnings = read_all(entries)
+        missions, errors, warnings = resolve_layers(repo_dir)
+        keys = [*SUMMARY_KEYS, "layer", "path"]
+    else:
+        entries, listing = list_entries(directory)
+        missions, found, warnings = read_all(entries)
+        errors = listing + found
     if summary:
-        missions = [{key: mission[key] for key in SUMMARY_KEYS} for mission in missions]
-    return emit(missions, errors + found, warnings)
+        missions = [{key: mission[key] for key in keys} for mission in missions]
+    return emit(missions, errors, warnings)
 
 
 def validate_main(argv):
