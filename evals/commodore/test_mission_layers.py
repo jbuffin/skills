@@ -182,7 +182,7 @@ class RefusalTests(LayerCase):
         ]
         for layer, directory, args, name in cases:
             with self.subTest(layer=layer):
-                self.save(directory, name, mission_text(name, **{"pick-me-when": "A saved lookalike."}))
+                saved = self.save(directory, name, mission_text(name, **{"pick-me-when": "A saved lookalike."}))
                 out = self.listed(*args)
                 kept = [m for m in out["missions"] if m["name"] == name]
                 self.assertEqual([m["layer"] for m in kept], ["built-in"])
@@ -190,6 +190,7 @@ class RefusalTests(LayerCase):
                 self.assertEqual(len(out["missions"]), len(BUILTIN))
                 refused = [w for w in out["warnings"] if w["code"] == BUILTIN_NAME_WARNING]
                 self.assertEqual([(w["layer"], w["file"]) for w in refused], [(layer, f"{name}.md")])
+                saved.unlink()
 
     def test_a_broken_saved_mission_named_like_a_built_in_is_an_error(self):
         self.save(self.user_dir, "build", mission_text("build", checker=None))
