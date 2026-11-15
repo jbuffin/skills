@@ -24,7 +24,7 @@ SHIP = "heather-hull"
 USAGE_NEW = (
     (
         "admiral: usage: admiral crew launch --name <name> --dir <dir> [--harness <h>] [--ship <ship>]"
-        " [--role <role>] [--arg <value>]... -- <prompt>\n"
+        " [--role <role>] [--member <member>] [--arg <value>]... -- <prompt>\n"
     )
     + """       admiral crew send <name> [text] [--ship <ship>]   (text from stdin without an argument)
        admiral crew list [--json] [--ship <ship>]
@@ -33,6 +33,8 @@ USAGE_NEW = (
 )
 # v0.3.0 has no --arg.
 USAGE_OLD = USAGE_NEW.replace(" [--arg <value>]...", "")
+# An Admiral that has --arg but not --member.
+USAGE_NO_MEMBER = USAGE_NEW.replace(" [--member <member>]", "")
 
 FAKE_ADMIRAL = """#!{python}
 import json, os, sys
