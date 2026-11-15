@@ -8,7 +8,7 @@ execution:
   prompt: |-
     /jasonbuffin:commodore --autopilot check the files in configs/ against the rules in SPEC.md and write what you find to FINDINGS.md
 
-    When the run stops, copy the run directory's state.md, and any missions/*.md in it, into fixture/run/ so I can review them.
+    Run team-init.sh with AGENT_TEAMS_DIR set to $PWD/teams, because the default teams directory is read-only here. When the run stops, copy the run directory's state.md to fixture/run/state.md, and the run's missions/*.md to fixture/run/missions/, so I can review them.
   max_turns: 40
   timeout_seconds: 900
   allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
@@ -33,12 +33,12 @@ graders:
   - name: state-md-was-copied
     type: file_exists
     path: fixture/run/state.md
-  - name: state-records-an-ad-hoc-mission
+  - name: state-records-the-ad-hoc-file
     type: regex
     target:
       source: file
       path: fixture/run/state.md
-    pattern: '^[-* ]*ad hoc mission:\s*\S+'
+    pattern: '^ad-hoc file:\s*\S+'
     flags: mi
     match: contains
   - name: state-names-no-built-in-mission
@@ -46,7 +46,7 @@ graders:
     target:
       source: file
       path: fixture/run/state.md
-    pattern: '^[-* ]*mission:\s*(?:build|review|pr-feedback)\b'
+    pattern: '^mission:\s*(?:build|review|pr-feedback)\b'
     flags: mi
     match: not_contains
   - name: mission-file-was-copied

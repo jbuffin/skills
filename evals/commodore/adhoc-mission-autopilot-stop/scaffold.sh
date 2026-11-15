@@ -15,3 +15,4 @@ printf 'name: worker\ndebug: true\n' > configs/worker.yaml
 printf 'timeout: 10\n' > configs/cron.yaml
 git add .
 git -c user.name=eval -c user.email=eval@example.com commit -q -m "Add config spec and configs"
+mkdir -p teams

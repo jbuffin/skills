@@ -17,54 +17,13 @@ graders:
   - name: proposal-was-written
     type: file_exists
     path: proposal.md
-  - name: proposal-shows-the-source-of-truth
-    type: regex
-    target:
-      source: file
-      path: proposal.md
-    pattern: 'source[ -]of[ -]truth'
-    flags: i
-    match: contains
-  - name: proposal-shows-the-task-force
-    type: regex
-    target:
-      source: file
-      path: proposal.md
-    pattern: 'task[ -]force'
-    flags: i
-    match: contains
-  - name: proposal-shows-the-builder
-    type: regex
-    target:
-      source: file
-      path: proposal.md
-    pattern: 'builder'
-    flags: i
-    match: contains
-  - name: proposal-shows-the-checker
-    type: regex
-    target:
-      source: file
-      path: proposal.md
-    pattern: 'checker'
-    flags: i
-    match: contains
-  - name: proposal-shows-the-stop-rule
-    type: regex
-    target:
-      source: file
-      path: proposal.md
-    pattern: 'stop[ -]rule'
-    flags: i
-    match: contains
-  - name: proposal-shows-the-delivery
-    type: regex
-    target:
-      source: file
-      path: proposal.md
-    pattern: 'delivery'
-    flags: i
-    match: contains
+  - name: proposal-shows-all-five-fields-and-the-builder
+    type: llm
+    focus: trace
+    criteria: |-
+      Read the proposal the agent wrote to proposal.md.
+      PASS when it shows each of these with a value: the source of truth, the task force, the builder, the checker, the stop rule and the delivery. The labels may be worded differently.
+      FAIL when any of the six has no value, or when no proposal was written.
   - name: checker-is-not-the-builder
     type: llm
     focus: trace
