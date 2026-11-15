@@ -4,9 +4,10 @@ A mission file is a Markdown file: frontmatter, then the procedure as the body. 
 
 ## Calling the parser
 
-- `mission.py list [--dir <dir>]` reads every file directly in `<dir>` whose name ends in lowercase `.md`. Without `--dir` it reads `missions/` next to `scripts/`. Subdirectories, other files, names starting with `.` (such as the macOS AppleDouble `._x.md`), names that aren't valid UTF-8 and anything that isn't a regular file or a symlink to one are skipped. Files are read in byte order of file name.
+- `mission.py list [--dir <dir>] [--summary]` reads every file directly in `<dir>` whose name ends in lowercase `.md`. Without `--dir` it reads `missions/` next to `scripts/`. Subdirectories, other files, names starting with `.` (such as the macOS AppleDouble `._x.md`), names that aren't valid UTF-8 and anything that isn't a regular file or a symlink to one are skipped. Files are read in byte order of file name.
+- `--summary` prints each mission with only `name`, `pick-me-when`, `builder`, `checker`, `delivery` and `file`, without the fields and `procedure` the others need. It checks the same files, so errors, warnings and exit codes are the same. It may be given once.
 - `mission.py validate <file> [<file> ...]` runs the same checks on the named files. It skips the `outside-layer` check, so a symlink may point anywhere.
-- Exit 5, a usage message on stderr and nothing on stdout: no subcommand, an unknown subcommand, an unknown flag, `--dir` twice, empty or with no value, an argument `list` doesn't take, or `validate` with no file.
+- Exit 5, a usage message on stderr and nothing on stdout: no subcommand, an unknown subcommand, an unknown flag, `--dir` twice, empty or with no value, `--summary` twice, an argument `list` doesn't take, or `validate` with no file.
 
 A directory that is missing or can't be listed is one error, `unreadable`, with `file` null. This differs from `crew.py`, where a missing layer is empty: a mission directory that isn't there is a broken install. An existing empty directory lists `{"missions": [], "warnings": []}` with exit 0.
 
@@ -54,5 +55,5 @@ A file with no error gets the check below. A warning drops what it names and rea
 
 Both commands print JSON on stdout. Errors and warnings are `{"file", "code", "field", "message"}`, with `file` the basename (null for a directory that can't be listed). Both lists sort by `file` (null first, then byte order), `code`, `field` (null first), then `message`.
 
-- No error, exit 0: `{"missions": [...], "warnings": [...]}`. Each mission has `name`, `pick-me-when`, `source-of-truth`, `task-force`, `builder`, `checker`, `stop-rule`, `delivery`, `file` (the basename) and `procedure` (the body). Missions sort by `name`.
+- No error, exit 0: `{"missions": [...], "warnings": [...]}`. Each mission has `name`, `pick-me-when`, `source-of-truth`, `task-force`, `builder`, `checker`, `stop-rule`, `delivery`, `file` (the basename) and `procedure` (the body). Missions sort by `name`. With `--summary` each mission has only the keys `--summary` lists.
 - Any error, exit 1: `{"errors": [...], "warnings": [...]}` and no `missions`. One refused file fails the whole call. The warnings are those of the files without an error; a refused file has none.

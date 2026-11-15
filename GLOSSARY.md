@@ -12,9 +12,15 @@
 
 **Non-blocking finding**: a review finding below the threshold. It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial. A note from the fix check is recorded the same way but never goes to the implementer, whatever its severity. _Avoid_: nit, minor finding.
 
-**Mission**: what a commodore run is for, worked out from what the engineer points it at: build, review or PR feedback. It decides the run's task force. _Avoid_: job, task type.
+**Mission**: what a commodore run is for, worked out from what the engineer points it at. It decides the run's task force. A mission is registered by its mission file; the built-in ones are build, review and PR feedback. _Avoid_: job, task type.
 
 **Task force**: the set of roles a mission assembles for a run. _Avoid_: team composition, cast.
+
+**Mission file**: the Markdown file in `missions/` that registers a mission: frontmatter naming its task force, builder, checker, stop rule and delivery, then the procedure as the body. `mission.py` reads it as text and never runs it. _Avoid_: mission definition, mission config.
+
+**Builder**: the role in a mission's task force that makes the mission's work: the implementer in build and PR feedback, the reviewer in review. It is a slot in the mission file, not a role of its own. Unlike the brief checker and the **Fix checker**, which are roles that check a brief or a fix, the builder produces what the checker checks. _Avoid_: implementer, author.
+
+**Checker**: the slot in a mission file for who checks the builder's work: a role in the task force, or the engineer. It is never the builder. It is not a role: unlike the brief checker, which verifies one brief, or a **Fix checker**, which runs only the fix check, it names whoever signs off the mission's work as a whole. _Avoid_: reviewer.
 
 **Triager**: a read-only teammate on a PR-feedback mission that sorts each review comment and failing check on the engineer's own PR into fix, push back, needs the engineer's call, or already done. _Avoid_: comment reviewer.
 
@@ -44,7 +50,7 @@
 
 **Crew note**: a short fact a crew member learned and will need again, kept for that member alone once the engineer approves it, for the whole fleet or for one repo. It is knowledge, never reasoning: no verdicts, opinions on code quality, past review findings or accounts of what happened on a run.
 
-**Custom role**: a role the engineer adds by basing it on an existing role, whose contract it takes. It joins a mission's task force when one of its members fits; it never adds a mission. _Avoid_: custom mission, new role type.
+**Custom role**: a role the engineer adds by basing it on an existing role, whose contract it takes. A custom role fills a role's slot at cast time and never appears in a mission file; it never adds a mission. _Avoid_: custom mission, new role type.
 
 **Harness lock**: a crew member's setting that makes it always run on one harness, whatever harness the run started from. _Avoid_: harness preference.
 

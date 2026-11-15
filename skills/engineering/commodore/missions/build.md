@@ -1,3 +1,14 @@
+---
+name: build
+pick-me-when: The engineer points at a spec, an issue, a design doc or a free-text request.
+source-of-truth: The spec, issue, design doc or free-text request the work is built from.
+task-force: [brief-checker, test-writer, implementer, reviewer, fix-checker, security-reviewer, target-steward, scribe]
+builder: implementer
+checker: reviewer
+stop-rule: The stop rule the run's profile records, observed on the target it names.
+delivery: By mode, one PR, a gh stack, or fixes to an existing PR.
+---
+
 # The build mission
 
 The build mission turns a spec, an issue, a design doc or a free-text request into delivered work: planned into units, each built, reviewed and evaluated on the real target. Its task force is the roles in the Phase 2 table below.
@@ -17,13 +28,13 @@ In every build run, with autopilot off, phase 1 also drafts allow rules for `<te
 | One unit | single unit | one worktree, one PR (draft while the run works on it, ready at the end) |
 | Several phases or passes, or related issues worked in order where each builds on the last. Inside Admiral, a slice: a launch that names two or more issues is always built as one gh stack, even when the issues don't build on each other | stack | one worktree per unit, a gh stack of PRs (draft while the run works on them, ready at the end) |
 | Several issues that don't build on each other, outside Admiral (inside it they are a slice: stack) | independent units | one worktree and one PR each |
-| Fixes to an existing PR: the [PR-feedback mission](mission-pr-feedback.md)'s delivery, or a PR the engineer explicitly asked to build on | existing PR | one worktree on its branch, no new PR |
+| Fixes to an existing PR: the [PR-feedback mission](pr-feedback.md)'s delivery, or a PR the engineer explicitly asked to build on | existing PR | one worktree on its branch, no new PR |
 
-Pick the mode in phase 1 and say which one and why in the decision batch. If the work turns out bigger or smaller than it looked, change it and tell the engineer. The chosen mode's section of [`modes.md`](modes.md) has its worktree commands and procedure.
+Pick the mode in phase 1 and say which one and why in the decision batch. If the work turns out bigger or smaller than it looked, change it and tell the engineer. The chosen mode's section of [`modes.md`](../references/modes.md) has its worktree commands and procedure.
 
 ## Phase 2: work, unit by unit
 
-The workflow is fixed, but the task force changes with the work. Pick each unit's team from this table, and give each role its section of [`roles.md`](roles.md).
+The workflow is fixed, but the task force changes with the work. Pick each unit's team from this table, and give each role its section of [`roles.md`](../references/roles.md).
 
 | Role | Does | Use when |
 | --- | --- | --- |
@@ -53,7 +64,7 @@ For each unit, record its progress with `<team>/state-set.sh` (see [The run dire
 5. Run one fix round, then the fix check, which is review round 2, the last. Merge both reviewers' blocking findings into one numbered list, label each with its source (reviewer / security), and write it to the [job file](../SKILL.md#re-task-job-files) the Phase 2 rule points to. Re-task the unit's implementer with that file, the way the re-tasking paragraph in agent-teammates' `SKILL.md` says (`retask.sh` or `retasked.sh`).
    - When fixes conflict, the security fix wins, and you record the decision in `state.md`.
    - The implementer may also fix trivial non-blocking findings in the same job. Trivial means a few lines inside the unit's own files with no other change in behaviour. Its report lists which non-blocking findings it fixed.
-   - Then run `<team>/review-round.sh <run> <unit>`, which starts round 2, a fix check, and launch one fresh fix checker, `--read-only --role fix-checker`, named `<unit>-fix-checker`, on the fix range only: `<reviewed SHA>..HEAD`. Its brief is its contract in [`roles.md`](roles.md#fix-checker), the fix job file and the range: add no questions, lists or things to investigate. On a Codex run its shell can't run `gh`, so put the fix job and anything else it needs in the run directory. If `team.env` has no `MODEL_FIX_CHECKER`, add it before launching, the way [`roles.md`](roles.md#models) says. No security reviewer runs in round 2; the fix checker checks that the security items were fixed. The steward re-checks anything user-visible.
+   - Then run `<team>/review-round.sh <run> <unit>`, which starts round 2, a fix check, and launch one fresh fix checker, `--read-only --role fix-checker`, named `<unit>-fix-checker`, on the fix range only: `<reviewed SHA>..HEAD`. Its brief is its contract in [`roles.md`](../references/roles.md#fix-checker), the fix job file and the range: add no questions, lists or things to investigate. On a Codex run its shell can't run `gh`, so put the fix job and anything else it needs in the run directory. If `team.env` has no `MODEL_FIX_CHECKER`, add it before launching, the way [`roles.md`](../references/roles.md#models) says. No security reviewer runs in round 2; the fix checker checks that the security items were fixed. The steward re-checks anything user-visible.
    - If launching the fix checker exits 2 (`NO_BG`), retry the launch once. If it exits 2 again, don't run the fix checker as an in-process subagent: it would have no separate read-only session. Tell the engineer, skip the fix check, set every fix-job item to `status=human`, and note in `state.md` that round 2 didn't run.
    - Never start a round 3. When `review-round.sh` exits 1, launch no more reviewers or fix checkers for the unit, however the last round went.
    - Never re-task the implementer for a fix-check result, and never carry one into a later unit as a carry-forward check.
