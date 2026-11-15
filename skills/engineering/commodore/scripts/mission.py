@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""List and validate Markdown mission files, read as text only (references/mission-files.md)."""
+"""List, validate and keep Markdown mission files, read as text only (references/mission-files.md)."""
 
 import json
 import os
@@ -7,7 +7,20 @@ import stat
 import sys
 from pathlib import Path
 
-from crew import ROLES, Unreadable, is_slug, member_files, parse_member
+from crew import (
+    ROLES,
+    Refusal,
+    Unreadable,
+    create_file,
+    inside_path,
+    is_slug,
+    make_directory,
+    member_files,
+    parse_member,
+    read_team_env,
+    real_target,
+    setting,
+)
 
 MAX_BYTES = 65536
 KNOWN_FIELDS = ["name", "pick-me-when", "source-of-truth", "task-force", "builder", "checker", "stop-rule", "delivery"]
@@ -15,9 +28,11 @@ ENGINEER = "engineer"
 USAGE = (
     "usage: mission.py list [--dir <dir> | --repo-dir <dir>] [--summary]\n"
     "       mission.py validate <file> [<file> ...]\n"
+    "       mission.py keep --run <run> --file <run>/missions/<name>.md --layer user-global|repo\n"
     "list reads every .md file directly in <dir>. Without --dir it resolves the built-in missions over the\n"
     "user-global (or fleet, inside Admiral) and repo layers; --repo-dir names the repo.\n"
     "--summary prints only each mission's name, pick-me-when, builder, checker, delivery and file.\n"
+    "keep saves a run's validated ad hoc mission into a layer; it refuses inside Admiral and never overwrites.\n"
 )
 
 
@@ -275,7 +290,106 @@ def validate_main(argv):
     return emit(*read_all(entries))
 
 
+def parse_keep_args(argv):
+    values, args = {}, iter(argv)
+    for arg in args:
+        if arg not in ("--run", "--file", "--layer"):
+            raise UsageError(f"unknown argument {arg}")
+        if arg in values:
+            raise UsageError(f"{arg} given twice")
+        values[arg] = next(args, "")
+        if values[arg] == "":
+            raise UsageError(f"{arg} needs a value")
+    for flag in ("--run", "--file", "--layer"):
+        if flag not in values:
+            raise UsageError(f"keep needs {flag}")
+    if values["--layer"] not in ("user-global", "repo"):
+        raise UsageError("--layer must be user-global or repo")
+    return values["--run"], values["--file"], values["--layer"]
+
+
+def keep_source(run_dir, path):
+    """The mission file's text once it is inside <run>/missions/, regular and valid; raise Refusal otherwise."""
+    missions = os.path.realpath(os.path.join(run_dir, "missions"))
+    real = os.path.realpath(path)
+    if real == missions or not inside_path(real, missions):
+        raise Refusal(f"{path} is not a file in {missions}")
+    entries = [(path, os.path.basename(path), None)]
+    found, errors, _ = read_all(entries)
+    if errors:
+        raise Refusal(f"{path} is not a valid mission: {errors[0]['message']}")
+    try:
+        return read_regular(path).decode("utf-8"), found[0]["name"]
+    except (OSError, Unreadable, UnicodeDecodeError) as err:
+        raise Refusal(f"{path} can't be read as a mission file: {err}") from None
+
+
+def keep_problem(directory, links, forbidden, inside_only):
+    """Why the layer directory can't be written, or None. Run before and after the directory is created."""
+    for link in links:
+        if os.path.islink(link):
+            return f"{link} is a symlink"
+    real = real_target(directory)
+    if inside_only is not None:
+        if not inside_path(real, os.path.realpath(inside_only)):
+            return f"{directory} is not inside {inside_only}"
+        return None
+    for root in forbidden:
+        if inside_path(real, os.path.realpath(root)):
+            return f"{directory} is inside {root}"
+    if ".commodore" in real.split(os.sep):
+        return f"{directory} is inside a .commodore directory"
+    return None
+
+
+def keep_target(team, layer):
+    """(directory, symlink-checked paths, directories it may not be in, directory it must be in or None)."""
+    repo, worktree = team.get("REPO", ""), team.get("WORKTREE", "")
+    if layer == "repo":
+        if not repo:
+            raise Refusal("team.env has no REPO")
+        top = os.path.join(repo, ".commodore")
+        directory = os.path.join(top, "missions")
+        return directory, [top, directory], [], repo
+    xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    top = os.path.join(xdg, "commodore")
+    directory = os.path.join(top, "missions")
+    return directory, [top, directory], [root for root in (repo, worktree) if root], None
+
+
+def keep_main(argv):
+    try:
+        run_dir, path, layer = parse_keep_args(argv)
+    except UsageError as err:
+        return usage_error(str(err))
+    try:
+        team = read_team_env(run_dir)
+        if setting("ADMIRAL_SHIP", team):
+            raise Refusal("inside Admiral a mission goes in the Admiral report, not a layer")
+        text, name = keep_source(run_dir, path)
+        builtin = layer_dirs(None)[0][1]
+        if os.path.lexists(os.path.join(builtin, f"{name}.md")):
+            raise Refusal(f"{name} is a built-in mission")
+        directory, links, forbidden, inside_only = keep_target(team, layer)
+        problem = keep_problem(directory, links, forbidden, inside_only)
+        if problem:
+            raise Refusal(problem)
+        if os.path.lexists(os.path.join(directory, f"{name}.md")):
+            raise Refusal(f"the {layer} layer already holds {name}")
+        make_directory(directory)
+        problem = keep_problem(directory, links, forbidden, inside_only)
+        if problem:
+            raise Refusal(problem)
+        sys.stdout.write(f"wrote {create_file(directory, name, text)}\n")
+    except Refusal as err:
+        sys.stdout.write(f"ERROR {err}\n")
+        return 1
+    return 0
+
+
 def main(argv):
+    if argv and argv[0] == "keep":
+        return keep_main(argv[1:])
     if argv and argv[0] == "list":
         return list_main(argv[1:])
     if argv and argv[0] == "validate":

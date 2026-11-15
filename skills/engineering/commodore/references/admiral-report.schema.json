@@ -81,6 +81,27 @@
           }
         ]
       }
+    },
+    "missions": {
+      "type": "array",
+      "description": "Keep proposals for Admiral's Inbox to approve: the run's validated ad hoc mission file, at most one. A fleet proposal carries the run's repo when one is known, else null. text is the whole file, at most 65536 bytes (mission.py validate enforces the bytes; maxLength counts characters).",
+      "items": {
+        "type": "object",
+        "required": ["name", "scope", "repo", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$" },
+          "scope": { "enum": ["fleet", "repo"] },
+          "repo": { "type": ["string", "null"], "description": "<owner>/<repo>, or null." },
+          "text": { "type": "string", "minLength": 1, "maxLength": 65536 }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "scope": { "const": "repo" } }, "required": ["scope"] },
+            "then": { "properties": { "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" } } }
+          }
+        ]
+      }
     }
   },
   "allOf": [
