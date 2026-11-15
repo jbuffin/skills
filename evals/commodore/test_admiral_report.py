@@ -113,6 +113,9 @@ class TestValidReports(ReportCase):
     def test_a_report_with_a_crew_note_proposal_is_published(self):
         self.assertAccepted(with_(notes=[NOTE, {**NOTE, "scope": "fleet", "repo": None}]))
 
+    def test_a_report_naming_an_ad_hoc_mission_is_published(self):
+        self.assertAccepted(with_(mission={"name": "docs-audit", "ad_hoc": True}))
+
 
 class TestInvalidReports(ReportCase):
     def test_version_1_is_rejected(self):
@@ -165,6 +168,21 @@ class TestInvalidReports(ReportCase):
         for repo in (None, "fixture"):
             with self.subTest(repo=repo):
                 self.assertRejected(with_(notes=[{**NOTE, "repo": repo}]), r"^/notes/0/repo")
+
+    def test_a_mission_without_a_name_is_rejected(self):
+        self.assertRejected(with_(mission={"ad_hoc": True}), r"^/mission: missing required property 'name'")
+
+    def test_a_mission_with_a_non_boolean_ad_hoc_is_rejected(self):
+        self.assertRejected(with_(mission={"name": "build", "ad_hoc": "yes"}), r"^/mission/ad_hoc")
+
+    def test_a_mission_with_an_empty_name_is_rejected(self):
+        self.assertRejected(with_(mission={"name": "", "ad_hoc": False}), r"^/mission/name")
+
+    def test_a_mission_with_an_extra_key_is_rejected(self):
+        self.assertRejected(with_(mission={"name": "build", "ad_hoc": False, "file": "build.md"}), r"^/mission")
+
+    def test_a_mission_that_is_not_an_object_is_rejected(self):
+        self.assertRejected(with_(mission="build"), r"^/mission: .*not of type object")
 
 
 class TestPublishing(ReportCase):

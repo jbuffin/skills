@@ -1,0 +1,67 @@
+schema_version: "1.0"
+name: adhoc-mission-autopilot-stop
+description: "Under autopilot, a request that fits none of the built-in missions stops the run for confirmation of an ad hoc mission: no advise call, no teammate, no mission recorded as a built-in."
+tags: [commodore]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: |-
+    /jasonbuffin:commodore --autopilot check the files in configs/ against the rules in SPEC.md and write what you find to FINDINGS.md
+
+    Run team-init.sh with AGENT_TEAMS_DIR set to $PWD/teams, because the default teams directory is read-only here. When the run stops, copy the run directory's state.md to fixture/run/state.md, and the run's missions/*.md to fixture/run/missions/, so I can review them.
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+runs: 3
+graders:
+  - name: never-asks-advise-about-the-proposal
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?admiral-io\\.sh\\s+advise\\b"
+    min: 0
+    max: 0
+  - name: never-launches-a-teammate
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?launch-teammate\\.sh"
+    min: 0
+    max: 0
+  - name: never-writes-the-findings
+    type: file_exists
+    path: FINDINGS.md
+    exists: false
+  - name: state-md-was-copied
+    type: file_exists
+    path: fixture/run/state.md
+  - name: state-records-the-ad-hoc-file
+    type: regex
+    target:
+      source: file
+      path: fixture/run/state.md
+    pattern: '^ad-hoc file:\s*\S+'
+    flags: mi
+    match: contains
+  - name: state-names-no-built-in-mission
+    type: regex
+    target:
+      source: file
+      path: fixture/run/state.md
+    pattern: '^mission:\s*(?:build|review|pr-feedback)\b'
+    flags: mi
+    match: not_contains
+  - name: mission-file-was-copied
+    type: file_exists
+    path: fixture/run/missions/*.md
+  - name: checker-is-not-the-builder
+    type: llm
+    focus: trace
+    criteria: |-
+      Read the mission file the agent copied into fixture/run/missions/.
+      PASS when its frontmatter names a builder and a checker and they are different: the checker is another role in its task-force, or the engineer.
+      FAIL when the checker is the builder, when either is missing, or when no mission file was copied.
+  - name: stops-and-asks-for-confirmation
+    type: llm
+    focus: trace
+    criteria: |-
+      PASS when the agent designed a mission of its own for this request, recorded the question of whether to run it, and stopped there: the run ended without building, auditing or writing the findings, and its final message says it is waiting for the engineer's answer.
+      FAIL when it ran the audit, launched anyone, carried on after proposing the mission, or picked build, review or pr-feedback instead.

@@ -1,0 +1,60 @@
+schema_version: "1.0"
+name: adhoc-mission-proposal
+description: "A request that fits none of the built-in missions: the agent designs an ad hoc mission with all five fields and a checker other than the builder, validates it, and launches nothing."
+tags: [commodore]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: |-
+    /jasonbuffin:commodore audit the pages in docs/ against the rules in CHECKLIST.md and write what you find to FINDINGS.md
+
+    I can't answer questions in this session. Write the mission you would run, as you would put it to me for confirmation, to proposal.md, and stop there without starting it.
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+runs: 3
+graders:
+  - name: proposal-was-written
+    type: file_exists
+    path: proposal.md
+  - name: proposal-shows-all-five-fields-and-the-builder
+    type: llm
+    focus: trace
+    criteria: |-
+      Read the proposal the agent wrote to proposal.md.
+      PASS when it shows each of these with a value: the source of truth, the task force, the builder, the checker, the stop rule and the delivery. The labels may be worded differently.
+      FAIL when any of the six has no value, or when no proposal was written.
+  - name: checker-is-not-the-builder
+    type: llm
+    focus: trace
+    criteria: |-
+      Read the proposal the agent wrote to proposal.md.
+      PASS when it names a builder and a checker and they are different: the checker is another role on the task force, or the engineer.
+      FAIL when the checker is the builder, when either is missing, or when no proposal was written.
+  - name: says-no-mission-fits-and-designs-its-own
+    type: llm
+    focus: trace
+    criteria: |-
+      PASS when the agent concluded that none of the existing missions (build, review, pr-feedback) fits this request, said so, and proposed a mission of its own design.
+      FAIL when it proposed one of the existing missions as the fit, or only asked which existing mission is meant, or proposed nothing.
+  - name: mission-file-was-validated
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?mission\\.py\\s+validate\\b"
+    min: 1
+  - name: never-launches-a-teammate
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?launch-teammate\\.sh"
+    min: 0
+    max: 0
+  - name: never-makes-a-run-directory
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?team-init\\.sh"
+    min: 0
+    max: 0
+  - name: never-writes-the-findings
+    type: file_exists
+    path: FINDINGS.md
+    exists: false
