@@ -1,5 +1,15 @@
 # jasonbuffin-skills
 
+## 3.3.0
+
+### Minor Changes
+
+- [#238](https://github.com/jbuffin/skills/pull/238) [`e87b67c`](https://github.com/jbuffin/skills/commit/e87b67c0811891e72790019063ce068019b1637e) Thanks [@jbuffin](https://github.com/jbuffin)! - New `crew` skill. At a hand-off moment (opening a PR, reviewing, writing tests or docs) it lists the engineer's crew members with `crew.py resolve`, asks before launching them through agent-teammates unless autopilot is on, and does nothing on event ships, in fenced checkouts or in teammate sessions. It offers the Commodore handoff and never starts it.
+
+- [#235](https://github.com/jbuffin/skills/pull/235) [`15c4562`](https://github.com/jbuffin/skills/commit/15c456291bf22cdcd4498e503f87d3014704ad3a) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore's three built-in missions (build, review and PR feedback) are now mission files in `missions/`, each with frontmatter for its task force, builder, checker, stop rule and delivery. A new `mission.py list` reads them as text, and the skill's mission detection picks a mission by its `pick-me-when` instead of a fixed table. The procedures are unchanged.
+
+- [#237](https://github.com/jbuffin/skills/pull/237) [`879d1b0`](https://github.com/jbuffin/skills/commit/879d1b0b1f344d76ac0f1cacc9f81ef747609083) Thanks [@jbuffin](https://github.com/jbuffin)! - agent-teammates' `launch-teammate.sh` takes `--member <member>` and launches the teammate as that Admiral crew member through `admiral crew launch --member`. The member's model applies when no `--model` is given, `--member` satisfies `REQUIRE_ROLE=1`, and the admiral driver shows Admiral's warnings after a launch. Outside an Admiral ship, and for codex or copilot teammates under autopilot or read-only, it exits 5.
+
 ## 3.2.0
 
 ### Minor Changes
