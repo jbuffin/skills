@@ -1,6 +1,7 @@
 """Tests for `mission.py list` and `mission.py validate` over Markdown mission files."""
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -401,6 +402,42 @@ class UnreadableFileTests(MissionCase):
         for label, text in cases.items():
             with self.subTest(label):
                 self.assertEqual(self.refused(text)["code"], "bad-frontmatter")
+
+
+class UnusualPathTests(MissionCase):
+    def test_a_fifo_is_unreadable_and_does_not_hang(self):
+        fifo = self.dir / "build.md"
+        os.mkfifo(fifo)
+        try:
+            proc = subprocess.run(
+                [str(MISSION_PY), "validate", str(fifo)],
+                env={"PATH": BASE_PATH},
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("validate hung on a FIFO")
+        self.assertEqual(proc.returncode, ERRORS, proc.stderr)
+        errors = json.loads(proc.stdout)["errors"]
+        self.assertEqual([(e["file"], e["code"]) for e in errors], [("build.md", "unreadable")])
+
+    def test_a_path_that_is_not_utf8_gives_json_not_a_traceback(self):
+        bad = bytes(self.dir / "caf") + b"\xe9.md"
+        proc = subprocess.run(
+            [bytes(MISSION_PY), b"validate", bad],
+            env={"PATH": BASE_PATH},
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            check=False,
+            timeout=20,
+        )
+        self.assertNotIn(b"Traceback", proc.stderr)
+        self.assertEqual(proc.returncode, ERRORS, proc.stderr)
+        errors = json.loads(proc.stdout)["errors"]
+        self.assertEqual([e["code"] for e in errors], ["unreadable"])
 
 
 class NoExecutionTests(MissionCase):

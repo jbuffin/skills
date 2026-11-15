@@ -3,6 +3,7 @@
 
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -90,15 +91,25 @@ def check_fields(fields, stem):
     required_string(fields, "delivery")
 
 
+def read_regular(path):
+    """The file's bytes; a non-regular file is unreadable, and one over MAX_BYTES is too-large."""
+    # O_NONBLOCK so that opening a FIFO can't hang before fstat sees it.
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise Unreadable("unreadable", None, "file is not a regular file")
+        raw = handle.read(MAX_BYTES + 1)
+    if len(raw) > MAX_BYTES:
+        raise Unreadable("too-large", None, f"file is over {MAX_BYTES} bytes")
+    return raw
+
+
 def read_mission(path, filename, layer_real=None):
     """Return (mission, warnings) for one file; raise Unreadable. `layer_real` turns on the outside-layer check."""
     try:
-        if os.stat(path).st_size > MAX_BYTES:
-            raise Unreadable("too-large", None, f"file is over {MAX_BYTES} bytes")
         if layer_real is not None and os.path.commonpath([os.path.realpath(path), layer_real]) != layer_real:
             raise Unreadable("outside-layer", None, "file resolves outside its directory")
-        with open(path, "rb") as handle:
-            raw = handle.read()
+        raw = read_regular(path)
     except OSError as err:
         raise Unreadable("unreadable", None, f"file can't be read: {err.strerror or err}") from None
     fields, body = parse_member(raw)
@@ -190,7 +201,7 @@ def list_main(argv):
 def validate_main(argv):
     if not argv or any(arg.startswith("-") for arg in argv):
         return usage_error("validate needs one or more files and takes no flags")
-    entries = [(path, os.path.basename(path), None) for path in argv]
+    entries = [(path, os.fsencode(os.path.basename(path)).decode("utf-8", "replace"), None) for path in argv]
     return emit(*read_all(entries))
 
 

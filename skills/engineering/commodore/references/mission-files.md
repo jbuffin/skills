@@ -14,7 +14,7 @@ A directory that is missing or can't be listed is one error, `unreadable`, with 
 
 These steps are `crew.py`'s "Reading a file" (see [crew-members.md](crew-members.md#reading-a-file)), with one `unreadable` code for the directory. Each failure is an error with the code shown. The first error ends the file.
 
-1. Over 65536 bytes: `too-large`. A file that can't be statted, opened or read: `unreadable`.
+1. A file that can't be opened or read, or that isn't a regular file (a FIFO or a device), is `unreadable`. The read stops after 65536 bytes: a file over that is `too-large`. A `validate` path whose name isn't valid UTF-8 is reported with the bad bytes replaced by U+FFFD.
 2. `list` only: real path not inside the real path of the directory: `outside-layer`.
 3. Not valid UTF-8, or starts with a BOM: `bad-frontmatter`. CRLF becomes LF.
 4. Line 1 is exactly `---` and a later line is exactly `---`, or `bad-frontmatter`.
