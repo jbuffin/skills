@@ -1,26 +1,30 @@
 #!/bin/zsh
-# usage: launch-teammate.sh [--read-only] [--model <model>] [--role <role>] [--harness <harness>] <team-dir> <name> <workdir|unit> [prompt-file]
+# usage: launch-teammate.sh [--read-only] [--model <model>] [--role <role>] [--member <member>] [--harness <harness>] <team-dir> <name> <workdir|unit> [prompt-file]
 # Starts a teammate as a background session of its harness (drivers/<harness>) named <name>, in <workdir>, told to
 # read [prompt-file] (default <team-dir>/prompts/<name>.md). Registers "<name> <id> <epoch> <viewer|-> <workdir>"
 # in <team-dir>/teammates.tsv, plus the teammate's harness as a sixth column. <unit> is looked up in <team-dir>/worktrees.tsv ("unit branch path") when it isn't a
 # directory. With VIEWER=cmux|tmux in team.env, also opens a pane attached to it where the harness has one.
 # Model: --model <model>, else with --role <role> the MODEL_<ROLE> from team.env (<ROLE> is the role uppercased, '-' and
-# '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with neither flag exits 5.
+# '.' as '_'; unset or empty exits 5), else MODEL. With REQUIRE_ROLE=1 in team.env, a launch with none of --role, --model and --member exits 5.
 # Harness: --harness <harness>, else with --role <role> the HARNESS_<ROLE> from team.env (same mangling as MODEL_<ROLE>), else
 # HARNESS (the run's); a name that isn't a harness with a driver exits 5 before any driver call. The driver gets it as TEAMMATE_HARNESS.
 # --read-only keeps the teammate from editing files in <workdir> (a reviewer, a brief checker); how strictly, how it
 # gets its report out, the advisor and what exit 2 (no background session) means depend on the harness: see
 # references/harness-<harness>.md.
+# --member <member> launches it as that Admiral crew member (`admiral crew launch --member`) inside an Admiral ship: it
+# satisfies REQUIRE_ROLE=1, and without --model the launch names no model, so Admiral applies the member's. Admiral refuses a
+# harness that differs from the member's lock, so pass --harness <the lock>. Anywhere else it exits 5.
 # With --role, EFFORT_<ROLE> from team.env goes to the driver's launch as TEAMMATE_EFFORT (empty otherwise), and the role
 # itself as TEAMMATE_ROLE (empty without --role); the admiral driver names the crew boat's role with it.
 SELF=${0:A}
-usage() { sed -n 2,15p $SELF; exit 5; }
-RO=; MODEL_OPT=; ROLE=; HARNESS_OPT=
+usage() { sed -n 2,18p $SELF; exit 5; }
+RO=; MODEL_OPT=; ROLE=; MEMBER=; HARNESS_OPT=
 while [[ $1 == --* ]]; do
   case $1 in
     --read-only) RO=1; shift ;;
     --model) [[ -n $2 && $2 != -* ]] || usage; MODEL_OPT=$2; shift 2 ;;
     --role) [[ -n $2 && $2 != -* ]] || usage; ROLE=$2; shift 2 ;;
+    --member) [[ -n $2 && $2 != -* ]] || usage; MEMBER=$2; shift 2 ;;
     --harness) [[ -n $2 && $2 != -* ]] || usage; HARNESS_OPT=$2; shift 2 ;;
     *) usage ;;
   esac
@@ -38,11 +42,13 @@ if [[ -n $ROLE ]]; then
 fi
 if [[ -n $MODEL_OPT ]]; then
   CHOSEN=$MODEL_OPT
+elif [[ -n $MEMBER ]]; then
+  CHOSEN=   # Admiral applies the member's model, or the dock's default
 elif [[ -n $ROLE ]]; then
   CHOSEN=${(P)ROLE_VAR}
   [[ -z $CHOSEN ]] && { echo "$ROLE_VAR is unset or empty in $D/team.env; set it (or pass --model) before launching $NAME with --role $ROLE"; exit 5; }
 else
-  [[ $REQUIRE_ROLE == 1 ]] && { echo "REQUIRE_ROLE=1 in $D/team.env: launch $NAME with --role <role> or --model <model>"; exit 5; }
+  [[ $REQUIRE_ROLE == 1 ]] && { echo "REQUIRE_ROLE=1 in $D/team.env: launch $NAME with --role <role>, --model <model> or --member <member>"; exit 5; }
   CHOSEN=$MODEL
 fi
 EFFORT=; [[ -n $ROLE ]] && EFFORT=${(P)EFFORT_VAR}
@@ -50,6 +56,13 @@ EFFORT=; [[ -n $ROLE ]] && EFFORT=${(P)EFFORT_VAR}
 if [[ -n $HARNESS_OPT ]]; then select_driver $HARNESS_OPT "--harness" || exit 5
 elif [[ -n $ROLE && -n ${(P)HARNESS_VAR} ]]; then select_driver ${(P)HARNESS_VAR} $HARNESS_VAR $D/team.env || exit 5
 else select_driver $HARNESS HARNESS $D/team.env || exit 5; fi
+if [[ -n $MEMBER ]]; then
+  MEMBER_WHY=
+  [[ -z $ADMIRAL_SHIP ]] && MEMBER_WHY="there is no Admiral ship (ADMIRAL_SHIP is unset)"
+  [[ -z $MEMBER_WHY && $DRIVER != */drivers/admiral ]] && MEMBER_WHY="a $TH teammate under ADMIRAL_AUTOPILOT=1 runs on its own driver, not an Admiral crew boat"
+  [[ -z $MEMBER_WHY && $RO == 1 && $TH != claude ]] && MEMBER_WHY="a read-only $TH teammate runs headless on its own driver, not an Admiral crew boat"
+  [[ -n $MEMBER_WHY ]] && { echo "--member needs a launch through admiral crew launch, and $MEMBER_WHY; put $MEMBER's instructions in the prompt file and launch $NAME with --role instead"; exit 5; }
+fi
 if [[ ! -d $W ]]; then
   W=$(awk -v u=$W '$1==u {print $3}' $D/worktrees.tsv 2>/dev/null | tail -1)
   [[ -z $W ]] && { echo "no directory or registered worktree for '$3'"; exit 5; }
@@ -60,7 +73,7 @@ TOP=$(git -C $W rev-parse --show-toplevel 2>/dev/null)
 [[ -n $REPO && ${${TOP:-$W}:A} == ${REPO:A} ]] && { echo "refusing to start $NAME in the repository's own checkout ($REPO); give it a worktree"; exit 5; }
 [[ -f $P ]] || { echo "missing prompt file $P"; exit 5; }
 # The driver starts the session (and any viewer pane). Success prints "<id> <viewer|->", then the lines to show after "launched".
-OUT=$(export TEAMMATE_EFFORT=$EFFORT TEAMMATE_ROLE=$ROLE; drv launch $D $NAME $W $CHOSEN $P ${RO:-0})
+OUT=$(export TEAMMATE_EFFORT=$EFFORT TEAMMATE_ROLE=$ROLE TEAMMATE_MEMBER=$MEMBER; drv launch $D $NAME $W "$CHOSEN" $P ${RO:-0})
 RC=$?
 (( RC == 9 )) && exit 5   # the driver has no launch operation; drv already said so on stderr
 (( RC != 0 )) && { print -r -- "$OUT"; exit $RC; }

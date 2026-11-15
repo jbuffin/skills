@@ -31,8 +31,8 @@ A teammate is a background `copilot -p` run in its own process group, with a fix
 | Setting | Value | Meaning |
 | --- | --- | --- |
 | `HARNESS` | `copilot` | selects `scripts/drivers/copilot` and this reference |
-| `MODEL` | `claude-sonnet-5.5` | the model for a launch with neither `--model` nor `--role` |
-| `REQUIRE_ROLE` | `1` | every launch passes `--role` or `--model` |
+| `MODEL` | `claude-sonnet-5.5` | the model for a launch with none of `--model`, `--role` and `--member` |
+| `REQUIRE_ROLE` | `1` | every launch passes `--role`, `--member` or `--model` |
 | `MODEL_<ROLE>` | per role | the model for `--role <role>` (commodore's reference has the table) |
 | `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, passed as `--reasoning-effort <effort>` on launch and resume only when set, because some models reject the flag. `send` reuses the effort recorded at launch, so a later `EFFORT_<ROLE>` edit doesn't affect a session that's already launched. The value is any value `copilot --help` lists for `--reasoning-effort`. An unknown value reaches copilot, and launch then exits 1 within a second. The driver refuses only a malformed value, with exit 5 |
 | `VIEWER` | `none` | Copilot teammates have no viewer panes |

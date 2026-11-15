@@ -5,9 +5,10 @@
 D=${1:A}; NAME=$2; W=$3; CHOSEN=$4; P=$5; RO=; [[ $6 == 1 ]] && RO=1
 source ${0:A:h:h:h}/team-env.zsh
 source ${0:A:h}/lib.zsh
-ROLE=$TEAMMATE_ROLE
+ROLE=$TEAMMATE_ROLE; MEMBER=$TEAMMATE_MEMBER
 # a read-only Codex or Copilot teammate runs headless on its own driver, so its read-only guarantee holds and it needs no admiral
 if [[ -n $RO && $TH != claude ]]; then
+  [[ -z $MEMBER ]] || { echo "crew member $MEMBER needs an Admiral crew boat, and a read-only $TH teammate runs headless on its own driver"; exit 5; }
   [[ -x $HARNESS_DRIVER/launch ]] || { echo "harness $TH has no launch operation ($HARNESS_DRIVER)"; exit 5; }
   OUT=$($HARNESS_DRIVER/launch "$@")
   RC=$?
@@ -21,8 +22,10 @@ fi
 [[ $LAUNCH_POLL =~ '^[0-9]+(\.[0-9]+)?$' ]] || { echo "invalid LAUNCH_POLL '$LAUNCH_POLL': use a non-negative number of seconds (set in team.env or the environment; team.env wins)"; exit 5; }
 [[ $NAME =~ '^[a-z0-9][a-z0-9-]*$' ]] || { echo "invalid teammate name '$NAME': Admiral accepts $NAME_RULE only"; exit 5; }
 [[ -z $ROLE || $ROLE =~ '^[a-z0-9][a-z0-9-]*$' ]] || { echo "invalid role '$ROLE': Admiral accepts $NAME_RULE only"; exit 5; }
+[[ -z $MEMBER || $MEMBER =~ '^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$' ]] || { echo "invalid crew member '$MEMBER': Admiral accepts $MEMBER_RULE only"; exit 5; }
 command -v admiral >/dev/null || { echo "admiral is not on PATH"; exit 1; }
 crew_takes_arg || { echo "$OLD_ADMIRAL"; exit 5; }
+[[ -z $MEMBER ]] || crew_takes_member || { echo "$NO_MEMBER_ADMIRAL"; exit 5; }
 
 # Admiral puts the last --arg right before the prompt, so each harness's list ends on a single-value flag: a flag that takes
 # several values (claude --disallowedTools, copilot --available-tools and --deny-tool) would read the prompt as one of them.
@@ -30,14 +33,15 @@ ARGS=()
 case $TH in
   claude)
     [[ -n $RO ]] && ARGS+=(--arg --disallowedTools --arg "Edit(/$W/**)" --arg "NotebookEdit(/$W/**)")
-    [[ $ADVISOR != none ]] && ! advisor_same_family $CHOSEN $ADVISOR && ARGS+=(--arg --advisor --arg $ADVISOR)
-    ARGS+=(--arg --model --arg $CHOSEN)
+    [[ -n $CHOSEN && $ADVISOR != none ]] && ! advisor_same_family $CHOSEN $ADVISOR && ARGS+=(--arg --advisor --arg $ADVISOR)
+    [[ -n $CHOSEN ]] && ARGS+=(--arg --model --arg $CHOSEN)
     # Under autopilot the boat inherits the dock's mode: Admiral refuses any looser one, and the default (auto) would block every launch.
     [[ $ADMIRAL_AUTOPILOT != 1 ]] && ARGS+=(--arg --permission-mode --arg $PERMISSION_MODE) ;;
   codex)
     # The interactive flags (`codex --help`), not exec's. No trust or -C override: the dock's startup prompts are settled once.
     source $DRIVERS/codex/lib.zsh
-    RAW=(-s workspace-write -c sandbox_workspace_write.network_access=true --add-dir $D/reports -m $CHOSEN)
+    RAW=(-s workspace-write -c sandbox_workspace_write.network_access=true --add-dir $D/reports)
+    [[ -n $CHOSEN ]] && RAW+=(-m $CHOSEN)
     [[ -n $TEAMMATE_EFFORT ]] && RAW+=(-c "model_reasoning_effort=$(toml_str $TEAMMATE_EFFORT)")
     # -a never: the boat has no one to answer an approval prompt; the sandbox still denies writes outside the workspace.
     RAW+=(-a never)
@@ -48,19 +52,20 @@ case $TH in
     # The shape check of drivers/copilot/launch: the value becomes a flag value, so no leading '-' and no odd characters.
     [[ -z $TEAMMATE_EFFORT || ( $TEAMMATE_EFFORT != *[^A-Za-z0-9._-]* && $TEAMMATE_EFFORT != -* ) ]] || { echo "effort ${(q-)TEAMMATE_EFFORT} has the wrong shape: use letters, digits, . _ - only, not starting with -; 'copilot --help' lists the values; fix EFFORT_<ROLE> in team.env"; exit 5; }
     cp_extra_dirs $D/team.env
-    RAW=(--no-ask-user --allow-all-tools)
+    # The multi-value flags go first, so the list ends on --add-dir (or --model), which takes one value.
+    RAW=(--no-ask-user --allow-all-tools --available-tools bash view edit create glob grep
+      --deny-tool 'shell(git push:*)' 'shell(gh pr merge:*)' 'shell(gh pr create:*)' 'shell(gh api:*)' 'shell(gh issue:*)')
     [[ -n $TEAMMATE_EFFORT ]] && RAW+=(--reasoning-effort $TEAMMATE_EFFORT)
     for d in $D ${CP_EXTRA:#$D}; do RAW+=(--add-dir $d); done
-    RAW+=(--available-tools bash view edit create glob grep
-      --deny-tool 'shell(git push:*)' 'shell(gh pr merge:*)' 'shell(gh pr create:*)' 'shell(gh api:*)' 'shell(gh issue:*)'
-      --model $CHOSEN)
+    [[ -n $CHOSEN ]] && RAW+=(--model $CHOSEN)
     ;;
   *) echo "Admiral crew boats run claude, codex or copilot; harness is '$TH'"; exit 5 ;;
 esac
 for a in $RAW; do ARGS+=(--arg $a); done
 ROLE_ARG=(); [[ -n $ROLE ]] && ROLE_ARG=(--role $ROLE)
+MEMBER_ARG=(); [[ -n $MEMBER ]] && MEMBER_ARG=(--member $MEMBER)
 
-OUT=$(admiral crew launch --name $NAME --dir $W --harness $TH $SHIP_ARG $ROLE_ARG $ARGS \
+OUT=$(admiral crew launch --name $NAME --dir $W --harness $TH $SHIP_ARG $ROLE_ARG $MEMBER_ARG $ARGS \
   -- "You are teammate $NAME. Read $P and do exactly what it says." 2>&1)
 RC=$?
 if (( RC != 0 )); then
@@ -88,3 +93,5 @@ while true; do
 done
 echo "$NAME -"
 echo "  board: admiral attach ${ADMIRAL_SHIP} $NAME   ·   list: admiral crew list --ship ${ADMIRAL_SHIP}   ·   output: teammate-tail.sh"
+WARNINGS=(${(M)${(f)OUT}:#warning:*})
+if (( $#WARNINGS )); then print -rl -- $WARNINGS; fi

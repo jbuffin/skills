@@ -9,6 +9,13 @@ crew_takes_arg() {
   usage=$(admiral crew 2>&1)
   [[ $usage != *"crew launch"* || $usage == *"--arg"* ]]
 }
+crew_takes_member() {
+  local usage
+  usage=$(admiral crew 2>&1)
+  [[ $usage != *"crew launch"* || $usage == *"--member"* ]]
+}
+NO_MEMBER_ADMIRAL="admiral crew launch has no --member: a newer Admiral is needed to launch a crew member"
+MEMBER_RULE="lowercase letters and digits, with '-' inside (not first or last), up to 64 characters"
 OLD_ADMIRAL="admiral crew launch has no --arg: Admiral newer than 0.3.0 is needed (main at 992f678 or later)"
 NAME_RULE="lowercase letters and digits, with '-' inside (not first)"
 DRIVERS=${0:A:h:h}

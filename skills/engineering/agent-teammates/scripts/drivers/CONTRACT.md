@@ -22,7 +22,7 @@ Each harness driver's `driver.env` sets three values and holds nothing else the 
 
 `launch <team-dir> <name> <workdir> <model> <prompt-file> <read-only: 0|1>`
 
-Starts a background session named `<name>` in `<workdir>` (an existing directory) on `<model>`, told to read `<prompt-file>`, and opens a viewer pane if `team.env` asks for one. On success prints line 1 `<session-id> <viewer-ref|->`, then the lines to show the engineer after the "launched" line. Failure prints a message and exits:
+Starts a background session named `<name>` in `<workdir>` (an existing directory) on `<model>` (empty only when `TEAMMATE_MEMBER` is set: the launch names no model), told to read `<prompt-file>`, and opens a viewer pane if `team.env` asks for one. On success prints line 1 `<session-id> <viewer-ref|->`, then the lines to show the engineer after the "launched" line. Failure prints a message and exits:
 
 - 1: sessions couldn't be listed, the session started with no id, or the harness CLI isn't on `PATH`.
 - 2: no background session can run. The last line starts `NO_BG:` and names what to do instead. A host driver never exits 2, because the host is the only way to start a teammate there.
@@ -31,6 +31,8 @@ Starts a background session named `<name>` in `<workdir>` (an existing directory
 Optional input: the environment variable `TEAMMATE_EFFORT`, set on every launch call (empty when the launch has no `--role` or the role has no `EFFORT_<ROLE>` in `team.env`), is the reasoning effort for harnesses that take one. Drivers may ignore it.
 
 Optional input: the environment variable `TEAMMATE_ROLE`, set on every launch call (empty without `--role`), is the teammate's role. The admiral driver passes it to Admiral as the crew boat's `--role`; other drivers ignore it.
+
+Optional input: the environment variable `TEAMMATE_MEMBER`, set on every launch call (empty without `--member`), is the Admiral crew member to launch as. Only the admiral driver reads it: it passes `--member` to Admiral, which applies the member's model, instructions and notes, and exits 5 for a name outside Admiral's member slug rule or an Admiral without `--member`. Admiral's own refusals exit 1. `launch-teammate.sh` refuses `--member` before any driver call when the launch can't go through `admiral crew launch`.
 
 ### status
 

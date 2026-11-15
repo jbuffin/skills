@@ -32,7 +32,7 @@ Tell the engineer these before a Codex run, and record their answer in the run's
 | Setting | Value | Meaning |
 | --- | --- | --- |
 | `HARNESS` | `codex` | selects `scripts/drivers/codex` and this reference |
-| `MODEL` | `gpt-6.1-sol` | the model for a launch with neither `--model` nor `--role` |
+| `MODEL` | `gpt-6.1-sol` | the model for a launch with none of `--model`, `--role` and `--member` |
 | `MODEL_<ROLE>` | per role | the model for `--role <role>` |
 | `EFFORT_<ROLE>` | per role | the reasoning effort for `--role <role>`, passed as `-c model_reasoning_effort=<effort>`. Empty passes nothing |
 | `VIEWER` | `none` | Codex teammates have no viewer panes |
