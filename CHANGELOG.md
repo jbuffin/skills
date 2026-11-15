@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 3.4.0
+
+### Minor Changes
+
+- [#241](https://github.com/jbuffin/skills/pull/241) [`259b30f`](https://github.com/jbuffin/skills/commit/259b30fb48e6bde17c935b8a775542aafdca747c) Thanks [@jbuffin](https://github.com/jbuffin)! - When no registered mission fits what you point Commodore at, it now designs an ad hoc mission for the run instead of only asking which one you mean. It validates the mission with `mission.py validate`, shows its source of truth, task force, builder, checker, stop rule and delivery, and asks you to confirm it; under autopilot the proposal is a question item and the run stops. The Admiral report gains an optional `mission` field, `{name, ad_hoc}`, which Commodore writes when the run has a settled mission or stops with an ad hoc proposal pending, and leaves out otherwise.
+
 ## 3.3.0
 
 ### Minor Changes
