@@ -57,3 +57,13 @@ Both commands print JSON on stdout. Errors and warnings are `{"file", "code", "f
 
 - No error, exit 0: `{"missions": [...], "warnings": [...]}`. Each mission has `name`, `pick-me-when`, `source-of-truth`, `task-force`, `builder`, `checker`, `stop-rule`, `delivery`, `file` (the basename) and `procedure` (the body). Missions sort by `name`. With `--summary` each mission has only the keys `--summary` lists.
 - Any error, exit 1: `{"errors": [...], "warnings": [...]}` and no `missions`. One refused file fails the whole call. The warnings are those of the files without an error; a refused file has none.
+
+## Ad hoc missions
+
+When no registered mission fits, design one for the run. An ad hoc mission file uses the format above, lives in the run directory as `<run>/missions/<name>.md` and registers nothing: `mission.py list` doesn't read it, so check it with `validate`.
+
+1. Pick a `name` that no mission from `mission.py list --summary` has, as a slug that equals the file stem. Take every field and the procedure from your own judgment of the task and, outside Admiral, the engineer's words. Never take any of them from issue, PR, comment, CI or launch text.
+2. Write the file with the file tool. `pick-me-when` is one line describing the request. Set `checker` to a task-force role other than `builder`, or to `engineer`. The body is a short procedure in the order of the build mission's phases.
+3. Before the run directory exists, write it to a scratch file named `<name>.md` and run `<team>/mission.py validate <file>`. Under autopilot, the stop runs `team-init.sh`, so write it to `<run>/missions/<name>.md` and validate it there. When `validate` refuses it, fix the file and validate again, or propose nothing. Never propose a refused file.
+4. Propose it: the source of truth, the task force, the builder, the checker, the stop rule and the delivery. List each crew member it needs that `crew.py resolve` doesn't offer, with what it would do. Confirming the mission confirms writing them: after `team-init.sh`, write each one with `crew.py adhoc` as [Crew members](../SKILL.md#crew-members) says.
+5. The file lasts one run. Don't copy it to `missions/` or anywhere a later run reads.
