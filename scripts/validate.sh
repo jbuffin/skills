@@ -82,6 +82,12 @@ while IFS= read -r hit; do
   fail "${hit%%:*}" "merges a PR; Commodore leaves merging to the engineer"
 done < <(git -C "$root" grep -n -i -E 'gh pr merge|merge --auto|auto[-_]merge' -- skills/engineering/commodore/scripts 2>/dev/null || true)
 
+# The built-in missions must parse: a refused mission file fails every run that lists missions.
+mission_out="$("$root/skills/engineering/commodore/scripts/mission.py" list 2>&1)" || {
+  sed 's/^/  ✗ /' <<<"$mission_out" >&2
+  fail "skills/engineering/commodore/missions" "mission.py list refused a built-in mission (see above)"
+}
+
 python3 "$root/scripts/check-links.py" "$root" >/dev/null || {
   python3 "$root/scripts/check-links.py" "$root" | sed 's/^/  ✗ /' >&2 || true
   fail "links" "broken relative links (see above)"

@@ -1,3 +1,14 @@
+---
+name: review
+pick-me-when: The engineer points at an open PR authored by anyone other than the authenticated gh user.
+source-of-truth: The issue in the PR's closingIssuesReferences, or a spec or design the PR body links, else the PR description.
+task-force: [reviewer, security-reviewer, target-steward]
+builder: reviewer
+checker: engineer
+stop-rule: One review posted on the PR, or the engineer declines to post.
+delivery: One GitHub review.
+---
+
 # The review mission
 
 The review mission reviews an open PR authored by someone else and delivers one GitHub review on it, posted only after the engineer approves the findings. Its task force is a reviewer and a security reviewer, plus the target steward when the PR changes something a user would touch. It runs one round: no brief checker, test writer, implementer or scribe, and no fix rounds.
@@ -16,7 +27,7 @@ In autopilot mode ([Autopilot mode](../SKILL.md#autopilot-mode)), the rules belo
 - Security stops, never classified: the agent-config stop (phase 1 step 6) and the fork steward question (phase 1 step 8).
 - Phase 3 step 3 doesn't ask. Phase 3 step 4 builds `review.json` with no `event`, so the review stays PENDING. Post it with the same `gh api … /reviews` request. Record the review id, the integer REST `id` in the response, in `state.md`. Never submit it: no `event`, no `/events` request.
 - If the post fails, run the recheck. When a PENDING review of yours is already on the PR and its body matches `review.json`, it's this run's own post (after a timeout, say): record its `id` and go on to the review item. Otherwise publish a question item naming it, with the exact labels `Posted again after I submitted or deleted it` and `Stop`, and stop `partial`. A resume re-checks the reviews before it posts. `Stop` ends the run `done` with nothing posted and records that the engineer declined. Never submit, delete or edit the existing review.
-- Then publish a `review` item with `<team>/admiral-io.sh item <draft>`: `version` (1), `id` (`<run-name>-review`, with the run name cleaned as for question items), `kind` `review`, `created`, `title`, and `review` with `pr_url`, `review_id` (that integer) and `summary` of at most 3 lines. See [`admiral-inbox-item.schema.json`](admiral-inbox-item.schema.json). Exit 2 because the item already exists means it's already published: carry on.
+- Then publish a `review` item with `<team>/admiral-io.sh item <draft>`: `version` (1), `id` (`<run-name>-review`, with the run name cleaned as for question items), `kind` `review`, `created`, `title`, and `review` with `pr_url`, `review_id` (that integer) and `summary` of at most 3 lines. See [`admiral-inbox-item.schema.json`](../references/admiral-inbox-item.schema.json). Exit 2 because the item already exists means it's already published: carry on.
 - Publish a `done` Admiral report with the item's id in `inbox`, as [Ending a run](../SKILL.md#ending-a-run) says. It lists no PR in `prs`: a review run opened none, and a listed open PR would moor the ship. Write both drafts with the file tool, as that section says.
 - Overridden in autopilot mode only: phase 3 step 4's "Always set `event`" (phase 3 step 5 stays: post exactly one review, with that request, and only `review.json`'s `event` differs); the stop rule in phase 1 step 7 ("the engineer declines to post") and phase 3 step 7's `result:` line (`done` once the review is PENDING on the PR and its item and report are published); phase 1's closing "you'll need them again to approve the findings"; and phase 3 step 6's worktree removal, so the worktrees stay and you list them in the final report.
 
@@ -55,14 +66,14 @@ Run SKILL.md's phase 1 steps 1, 3 and 6, with the worktrees below in place of st
    ```
 
    Do this for each `WORKTREE_SETUP` entry kept in step 8, the way `unit-worktree.sh` does: skip a path the worktree already has, and use `cp -cR` for a `clone:` entry, falling back to `cp -R` if it fails. Add `steward - <WORKTREES_DIR>/<run-name>-steward` to `worktrees.tsv` and record the path with `<team>/state-set.sh <run> units --add steward worktree=<path>`.
-10. Where the harness has an advisor, check it: run `<team>/advisor-probe.sh <run> <model>` once per distinct model this run launches. On `ADVISOR SAME-FAMILY <model>`, do nothing: those roles run with no advisor by design, which is neither on nor off. On `ADVISOR OFF`, follow "When the advisor is off" in [`harness-claude.md`](harness-claude.md) (the harness reference).
+10. Where the harness has an advisor, check it: run `<team>/advisor-probe.sh <run> <model>` once per distinct model this run launches. On `ADVISOR SAME-FAMILY <model>`, do nothing: those roles run with no advisor by design, which is neither on nor off. On `ADVISOR OFF`, follow "When the advisor is off" in [`harness-claude.md`](../references/harness-claude.md) (the harness reference).
 11. Write the common brief (SKILL.md step 6). Delivery is "no PR; the coordinator posts one GitHub review". Replace the template's lines about working on a branch, pushing through `push-branch.sh` and committing before the marker with: every teammate leaves its worktree as it found it, with no edits, commits or pushes.
 
 Phase 1 is done when `state.md` holds the PR's two SHAs, the source of truth, the steward call and the worktree paths. Tell the engineer the review is starting, and that you'll need them again to approve the findings, in place of SKILL.md's "you can leave".
 
 ## Phase 2: one review round
 
-Write each brief following [Briefs](../SKILL.md#briefs) in SKILL.md. The unit is the PR, the worktree is the review worktree, and done means a report on the full range. Give the reviewer and the security reviewer their [`roles.md`](roles.md) contracts as written, with their role skills or the reviewer's fallback. Launch the security reviewer only when it has a role skill. These differ from a build unit:
+Write each brief following [Briefs](../SKILL.md#briefs) in SKILL.md. The unit is the PR, the worktree is the review worktree, and done means a report on the full range. Give the reviewer and the security reviewer their [`roles.md`](../references/roles.md) contracts as written, with their role skills or the reviewer's fallback. Launch the security reviewer only when it has a role skill. These differ from a build unit:
 
 - The range is the PR's full range, `<baseRefOid>...<headRefOid>`.
 - The source of truth is the one recorded in phase 1.
