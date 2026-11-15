@@ -95,10 +95,18 @@ class TestMemberArgv(MemberCase):
         self.assert_ends_on_a_single_value_flag(args)
 
     def test_claude_read_only_under_autopilot_without_a_model_ends_on_a_single_value_flag(self):
-        _, _, _, args = self.launched("--member", "crew-lead", "--read-only", ADMIRAL_AUTOPILOT="1")
+        self.w.write_team_env(extra=["EFFORT_SCRIBE=high"])
+        _, _, _, args = self.launched(
+            "--member", "crew-lead", "--role", "scribe", "--read-only", ADMIRAL_AUTOPILOT="1"
+        )
         self.assertIn("--disallowedTools", args)
         self.assertNotIn("--model", args)
+        self.assertEqual(self.value(args, "--effort"), "high")
         self.assert_ends_on_a_single_value_flag(args)
+
+    def test_claude_read_only_under_autopilot_without_a_model_or_effort_exits_5_naming_the_need(self):
+        done = self.refused("--member", "crew-lead", "--read-only", ADMIRAL_AUTOPILOT="1")
+        self.assertIn("--effort", done.out)
 
 
 class TestMemberRefusals(MemberCase):

@@ -20,11 +20,11 @@ This can be any directory you choose, or one an orchestrating skill gives you. I
   | Setting | Default | Meaning |
   | --- | --- | --- |
   | `HARNESS` | claude | the run's harness; selects `scripts/drivers/<HARNESS>` and `references/harness-<HARNESS>.md` for every teammate not locked to another harness (`HARNESS_<ROLE>`) |
-  | `MODEL` | the harness reference | the model for a launch with neither `--model` nor `--role` |
+  | `MODEL` | the harness reference | the model for a launch with none of `--model`, `--role` and `--member` |
   | `HARNESS_<ROLE>` | unset | the harness `--role <role>` runs on, when it isn't the run's `HARNESS`; written by `crew.py cast --save` for a crew member locked to a harness. `launch-teammate.sh --harness <h>` overrides it. Launch a custom-role teammate with `--harness <run harness>` when unlocked and `--harness <h>` when its member is locked |
   | `MODEL_<ROLE>` | none | the model for `--role <role>`; see "Set the model explicitly" |
   | `EFFORT_<ROLE>` | empty | the reasoning effort for `--role <role>`, on a harness that takes one; empty passes none. The reference says how the harness passes it |
-  | `REQUIRE_ROLE` | unset | `1` makes every launch pass `--role` or `--model` |
+  | `REQUIRE_ROLE` | unset | `1` makes every launch pass `--role`, `--member` or `--model` |
   | `ADVISOR` | the harness reference | the advisor model, where the harness has an advisor; `none` turns it off. A teammate whose model is in the same family as `ADVISOR` launches without it, by design. The reference gives the pairing rules |
   | `PERMISSION_MODE` | the harness reference | the teammates' permission mode |
   | `STALL_MIN` | 10 | the quiet minutes before STALL |
@@ -81,7 +81,7 @@ When `ADMIRAL_SHIP` is non-empty, in the caller's environment or in `team.env`, 
 ## Launch, re-task, close
 
 ```bash
-<teammates>/launch-teammate.sh [--read-only] [--model <model>] [--role <role>] <team-dir> <name> <workdir|unit> [prompt-file]
+<teammates>/launch-teammate.sh [--read-only] [--model <model>] [--role <role>] [--member <member>] <team-dir> <name> <workdir|unit> [prompt-file]
 <teammates>/retasked.sh        <team-dir> <name>                                              # after sending new work
 <teammates>/retask.sh          <team-dir> <name> <message-file>                               # send new work by the driver's send (SEND=script)
 <teammates>/close-teammate.sh  <team-dir> <name>...
@@ -95,7 +95,7 @@ Write a teammate's `prompts/<name>.proof` before launching or re-tasking it, one
 
 To give a live teammate new work (`LIVE_MESSAGING=1`), send it a message the way the harness reference says, addressed by the teammate's name. Then run `retasked.sh` so the watchdog stops counting the old marker. With `LIVE_MESSAGING=0`, and on any harness whose driver declares `SEND=script`, write the next job to a file and run `retask.sh` instead of resuming the session yourself: it sends the job through the driver and records the re-task, so don't run `retasked.sh` after it. It sends nothing on a `SEND=tool` harness and exits 4; send with the harness's tool, then run `retasked.sh`. The reference also covers the permission class a teammate needs so your message isn't held for approval.
 
-Set the model explicitly. The launcher picks it in this order: `--model <model>`; else, with `--role <role>`, `MODEL_<ROLE>` from `team.env` (the role uppercased, `-` and `.` as `_`, so `brief-checker` reads `MODEL_BRIEF_CHECKER`); else `MODEL`, whose default the harness reference gives. If `MODEL_<ROLE>` is unset or empty, the launch exits 5 and names the variable, and it never falls back to `MODEL`. With `REQUIRE_ROLE=1`, a launch with neither `--role` nor `--model` exits 5, so a forgotten flag fails loudly. Flags go in any order before the positional arguments. The launcher passes the model name through unchecked.
+Set the model explicitly. The launcher picks it in this order: `--model <model>`; else, with `--role <role>`, `MODEL_<ROLE>` from `team.env` (the role uppercased, `-` and `.` as `_`, so `brief-checker` reads `MODEL_BRIEF_CHECKER`); else `MODEL`, whose default the harness reference gives. If `MODEL_<ROLE>` is unset or empty, the launch exits 5 and names the variable, and it never falls back to `MODEL`. With `REQUIRE_ROLE=1`, a launch with neither `--role` nor `--model` exits 5, so a forgotten flag fails loudly. `--member <member>` launches the teammate as that Admiral crew member (`admiral crew launch --member`): it satisfies `REQUIRE_ROLE=1` alone, and with no `--model` the launch names no model and reads no `MODEL_<ROLE>` or `MODEL`, so Admiral applies the member's model or the dock's default. The launcher still picks the harness as above and Admiral refuses one that differs from the member's lock, so pass `--harness <the lock>`. It needs the admiral driver: outside an Admiral ship, for a codex or copilot teammate under `ADMIRAL_AUTOPILOT=1`, and for a read-only codex or copilot teammate it exits 5 before any launch; put the member's instructions in the prompt and launch with `--role` there. Flags go in any order before the positional arguments. The launcher passes the model name through unchecked.
 
 Give each teammate its own working directory, which is usually a git worktree. The reference says which folders are trusted.
 
