@@ -158,7 +158,7 @@ def read_all(entries):
 
 
 def list_entries(directory, required=True):
-    """(entries, errors) for `directory`'s .md files; one that can't be listed (or is missing, if `required`) is an error."""
+    """(entries, errors) for `directory`'s .md files; an unlistable (or, if `required`, missing) one is an error."""
     try:
         if required:
             os.listdir(directory)
