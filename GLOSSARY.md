@@ -12,13 +12,15 @@
 
 **Non-blocking finding**: a review finding below the threshold. It's recorded for the run's final summary, and the implementer may fix it if the fix is trivial. A note from the fix check is recorded the same way but never goes to the implementer, whatever its severity. _Avoid_: nit, minor finding.
 
-**Mission**: what a commodore run is for, worked out from what the engineer points it at. It decides the run's task force. A mission is registered by its mission file; the built-in ones are build, review and PR feedback. _Avoid_: job, task type.
+**Mission**: what a commodore run is for, worked out from what the engineer points it at. It decides the run's task force. A mission is registered by its mission file: the built-in ones are build, review and PR feedback, and a **Saved mission** adds to them. _Avoid_: job, task type.
 
 **Task force**: the set of roles a mission assembles for a run. _Avoid_: team composition, cast.
 
-**Mission file**: the Markdown file in `missions/` that registers a mission: frontmatter naming its task force, builder, checker, stop rule and delivery, then the procedure as the body. `mission.py` reads it as text and never runs it. _Avoid_: mission definition, mission config.
+**Mission file**: the Markdown file that registers a mission, in the skill's `missions/` for a built-in one or in an override layer's `missions/` directory for a saved one: frontmatter naming its task force, builder, checker, stop rule and delivery, then the procedure as the body. `mission.py` reads it as text and never runs it. _Avoid_: mission definition, mission config.
 
 **Ad hoc mission**: a mission Commodore designs for one run when no registered mission fits, written in the mission-file format into the run directory and checked with `mission.py validate`. It registers nothing, and only that run uses it. Unlike an **Ad hoc crew member**, it is never kept for later runs. _Avoid_: custom mission, temporary mission.
+
+**Saved mission**: a mission file kept in the user-global, fleet or repo layer's `missions/` directory, which `mission.py list` shows beside the built-in missions. It adds to them and is dropped with a warning when it is named like a built-in one. A run that uses it works from a validated copy in its run directory. _Avoid_: custom mission.
 
 **Builder**: the role in a mission's task force that makes the mission's work: the implementer in build and PR feedback, the reviewer in review. It is a slot in the mission file, not a role of its own. Unlike the brief checker and the **Fix checker**, which are roles that check a brief or a fix, the builder produces what the checker checks. _Avoid_: implementer, author.
 
@@ -38,7 +40,7 @@
 
 **Role contract**: the part of a role that always applies, whatever role skill runs: its inputs, launch flags, scope, report, done signal, proofs and safety rules. A role skill or its instructions can't override it. _Avoid_: role rules, base prompt.
 
-**Override layer**: one of the places a crew member is defined, in precedence order: built-in, fleet inside an Admiral ship or user-global outside one, repo, then the run, which only the engineer's prompt or the launch can set. A member in a later layer replaces the one with the same name. _Avoid_: config level, scope, tier.
+**Override layer**: one of the places a crew member or a mission is defined, in precedence order: built-in, fleet inside an Admiral ship or user-global outside one, repo, then, for crew members only, the run, which only the engineer's prompt or the launch can set. A member in a later layer replaces the one with the same name. A saved mission in a later layer replaces an earlier saved one, but adds to the built-in missions and never replaces one. _Avoid_: config level, scope, tier.
 
 **Unit**: one slice of a run's work that ships as its own branch and PR, reviewed in its own review rounds. _Avoid_: task, chunk, slice.
 
