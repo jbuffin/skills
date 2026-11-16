@@ -1,5 +1,13 @@
 # jasonbuffin-skills
 
+## 3.5.0
+
+### Minor Changes
+
+- [#244](https://github.com/jbuffin/skills/pull/244) [`ec5bf32`](https://github.com/jbuffin/skills/commit/ec5bf321d0246a0e3a38d1e10cbd426e89dea949) Thanks [@jbuffin](https://github.com/jbuffin)! - At the end of a run on an ad hoc mission, Commodore now offers to keep it. Outside Admiral it asks once whether to keep it user-global, keep it for the repo, or drop it, and `mission.py keep` saves the validated file into that layer without overwriting anything. Inside Admiral the Admiral report gains an optional `missions` field carrying the proposal for Admiral's Inbox. A saved mission then shows up in `mission.py list` for later runs.
+
+- [#243](https://github.com/jbuffin/skills/pull/243) [`348675f`](https://github.com/jbuffin/skills/commit/348675f96e3b98f4bd7370697f4c95c088837e50) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore now finds saved missions beside the built-in ones. `mission.py list` resolves missions over the built-in, user-global (or fleet, inside Admiral) and repo (`--repo-dir`) layers, tags each with its `layer` and `path`, and drops a saved mission named like a built-in one with a warning. When you confirm a saved mission, the run works from a validated copy recorded as `saved file:` in `state.md`.
+
 ## 3.4.0
 
 ### Minor Changes
