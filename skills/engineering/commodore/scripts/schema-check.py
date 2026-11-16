@@ -111,6 +111,12 @@ def kw_min_length(arg, value, path, _schema):
     return []
 
 
+def kw_max_length(arg, value, path, _schema):
+    if isinstance(value, str) and len(value) > arg:
+        return [f"{path or '(root)'}: {short(value)} is longer than {arg}"]
+    return []
+
+
 def kw_unique_items(arg, value, path, _schema):
     if not arg or not isinstance(value, list):
         return []
@@ -158,6 +164,7 @@ KEYWORDS = {
     "items": kw_items,
     "minItems": kw_min_items,
     "minLength": kw_min_length,
+    "maxLength": kw_max_length,
     "uniqueItems": kw_unique_items,
     "enum": kw_enum,
     "const": kw_const,
@@ -201,6 +208,7 @@ ARGUMENTS = {
     "properties": lambda a: isinstance(a, dict),
     "minItems": lambda a: isinstance(a, int) and not isinstance(a, bool) and a >= 0,
     "minLength": lambda a: isinstance(a, int) and not isinstance(a, bool) and a >= 0,
+    "maxLength": lambda a: isinstance(a, int) and not isinstance(a, bool) and a >= 0,
     "uniqueItems": lambda a: isinstance(a, bool),
     "enum": lambda a: isinstance(a, list),
     "pattern": lambda a: isinstance(a, str),

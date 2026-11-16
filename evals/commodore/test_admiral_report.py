@@ -45,6 +45,13 @@ NOTE = {
     "ad-hoc": False,
 }
 PATTERN = r"^/prs/0/closes/0: .*doesn't match pattern"
+KEEP = {
+    "name": "docs-audit",
+    "scope": "fleet",
+    "repo": None,
+    "text": "---\nname: docs-audit\n---\n\nAudit the docs.\n",
+}
+MAX_TEXT = 65536
 
 
 def with_(**changes):
@@ -115,6 +122,59 @@ class TestValidReports(ReportCase):
 
     def test_a_report_naming_an_ad_hoc_mission_is_published(self):
         self.assertAccepted(with_(mission={"name": "docs-audit", "ad_hoc": True}))
+
+
+class TestKeepProposals(ReportCase):
+    def test_a_fleet_and_a_repo_keep_proposal_are_published(self):
+        repo_item = {**KEEP, "scope": "repo", "repo": "example/fixture"}
+        self.assertAccepted(with_(missions=[KEEP]))
+        self.assertAccepted(with_(missions=[repo_item]))
+        self.assertAccepted(with_(missions=[{**KEEP, "repo": "example/fixture"}]))
+
+    def test_a_report_without_missions_is_still_published(self):
+        self.assertAccepted(DONE)
+
+    def test_text_of_exactly_the_limit_is_published(self):
+        self.assertAccepted(with_(missions=[{**KEEP, "text": "a" * MAX_TEXT}]))
+
+    def test_the_limit_counts_characters_not_bytes(self):
+        self.assertAccepted(with_(missions=[{**KEEP, "text": "é" * MAX_TEXT}]))
+        self.assertAccepted(with_(missions=[{**KEEP, "text": "\U0001f600" * MAX_TEXT}]))
+
+    def test_text_over_the_limit_is_rejected(self):
+        self.assertRejected(with_(missions=[{**KEEP, "text": "a" * (MAX_TEXT + 1)}]), r"^/missions/0/text")
+        self.assertRejected(with_(missions=[{**KEEP, "text": "é" * (MAX_TEXT + 1)}]), r"^/missions/0/text")
+
+    def test_empty_text_is_rejected(self):
+        self.assertRejected(with_(missions=[{**KEEP, "text": ""}]), r"^/missions/0/text")
+
+    def test_a_keep_proposal_missing_a_field_is_rejected(self):
+        for key in KEEP:
+            with self.subTest(key=key):
+                item = {k: v for k, v in KEEP.items() if k != key}
+                self.assertRejected(with_(missions=[item]), rf"^/missions/0: missing required property '{key}'")
+
+    def test_a_keep_proposal_with_an_extra_field_is_rejected(self):
+        self.assertRejected(with_(missions=[{**KEEP, "layer": "repo"}]), r"^/missions/0")
+
+    def test_an_unknown_scope_is_rejected(self):
+        for scope in ("user-global", "everywhere"):
+            with self.subTest(scope=scope):
+                self.assertRejected(with_(missions=[{**KEEP, "scope": scope}]), r"^/missions/0/scope")
+
+    def test_a_bad_name_is_rejected(self):
+        for name in ("", "Docs Audit", "docs_audit", "../x", "-docs", "a" * 65):
+            with self.subTest(name=name):
+                self.assertRejected(with_(missions=[{**KEEP, "name": name}]), r"^/missions/0/name")
+
+    def test_a_repo_keep_proposal_without_an_owner_slash_repo_is_rejected(self):
+        for repo in (None, "fixture"):
+            with self.subTest(repo=repo):
+                self.assertRejected(with_(missions=[{**KEEP, "scope": "repo", "repo": repo}]), r"^/missions/0/repo")
+
+    def test_missions_that_is_not_an_array_of_objects_is_rejected(self):
+        self.assertRejected(with_(missions=KEEP), r"^/missions")
+        self.assertRejected(with_(missions=["docs-audit"]), r"^/missions/0")
 
 
 class TestInvalidReports(ReportCase):

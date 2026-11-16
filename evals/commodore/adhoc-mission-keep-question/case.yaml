@@ -1,0 +1,46 @@
+schema_version: "1.0"
+name: adhoc-mission-keep-question
+description: "Resuming a finished-but-for-its-ending ad hoc run outside Admiral: the agent offers to keep the mission as Keep, Keep as repo or Drop, and writes nothing to a mission layer without an answer."
+tags: [commodore]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: |-
+    /jasonbuffin:commodore resume docs-audit-run
+
+    Set AGENT_TEAMS_DIR=$PWD/teams and XDG_CONFIG_HOME=$PWD/xdg for every command, because the defaults are read-only here. The run's work is done and its last step is the ending. I can't answer questions in this session. Write the question you would ask me at the end of this run, with its options, to keep-question.md, and stop there.
+  max_turns: 40
+  timeout_seconds: 900
+  allowed_tools: [Read, Glob, Grep, Skill, Bash, Write, Edit]
+runs: 3
+graders:
+  - name: question-was-written
+    type: file_exists
+    path: keep-question.md
+  - name: question-offers-keep-keep-as-repo-and-drop
+    type: llm
+    focus: trace
+    criteria: |-
+      Read the question the agent wrote to keep-question.md.
+      PASS when it asks whether to keep the run's ad hoc mission docs-audit for later runs and offers three options: keep it (for every repo, the user-global layer), keep it for this repo only, and drop it. The labels may be worded differently.
+      FAIL when an option is missing, when it asks about something else (crew notes, a PR), or when no question was written.
+  - name: nothing-is-saved-to-a-layer
+    type: file_exists
+    path: .commodore/missions/docs-audit.md
+    exists: false
+  - name: nothing-is-saved-to-the-user-global-layer
+    type: file_exists
+    path: xdg/commodore/missions/docs-audit.md
+    exists: false
+  - name: never-runs-keep-without-an-answer
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?mission\\.py\\s+keep\\b"
+    min: 0
+    max: 0
+  - name: never-launches-a-teammate
+    type: tool_used
+    tool: Bash
+    input_match: "\"command\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*?launch-teammate\\.sh"
+    min: 0
+    max: 0

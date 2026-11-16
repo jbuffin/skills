@@ -18,7 +18,9 @@
 
 **Mission file**: the Markdown file that registers a mission, in the skill's `missions/` for a built-in one or in an override layer's `missions/` directory for a saved one: frontmatter naming its task force, builder, checker, stop rule and delivery, then the procedure as the body. `mission.py` reads it as text and never runs it. _Avoid_: mission definition, mission config.
 
-**Ad hoc mission**: a mission Commodore designs for one run when no registered mission fits, written in the mission-file format into the run directory and checked with `mission.py validate`. It registers nothing, and only that run uses it. Unlike an **Ad hoc crew member**, it is never kept for later runs. _Avoid_: custom mission, temporary mission.
+**Ad hoc mission**: a mission Commodore designs for one run when no registered mission fits, written in the mission-file format into the run directory and checked with `mission.py validate`. It registers nothing, and only that run uses it. Unlike an **Ad hoc crew member**, it is kept for later runs only when the engineer answers a **Keep proposal** at the end of the run, which turns it into a **Saved mission**. _Avoid_: custom mission, temporary mission.
+
+**Keep proposal**: the end-of-run offer to save a run's **Ad hoc mission** as a **Saved mission**: a question to the engineer outside Admiral, an entry in the Admiral report's `missions` inside it. It is not the ad hoc mission proposal the engineer confirms before the run starts.
 
 **Saved mission**: a mission file kept in the user-global, fleet or repo layer's `missions/` directory, which `mission.py list` shows beside the built-in missions. It adds to them and is dropped with a warning when it is named like a built-in one. A run that uses it works from a validated copy in its run directory. _Avoid_: custom mission.
 
