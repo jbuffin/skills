@@ -3,6 +3,7 @@
 
 import datetime
 import errno
+import hashlib
 import json
 import os
 import re
@@ -27,6 +28,9 @@ ROLES = [
 HARNESSES = ["claude", "codex", "copilot"]
 KNOWN_FIELDS = {"name", "role", "pick-me-when", "model", "harness", "ad-hoc", "ad-hoc-run", "based-on", "skills"}
 MAX_BYTES = 65536
+SIDECAR_PATH = re.compile(r"crew/([^/.][^/]*\.md)")
+HEX40 = re.compile(r"[0-9a-f]{40}")
+HEX64 = re.compile(r"[0-9a-f]{64}")
 MIN_QUOTED = 2
 MIN_PRINTABLE = 32
 DEL = 127
@@ -301,8 +305,66 @@ def review_fields(fields, body, layer):
     return warnings, kept, body, refused
 
 
-def read_member(path, layer_real, layer, stem):
-    """Return (member, warnings, refused); raise Unreadable for an error."""
+def no_constant(name):
+    raise ValueError(name)
+
+
+def sidecar_fields(raw):
+    """The `shared` object for sidecar bytes, or None when the sidecar is unreadable."""
+    try:
+        data = json.loads(raw.decode("utf-8"), parse_constant=no_constant)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    owner, slash, repo = str(data.get("repo")).partition("/")
+    tag = data.get("tag")
+    version = data.get("version")
+    path, commit, digest = data.get("path"), data.get("commit"), data.get("content_sha256")
+    if not (
+        type(version) is int
+        and version == 1
+        and data.get("host") == "github.com"
+        and slash
+        and segments_ok(owner, repo)
+        and isinstance(path, str)
+        and SIDECAR_PATH.fullmatch(path)
+        and isinstance(commit, str)
+        and HEX40.fullmatch(commit)
+        and isinstance(digest, str)
+        and HEX64.fullmatch(digest)
+        and (tag is None or (isinstance(tag, str) and tag))
+    ):
+        return None
+    return {"owner": owner, "repo": repo, "commit": commit, "tag": tag, "digest": digest}
+
+
+def read_sidecar(path, layer_real, member_raw):
+    """(shared, warning message): `shared` is None with no sidecar or an unreadable one."""
+    if not os.path.lexists(path):
+        return None, None
+    try:
+        info = os.stat(path)
+        if not stat.S_ISREG(info.st_mode):
+            return None, "sidecar is not a regular file"
+        if info.st_size > MAX_BYTES:
+            return None, f"sidecar is over {MAX_BYTES} bytes"
+        if os.path.commonpath([os.path.realpath(path), layer_real]) != layer_real:
+            return None, "sidecar resolves outside its layer directory"
+        with open(path, "rb") as handle:
+            raw = handle.read()
+    except OSError as err:
+        return None, f"sidecar can't be read: {err.strerror or err}"
+    found = sidecar_fields(raw)
+    if found is None:
+        return None, "sidecar is not a valid version 1 shared-member sidecar"
+    digest = found.pop("digest")
+    found["detached"] = hashlib.sha256(member_raw).hexdigest() != digest
+    return found, None
+
+
+def read_member(path, layer_real, layer, stem, sidecar=False):
+    """Return (member, warnings, refused); raise Unreadable for an error. `sidecar` reads `<stem>.shared.json`."""
     try:
         if os.stat(path).st_size > MAX_BYTES:
             raise Unreadable("too-large", None, f"file is over {MAX_BYTES} bytes")
@@ -332,9 +394,17 @@ def read_member(path, layer_real, layer, stem):
         "instructions": body,
         "layer": layer,
         "file": f"{stem}.md",
+        "shared": None,
     }
     for item in warnings:
         item["layer"], item["file"] = layer, member["file"]
+    if sidecar:
+        member["shared"], problem = read_sidecar(f"{path[: -len('.md')]}.shared.json", layer_real, raw)
+        if problem:
+            name = f"{stem}.shared.json"
+            warnings.append(
+                {"layer": layer, "file": name, "code": "shared-unreadable", "field": None, "message": problem}
+            )
     return member, warnings, refused
 
 
@@ -479,7 +549,7 @@ def resolve(layers, run_id=None, guard=None):
             path = os.path.join(directory, filename)
             stem = filename[: -len(".md")]
             try:
-                member, found, refused = read_member(path, layer_real, label, stem)
+                member, found, refused = read_member(path, layer_real, label, stem, sidecar=True)
             except Unreadable as err:
                 errors.append(
                     {"layer": label, "file": filename, "code": err.code, "field": err.field, "message": err.message}
@@ -1046,6 +1116,7 @@ def build_cast(members, picks, harnesses, unlocks, warn):
             "ad-hoc": member["ad-hoc"],
             "ad-hoc-run": member["ad-hoc-run"],
             "pinned": member["layer"] == "run",
+            "_shared": member["shared"],
             "_lock": lock,
             "_unlocked": unlocked,
             "_own": own,
@@ -1127,7 +1198,13 @@ def cast_table(entries, harnesses, warn):
         "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for e in entries:
-        source = e["layer"] + (" (pinned)" if e["pinned"] else "")
+        parts = ["pinned"] if e["pinned"] else []
+        shared = e["_shared"]
+        if shared:
+            parts.append(f"shared by {shared['owner']}/{shared['repo']}@{shared['commit'][:7]}")
+            if shared["detached"]:
+                parts[-1] += ", edited here"
+        source = e["layer"] + (f" ({', '.join(parts)})" if parts else "")
         cells = [
             e["role"],
             e["member"],

@@ -89,6 +89,7 @@ class ResolverCase(unittest.TestCase):
         d.mkdir(parents=True, exist_ok=True)
         for name, content in files.items():
             path = d / name
+            path.parent.mkdir(parents=True, exist_ok=True)
             if isinstance(content, bytes):
                 path.write_bytes(content)
             else:

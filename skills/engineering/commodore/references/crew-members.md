@@ -183,6 +183,31 @@ It prints nothing and exits 0 when the member has no notes (or is the fix checke
 - **Safety.** Refuses when `commodore/`, `crew/` or anything from `memory/` down is a symlink, when the memory root is inside the repo, and when the run directory's name isn't `[A-Za-z0-9._-]+`. Directories above `commodore/` aren't checked.
 - **Refused.** Inside Admiral (`ADMIRAL_SHIP` set; Admiral's Inbox writes notes there): exit 5. The fix checker and any failure above, an unresolved crew, an unknown member or a bad `repo` origin: exit 1 with an `ERROR` line and nothing on stdout. A bad call (`--run`, `--member` or `--proposal` missing, twice or without a value, an unknown flag): exit 5.
 
+## Shared members
+
+A member imported from someone's share repo has a provenance sidecar. A resolver reads it as the member's provenance and never as a member. Only Admiral writes sidecars; a resolver never does.
+
+- **File.** `<stem>.shared.json` beside `<stem>.md`, in any standing layer. The ad hoc directory never has sidecars: its `.shared.json` files are ignored silently. A sidecar with no `<stem>.md` is an orphan: no member, no warning.
+- **Schema.** One JSON object. Unknown fields are ignored. A resolver reads these:
+
+  | Field | Valid value |
+  | --- | --- |
+  | `version` | the integer `1` (not `true`, not `1.0`) |
+  | `host` | `"github.com"` |
+  | `repo` | `<owner>/<name>`: exactly two segments, each matching `^[A-Za-z0-9_.-]+$` and not `.` or `..` |
+  | `path` | `crew/<file>.md`: exactly one segment after `crew/`, not starting with `.` |
+  | `commit` | 40 lowercase hex characters |
+  | `content_sha256` | 64 lowercase hex characters: the sha256 of the bytes Admiral wrote to `<stem>.md` |
+  | `tag` | absent, `null`, or a non-empty string |
+
+  Admiral also writes `upstream_name`, `upstream_blob`, `imported_at` and `updated_at`; a resolver doesn't read them.
+- **Strict JSON.** Decode the bytes as UTF-8 first, with no UTF-16/32 or byte order mark detection. Reject `NaN`, `Infinity` and `-Infinity`. Parse `version` as a number, so `true` fails.
+- **Same guards as a member file.** A sidecar may be a symlink only when its real path is a regular file inside the layer. One that escapes the layer, isn't a regular file, or is over 65536 bytes is unreadable.
+- **Which sidecars are checked.** The sidecar of every member file that reads without error, whether or not it wins: an overridden member in an earlier layer, and one refused for `role-change`, `bad-based-on` or `misplaced-ad-hoc`, are checked too. A member file with an error gets no sidecar check. Only the winning file's sidecar sets `shared`.
+- **`shared`.** `null` when there's no sidecar, the sidecar is unreadable, or the member is ad hoc. Otherwise `{"owner", "repo", "commit", "tag", "detached"}`: `owner` and `repo` are the two halves of the sidecar's `repo`, `tag` is null when absent, and `detached` is `sha256(raw bytes of <stem>.md) != content_sha256`. It's computed on each read and never stored, so undoing a local edit by hand attaches the member again.
+- **Unreadable.** A sidecar that fails any rule above gives `shared: null` and one warning `{"layer", "file": "<stem>.shared.json", "code": "shared-unreadable", "field": null, "message"}`. It is never an error, and the member still resolves. `file` is the sidecar's name, and the warning sorts with the others.
+- **Cast.** `cast --save` writes nothing about sharing to `cast.json`. The table's Source cell is `<layer> (shared by <owner>/<repo>@<first 7 chars of commit>)`, with `, edited here` inside the parentheses when detached: `fleet (shared by octocat/admiral-crew@0123456, edited here)`. A pinned run-layer member reads `run (pinned, shared by …)`. A member with no `shared` keeps its Source cell as before.
+
 ## Built-in members
 
 `crew/` holds one member per role, named after it, with `skills: []`, no model, no harness and no `based-on`. Its body points at the role's fallback in `roles.md`. The `fix-checker` member has an empty body, and `pick-me-when` says it is the only one. The `security-reviewer` member notes that with no role skill the security reviewer isn't launched.
