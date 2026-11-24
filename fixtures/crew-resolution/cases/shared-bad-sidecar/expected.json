@@ -81,6 +81,25 @@
       "ad-hoc": false,
       "ad-hoc-run": null,
       "based-on": null,
+      "file": "dangling.md",
+      "harness": null,
+      "instructions": "Body of dangling.",
+      "layer": "fleet",
+      "model": null,
+      "name": "dangling",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
+      "pick-me-when": "Pick dangling.",
+      "role": "scribe",
+      "shared": null,
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
       "file": "dir-sidecar.md",
       "harness": null,
       "instructions": "Body of dir-sidecar.",
@@ -174,6 +193,25 @@
         "repo": []
       },
       "pick-me-when": "Pick host-gitlab.",
+      "role": "scribe",
+      "shared": null,
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
+      "file": "key-upper.md",
+      "harness": null,
+      "instructions": "Body of key-upper.",
+      "layer": "fleet",
+      "model": null,
+      "name": "key-upper",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
+      "pick-me-when": "Pick key-upper.",
       "role": "scribe",
       "shared": null,
       "skills": []
@@ -359,6 +397,44 @@
       "ad-hoc": false,
       "ad-hoc-run": null,
       "based-on": null,
+      "file": "tag-bidi.md",
+      "harness": null,
+      "instructions": "Body of tag-bidi.",
+      "layer": "fleet",
+      "model": null,
+      "name": "tag-bidi",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
+      "pick-me-when": "Pick tag-bidi.",
+      "role": "scribe",
+      "shared": null,
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
+      "file": "tag-control.md",
+      "harness": null,
+      "instructions": "Body of tag-control.",
+      "layer": "fleet",
+      "model": null,
+      "name": "tag-control",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
+      "pick-me-when": "Pick tag-control.",
+      "role": "scribe",
+      "shared": null,
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
       "file": "tag-empty.md",
       "harness": null,
       "instructions": "Body of tag-empty.",
@@ -389,6 +465,25 @@
         "repo": []
       },
       "pick-me-when": "Pick tag-number.",
+      "role": "scribe",
+      "shared": null,
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
+      "file": "tag-surrogate.md",
+      "harness": null,
+      "instructions": "Body of tag-surrogate.",
+      "layer": "fleet",
+      "model": null,
+      "name": "tag-surrogate",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
+      "pick-me-when": "Pick tag-surrogate.",
       "role": "scribe",
       "shared": null,
       "skills": []
@@ -460,6 +555,12 @@
     {
       "code": "shared-unreadable",
       "field": null,
+      "file": "dangling.shared.json",
+      "layer": "fleet"
+    },
+    {
+      "code": "shared-unreadable",
+      "field": null,
       "file": "dir-sidecar.shared.json",
       "layer": "fleet"
     },
@@ -479,6 +580,12 @@
       "code": "shared-unreadable",
       "field": null,
       "file": "host-gitlab.shared.json",
+      "layer": "fleet"
+    },
+    {
+      "code": "shared-unreadable",
+      "field": null,
+      "file": "key-upper.shared.json",
       "layer": "fleet"
     },
     {
@@ -544,6 +651,18 @@
     {
       "code": "shared-unreadable",
       "field": null,
+      "file": "tag-bidi.shared.json",
+      "layer": "fleet"
+    },
+    {
+      "code": "shared-unreadable",
+      "field": null,
+      "file": "tag-control.shared.json",
+      "layer": "fleet"
+    },
+    {
+      "code": "shared-unreadable",
+      "field": null,
       "file": "tag-empty.shared.json",
       "layer": "fleet"
     },
@@ -551,6 +670,12 @@
       "code": "shared-unreadable",
       "field": null,
       "file": "tag-number.shared.json",
+      "layer": "fleet"
+    },
+    {
+      "code": "shared-unreadable",
+      "field": null,
+      "file": "tag-surrogate.shared.json",
       "layer": "fleet"
     },
     {

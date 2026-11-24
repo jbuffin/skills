@@ -315,6 +315,17 @@ class SharedSidecars(ResolverCase):
         self.assertEqual(proc.returncode, OK, proc.stderr)
         self.assertEqual(parsed["members"][0]["shared"], SHARED_BY_OCTOCAT)
 
+    def test_a_deeply_nested_sidecar_is_unreadable_not_a_crash(self):
+        text = member_text("reviewer", "reviewer")
+        deep = '{"a":' * 10000 + "1" + "}" * 10000
+        d = self.layer("repo", {"reviewer.md": text, "reviewer.shared.json": deep})
+        proc, parsed = self.explicit({"repo": d})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertIsNone(parsed["members"][0]["shared"])
+        self.assertEqual(
+            [(w["file"], w["code"]) for w in parsed["warnings"]], [("reviewer.shared.json", "shared-unreadable")]
+        )
+
     def test_a_member_with_an_error_gets_no_sidecar_check(self):
         files = {
             "broken.md": "no frontmatter at all\n",

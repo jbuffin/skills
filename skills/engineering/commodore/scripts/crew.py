@@ -313,11 +313,12 @@ def sidecar_fields(raw):
     """The `shared` object for sidecar bytes, or None when the sidecar is unreadable."""
     try:
         data = json.loads(raw.decode("utf-8"), parse_constant=no_constant)
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
     if not isinstance(data, dict):
         return None
-    owner, slash, repo = str(data.get("repo")).partition("/")
+    repo_text = data.get("repo")
+    owner, slash, repo = repo_text.partition("/") if isinstance(repo_text, str) else ("", "", "")
     tag = data.get("tag")
     version = data.get("version")
     path, commit, digest = data.get("path"), data.get("commit"), data.get("content_sha256")
@@ -333,7 +334,7 @@ def sidecar_fields(raw):
         and HEX40.fullmatch(commit)
         and isinstance(digest, str)
         and HEX64.fullmatch(digest)
-        and (tag is None or (isinstance(tag, str) and tag))
+        and (tag is None or (isinstance(tag, str) and tag and hidden_char(tag) is None))
     ):
         return None
     return {"owner": owner, "repo": repo, "commit": commit, "tag": tag, "digest": digest}
@@ -342,13 +343,13 @@ def sidecar_fields(raw):
 def sidecar_bytes(path, layer_real):
     """(raw, problem): the sidecar's bytes, or why it can't be read."""
     try:
+        if os.path.commonpath([os.path.realpath(path), layer_real]) != layer_real:
+            return None, "sidecar resolves outside its layer directory"
         info = os.stat(path)
         if not stat.S_ISREG(info.st_mode):
             return None, "sidecar is not a regular file"
         if info.st_size > MAX_BYTES:
             return None, f"sidecar is over {MAX_BYTES} bytes"
-        if os.path.commonpath([os.path.realpath(path), layer_real]) != layer_real:
-            return None, "sidecar resolves outside its layer directory"
         with open(path, "rb") as handle:
             return handle.read(), None
     except OSError as err:
