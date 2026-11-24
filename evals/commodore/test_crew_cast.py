@@ -136,6 +136,8 @@ class TestSharedSource(CastCase):
         path = self.share("fleet", "reviewer")
         original = path.read_text()
         path.write_text(original + "x")
+        edited = self.source(self.w.cast(env=self.w.admiral_env()), "reviewer")
+        self.assertEqual(edited, "fleet (shared by octocat/admiral-crew@0123456, edited here)")
         path.write_text(original)
         done = self.w.cast(env=self.w.admiral_env())
         self.assertEqual(self.source(done, "reviewer"), "fleet (shared by octocat/admiral-crew@0123456)")

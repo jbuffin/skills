@@ -74,6 +74,31 @@
       "ad-hoc": false,
       "ad-hoc-run": null,
       "based-on": null,
+      "file": "reviewer-2.md",
+      "harness": null,
+      "instructions": "Body of reviewer-2.",
+      "layer": "fleet",
+      "model": null,
+      "name": "reviewer-2",
+      "notes": {
+        "fleet": [],
+        "repo": []
+      },
+      "pick-me-when": "Pick reviewer-2.",
+      "role": "reviewer",
+      "shared": {
+        "commit": "0123456789abcdef0123456789abcdef01234567",
+        "detached": false,
+        "owner": "octocat",
+        "repo": "admiral-crew",
+        "tag": "v1"
+      },
+      "skills": []
+    },
+    {
+      "ad-hoc": false,
+      "ad-hoc-run": null,
+      "based-on": null,
       "file": "scribe.md",
       "harness": null,
       "instructions": "Body of scribe.",

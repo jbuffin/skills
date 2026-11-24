@@ -319,11 +319,24 @@ class SharedSidecars(ResolverCase):
             "broken.md": "no frontmatter at all\n",
             "broken.shared.json": "{not json",
             "fine.md": member_text("fine", "scribe"),
+            "fine.shared.json": "{not json",
         }
         proc, parsed = self.explicit({"repo": self.layer("repo", files)})
         self.assertEqual(proc.returncode, ERRORS, proc.stderr)
         self.assertEqual([e["code"] for e in parsed["errors"]], ["bad-frontmatter"])
-        self.assertEqual(parsed["warnings"], [])
+        self.assertEqual(
+            [(w["file"], w["code"]) for w in parsed["warnings"]], [("fine.shared.json", "shared-unreadable")]
+        )
+
+    def test_a_utf16_sidecar_is_unreadable_not_decoded(self):
+        text = member_text("reviewer", "reviewer")
+        files = {"reviewer.md": text, "reviewer.shared.json": sidecar_for(text).encode("utf-16")}
+        proc, parsed = self.explicit({"repo": self.layer("repo", files)})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertIsNone(parsed["members"][0]["shared"])
+        self.assertEqual(
+            [(w["file"], w["code"]) for w in parsed["warnings"]], [("reviewer.shared.json", "shared-unreadable")]
+        )
 
     def test_a_sidecar_file_is_never_a_member_or_an_error(self):
         text = member_text("keep", "scribe")

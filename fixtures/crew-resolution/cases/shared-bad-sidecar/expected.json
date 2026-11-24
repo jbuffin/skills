@@ -397,25 +397,6 @@
       "ad-hoc": false,
       "ad-hoc-run": null,
       "based-on": null,
-      "file": "utf16.md",
-      "harness": null,
-      "instructions": "Body of utf16.",
-      "layer": "fleet",
-      "model": null,
-      "name": "utf16",
-      "notes": {
-        "fleet": [],
-        "repo": []
-      },
-      "pick-me-when": "Pick utf16.",
-      "role": "scribe",
-      "shared": null,
-      "skills": []
-    },
-    {
-      "ad-hoc": false,
-      "ad-hoc-run": null,
-      "based-on": null,
       "file": "version-2.md",
       "harness": null,
       "instructions": "Body of version-2.",
@@ -570,12 +551,6 @@
       "code": "shared-unreadable",
       "field": null,
       "file": "tag-number.shared.json",
-      "layer": "fleet"
-    },
-    {
-      "code": "shared-unreadable",
-      "field": null,
-      "file": "utf16.shared.json",
       "layer": "fleet"
     },
     {
