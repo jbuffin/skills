@@ -339,10 +339,8 @@ def sidecar_fields(raw):
     return {"owner": owner, "repo": repo, "commit": commit, "tag": tag, "digest": digest}
 
 
-def read_sidecar(path, layer_real, member_raw):
-    """(shared, warning message): `shared` is None with no sidecar or an unreadable one."""
-    if not os.path.lexists(path):
-        return None, None
+def sidecar_bytes(path, layer_real):
+    """(raw, problem): the sidecar's bytes, or why it can't be read."""
     try:
         info = os.stat(path)
         if not stat.S_ISREG(info.st_mode):
@@ -352,9 +350,18 @@ def read_sidecar(path, layer_real, member_raw):
         if os.path.commonpath([os.path.realpath(path), layer_real]) != layer_real:
             return None, "sidecar resolves outside its layer directory"
         with open(path, "rb") as handle:
-            raw = handle.read()
+            return handle.read(), None
     except OSError as err:
         return None, f"sidecar can't be read: {err.strerror or err}"
+
+
+def read_sidecar(path, layer_real, member_raw):
+    """(shared, problem): `shared` is None with no sidecar or an unreadable one."""
+    if not os.path.lexists(path):
+        return None, None
+    raw, problem = sidecar_bytes(path, layer_real)
+    if problem:
+        return None, problem
     found = sidecar_fields(raw)
     if found is None:
         return None, "sidecar is not a valid version 1 shared-member sidecar"
