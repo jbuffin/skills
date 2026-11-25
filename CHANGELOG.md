@@ -1,5 +1,11 @@
 # jasonbuffin-skills
 
+## 3.6.0
+
+### Minor Changes
+
+- [#247](https://github.com/jbuffin/skills/pull/247) [`66288e6`](https://github.com/jbuffin/skills/commit/66288e690cf38167d2ce7685f9f778d0ace4c3c3) Thanks [@jbuffin](https://github.com/jbuffin)! - Commodore's crew resolver now reads the provenance sidecar (`<member>.shared.json`) Admiral writes beside a shared member. `crew.py resolve` gives every member a `shared` field (`null`, or the owner, repo, commit, tag and whether the member was edited here), a bad sidecar warns `shared-unreadable` without failing the member, and `crew.py cast` shows `fleet (shared by owner/repo@abc1234)` in the Source column. The schema is documented in `references/crew-members.md`.
+
 ## 3.5.0
 
 ### Minor Changes
