@@ -1,5 +1,6 @@
 """Tests for `crew.py resolve` over layered Markdown member files, in explicit `--layer` and `--run` mode."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -88,6 +89,7 @@ class ResolverCase(unittest.TestCase):
         d.mkdir(parents=True, exist_ok=True)
         for name, content in files.items():
             path = d / name
+            path.parent.mkdir(parents=True, exist_ok=True)
             if isinstance(content, bytes):
                 path.write_bytes(content)
             else:
@@ -270,6 +272,99 @@ class ExplicitMode(ResolverCase):
                 "warnings": [],
             },
         )
+
+
+def sidecar_for(text, **over):
+    """A valid sidecar for a member file's text."""
+    side = {
+        "version": 1,
+        "host": "github.com",
+        "repo": "octocat/admiral-crew",
+        "path": "crew/reviewer.md",
+        "commit": "0123456789abcdef0123456789abcdef01234567",
+        "tag": "v1",
+        "content_sha256": hashlib.sha256(text.encode()).hexdigest(),
+    }
+    side.update(over)
+    return json.dumps(side)
+
+
+SHARED_BY_OCTOCAT = {
+    "owner": "octocat",
+    "repo": "admiral-crew",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "tag": "v1",
+    "detached": False,
+}
+
+
+class SharedSidecars(ResolverCase):
+    def test_a_sidecar_is_read_in_the_repo_layer_too(self):
+        text = member_text("reviewer", "reviewer")
+        d = self.layer("repo", {"reviewer.md": text, "reviewer.shared.json": sidecar_for(text)})
+        proc, parsed = self.explicit({"repo": d})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual([m["shared"] for m in parsed["members"]], [SHARED_BY_OCTOCAT])
+        self.assertEqual(parsed["warnings"], [])
+
+    def test_a_sidecar_symlinked_inside_the_layer_is_read(self):
+        text = member_text("reviewer", "reviewer")
+        d = self.layer("repo", {"reviewer.md": text, "store/real.json": sidecar_for(text)})
+        (d / "reviewer.shared.json").symlink_to("store/real.json")
+        proc, parsed = self.explicit({"repo": d})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual(parsed["members"][0]["shared"], SHARED_BY_OCTOCAT)
+
+    def test_a_deeply_nested_sidecar_is_unreadable_not_a_crash(self):
+        text = member_text("reviewer", "reviewer")
+        deep = '{"a":' * 10000 + "1" + "}" * 10000
+        d = self.layer("repo", {"reviewer.md": text, "reviewer.shared.json": deep})
+        proc, parsed = self.explicit({"repo": d})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertIsNone(parsed["members"][0]["shared"])
+        self.assertEqual(
+            [(w["file"], w["code"]) for w in parsed["warnings"]], [("reviewer.shared.json", "shared-unreadable")]
+        )
+
+    def test_a_member_with_an_error_gets_no_sidecar_check(self):
+        files = {
+            "broken.md": "no frontmatter at all\n",
+            "broken.shared.json": "{not json",
+            "fine.md": member_text("fine", "scribe"),
+            "fine.shared.json": "{not json",
+        }
+        proc, parsed = self.explicit({"repo": self.layer("repo", files)})
+        self.assertEqual(proc.returncode, ERRORS, proc.stderr)
+        self.assertEqual([e["code"] for e in parsed["errors"]], ["bad-frontmatter"])
+        self.assertEqual(
+            [(w["file"], w["code"]) for w in parsed["warnings"]], [("fine.shared.json", "shared-unreadable")]
+        )
+
+    def test_a_utf16_sidecar_is_unreadable_not_decoded(self):
+        text = member_text("reviewer", "reviewer")
+        files = {"reviewer.md": text, "reviewer.shared.json": sidecar_for(text).encode("utf-16")}
+        proc, parsed = self.explicit({"repo": self.layer("repo", files)})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertIsNone(parsed["members"][0]["shared"])
+        self.assertEqual(
+            [(w["file"], w["code"]) for w in parsed["warnings"]], [("reviewer.shared.json", "shared-unreadable")]
+        )
+
+    def test_a_sidecar_file_is_never_a_member_or_an_error(self):
+        text = member_text("keep", "scribe")
+        files = {"stray.shared.json": "{not json", "keep.md": text, "keep.shared.json": sidecar_for(text)}
+        proc, parsed = self.explicit({"repo": self.layer("repo", files)})
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual([(m["name"], m["shared"]["owner"]) for m in parsed["members"]], [("keep", "octocat")])
+        self.assertEqual(parsed["warnings"], [])
+
+    def test_the_ad_hoc_directory_never_reads_a_sidecar(self):
+        text = member_text("helper", "scribe", extra='ad-hoc: true\nad-hoc-run: "run-1"\n')
+        files = {"helper.md": text, "helper.shared.json": sidecar_for(text, version=2)}
+        proc, parsed = self.explicit({"ad-hoc": self.layer("ad-hoc", files)}, run_id="run-1")
+        self.assertEqual(proc.returncode, OK, proc.stderr)
+        self.assertEqual([(m["name"], m["shared"]) for m in parsed["members"]], [("helper", None)])
+        self.assertEqual(parsed["warnings"], [])
 
 
 class UsageErrors(ResolverCase):

@@ -131,7 +131,7 @@ An ad hoc member is one the lead writes for a single run. It lives in the ad hoc
 
 Every file in every non-ignored layer is checked, including ones a later layer overrides; the ad hoc directory is the exception (see [Ad hoc members](#ad-hoc-members): it skips files silently and never errors). `layer` is a layer label, or `ad-hoc`. Errors and warnings are `{"layer", "file", "code", "field", "message"}`, with `file` the basename (for `memory`, the path relative to the memory root; the root itself is null). A layer directory that exists but can't be listed is one error, `unreadable`, with `file` null. Both lists sort by layer order, `file` (null first, then byte order), `code`, `field` (null first), then `message`.
 
-- No error, exit 0: `{"members": [...], "warnings": [...]}`. Each member has `name`, `role`, `based-on` (or null), `skills`, `model` (or null), `harness` (or null), `pick-me-when`, `ad-hoc`, `ad-hoc-run` (or null), `instructions`, `layer`, `file` and `notes` (see [Crew notes](#crew-notes)). Members sort by `role`, then `name`.
+- No error, exit 0: `{"members": [...], "warnings": [...]}`. Each member has `name`, `role`, `based-on` (or null), `skills`, `model` (or null), `harness` (or null), `pick-me-when`, `ad-hoc`, `ad-hoc-run` (or null), `instructions`, `layer`, `file`, `shared` (see [Shared members](#shared-members)) and `notes` (see [Crew notes](#crew-notes)). Members sort by `role`, then `name`.
 - Any error, exit 1: `{"errors": [...], "warnings": [...]}` and no `members`. A file in a layer the resolver can't read as a member fails the whole resolution; a readable member with a bad field or value warns instead.
 
 Warnings go to stdout JSON only. Callers decide how to print them.
@@ -182,6 +182,31 @@ It prints nothing and exits 0 when the member has no notes (or is the fix checke
 - **Cap.** Without `replaces`, a scope holding 30 valid notes refuses; name the note to replace. Bad lines don't count. A write that would leave the file over 65536 bytes refuses, because the reader skips a larger file as `memory-unreadable`; replace a shorter note. `replaces` on a file or line that isn't there refuses and creates nothing.
 - **Safety.** Refuses when `commodore/`, `crew/` or anything from `memory/` down is a symlink, when the memory root is inside the repo, and when the run directory's name isn't `[A-Za-z0-9._-]+`. Directories above `commodore/` aren't checked.
 - **Refused.** Inside Admiral (`ADMIRAL_SHIP` set; Admiral's Inbox writes notes there): exit 5. The fix checker and any failure above, an unresolved crew, an unknown member or a bad `repo` origin: exit 1 with an `ERROR` line and nothing on stdout. A bad call (`--run`, `--member` or `--proposal` missing, twice or without a value, an unknown flag): exit 5.
+
+## Shared members
+
+A member imported from someone's share repo has a provenance sidecar. A resolver reads it as the member's provenance and never as a member. Only Admiral writes sidecars; a resolver never does.
+
+- **File.** `<stem>.shared.json` beside `<stem>.md`, in any standing layer. The ad hoc directory never has sidecars: its `.shared.json` files are ignored silently. A sidecar with no `<stem>.md` is an orphan: no member, no warning.
+- **Schema.** One JSON object. Unknown fields are ignored. A resolver reads these:
+
+  | Field | Valid value |
+  | --- | --- |
+  | `version` | the integer `1` (not `true`, not `1.0`) |
+  | `host` | `"github.com"` |
+  | `repo` | `<owner>/<name>`: exactly two segments, each matching `^[A-Za-z0-9_.-]+$` and not `.` or `..` |
+  | `path` | `crew/<file>.md`: exactly one segment after `crew/`, not starting with `.` |
+  | `commit` | 40 lowercase hex characters |
+  | `content_sha256` | 64 lowercase hex characters: the sha256 of the bytes Admiral wrote to `<stem>.md` |
+  | `tag` | absent, `null`, or a non-empty string with no character in Unicode category `Cc`, `Cf`, `Cs`, `Co`, `Cn`, `Zl` or `Zp`: a lone surrogate (`"v1\ud800"`), control or bidi character makes the sidecar unreadable |
+
+  Admiral also writes `upstream_name`, `upstream_blob`, `imported_at` and `updated_at`; a resolver doesn't read them.
+- **Strict JSON.** Check the bytes are valid UTF-8 first (Go: `utf8.Valid`); invalid UTF-8 is unreadable, never U+FFFD. Don't detect UTF-16/32 or a byte order mark. Reject `NaN`, `Infinity` and `-Infinity`. Keys match exactly and case-sensitively (Go: decode into a map, not a struct), so `Version` is an unknown field and `{"version":1,"Version":2}` reads as version 1. `version` must be an integer type, so `1.0`, `1e0` and `true` fail. An integer literal Python can't parse (over 4300 digits) makes the sidecar unreadable, even in an unknown field.
+- **Same guards as a member file.** A sidecar may be a symlink only when its real path is a regular file inside the layer. One that escapes the layer, isn't a regular file, or is over 65536 bytes is unreadable. A dangling symlink is unreadable too: test for presence without following links (`lexists`, Go `os.Lstat`).
+- **Which sidecars are checked.** The sidecar of every member file that reads without error, whether or not it wins: an overridden member in an earlier layer, and one refused for `role-change`, `bad-based-on` or `misplaced-ad-hoc`, are checked too. A member file with an error gets no sidecar check. Only the winning file's sidecar sets `shared`.
+- **`shared`.** `null` when there's no sidecar, the sidecar is unreadable, or the member is ad hoc. Otherwise `{"owner", "repo", "commit", "tag", "detached"}`: `owner` and `repo` are the two halves of the sidecar's `repo`, `tag` is null when absent, and `detached` is `sha256(raw bytes of <stem>.md) != content_sha256`. It's computed on each read and never stored, so undoing a local edit by hand attaches the member again.
+- **Unreadable.** A sidecar that fails any rule above gives `shared: null` and one warning `{"layer", "file": "<stem>.shared.json", "code": "shared-unreadable", "field": null, "message"}`. It is never an error, and the member still resolves. `file` is the sidecar's name, and the warning sorts with the others.
+- **Cast.** `cast --save` writes nothing about sharing to `cast.json`. The table's Source cell is `<layer> (shared by <owner>/<repo>@<first 7 chars of commit>)`, with `, edited here` inside the parentheses when detached: `fleet (shared by octocat/admiral-crew@0123456, edited here)`. A pinned run-layer member reads `run (pinned, shared by …)`. A member with no `shared` keeps its Source cell as before.
 
 ## Built-in members
 

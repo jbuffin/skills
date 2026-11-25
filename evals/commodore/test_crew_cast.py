@@ -1,5 +1,7 @@
 """Tests for `crew.py cast`: who fills each role, pins, picks, skills, models and the files it saves."""
 
+import hashlib
+import json
 import os
 import re
 import unittest
@@ -93,6 +95,74 @@ class TestTable(CastCase):
         self.w.write_member("user", "scribe", body="line one\nline|two\n\tindented")
         _, _, rows, _ = parse_table(self.w.cast().stdout)
         self.assertEqual(rows["scribe"][4], "line one<br>line\\|two<br> indented")
+
+
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+class TestSharedSource(CastCase):
+    def share(self, layer, name, **over):
+        """Write a member in `layer` and a sidecar for its current bytes beside it."""
+        path = self.w.write_member(layer, name, name)
+        side = {
+            "version": 1,
+            "host": "github.com",
+            "repo": "octocat/admiral-crew",
+            "path": f"crew/{name}.md",
+            "commit": COMMIT,
+            "tag": "v1",
+            "content_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        side.update(over)
+        path.with_name(f"{name}.shared.json").write_text(json.dumps(side))
+        return path
+
+    def source(self, done, role):
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return parse_table(done.stdout)[2][role][7]
+
+    def test_an_attached_fleet_member_shows_who_shared_it(self):
+        self.share("fleet", "reviewer")
+        done = self.w.cast(env=self.w.admiral_env())
+        self.assertEqual(self.source(done, "reviewer"), "fleet (shared by octocat/admiral-crew@0123456)")
+
+    def test_an_edited_member_says_so(self):
+        path = self.share("fleet", "reviewer")
+        path.write_text(path.read_text() + "\nLocal tweak.\n")
+        done = self.w.cast(env=self.w.admiral_env())
+        self.assertEqual(self.source(done, "reviewer"), "fleet (shared by octocat/admiral-crew@0123456, edited here)")
+
+    def test_undoing_the_edit_by_hand_attaches_it_again(self):
+        path = self.share("fleet", "reviewer")
+        original = path.read_text()
+        path.write_text(original + "x")
+        edited = self.source(self.w.cast(env=self.w.admiral_env()), "reviewer")
+        self.assertEqual(edited, "fleet (shared by octocat/admiral-crew@0123456, edited here)")
+        path.write_text(original)
+        done = self.w.cast(env=self.w.admiral_env())
+        self.assertEqual(self.source(done, "reviewer"), "fleet (shared by octocat/admiral-crew@0123456)")
+
+    def test_a_pinned_shared_member_keeps_pinned_in_front(self):
+        self.share("run", "reviewer")
+        done = self.w.cast()
+        self.assertEqual(self.source(done, "reviewer"), "run (pinned, shared by octocat/admiral-crew@0123456)")
+
+    def test_an_unreadable_sidecar_leaves_the_plain_source(self):
+        self.share("fleet", "reviewer")
+        self.share("fleet", "scribe", version=2)
+        done = self.w.cast(env=self.w.admiral_env())
+        self.assertEqual(self.source(done, "reviewer"), "fleet (shared by octocat/admiral-crew@0123456)")
+        self.assertEqual(self.source(done, "scribe"), "fleet")
+
+    def test_saving_a_cast_with_a_shared_member_writes_no_shared_key(self):
+        self.share("fleet", "reviewer")
+        done = self.w.cast("--save", env=self.w.admiral_env())
+        self.assertEqual(self.source(done, "reviewer"), "fleet (shared by octocat/admiral-crew@0123456)")
+        entries = self.w.read_json()["cast"]
+        reviewer = next(e for e in entries if e["role"] == "reviewer")
+        self.assertEqual((reviewer["member"], reviewer["layer"]), ("reviewer", "fleet"))
+        for entry in entries:
+            self.assertEqual([k for k in entry if "shared" in k], [])
 
 
 class TestPicking(CastCase):
